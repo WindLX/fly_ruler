@@ -1,0 +1,3 @@
+[workspace]
+members = ["fly_ruler_core", "fly_ruler_utils", "fly_ruler_system", "fly_ruler_ffi"]
+resolver = "2"
