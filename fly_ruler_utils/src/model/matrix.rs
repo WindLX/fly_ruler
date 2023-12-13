@@ -61,10 +61,9 @@ impl Matrix {
 
     pub fn ravel(&self) -> Vector {
         let mut data = self.data.clone();
-        let new_data = Arc::new(Mutex::new(Vec::new()));
-        data.par_iter_mut()
-            .for_each(|x| new_data.lock().unwrap().extend(x.data.clone()));
-        let new_data = Arc::try_unwrap(new_data).unwrap().into_inner().unwrap();
+        let mut new_data = Vec::new();
+        data.iter_mut()
+            .for_each(|x| new_data.extend(x.data.clone()));
         Vector::from(new_data)
     }
 
@@ -89,6 +88,16 @@ impl Matrix {
             Some(x) => Some(Vector::from(x.clone())),
             None => None,
         }
+    }
+
+    pub fn linespace(start: &Vector, end: &Vector, n: usize) -> Self {
+        let mut data = Vec::with_capacity(n);
+        let mut i = 0;
+        while i < n {
+            data.push(start.clone() + (end.clone() - start.clone()) * (i as f64) / (n as f64));
+            i += 1;
+        }
+        Self::from(data)
     }
 }
 
@@ -213,7 +222,7 @@ impl Add<Vector> for Matrix {
 impl AddAssign<Vector> for Matrix {
     fn add_assign(&mut self, rhs: Vector) {
         assert!(self.shape().1 == rhs.dim());
-        self.data.iter_mut().for_each(|a| *a += rhs.clone());
+        self.data.par_iter_mut().for_each(|a| *a += rhs.clone());
     }
 }
 
@@ -237,8 +246,8 @@ impl SubAssign for Matrix {
     fn sub_assign(&mut self, rhs: Self) {
         assert!(self.dim_eq(&rhs));
         self.data
-            .iter_mut()
-            .zip(rhs.data.iter())
+            .par_iter_mut()
+            .zip(rhs.data.par_iter())
             .for_each(|(a, b)| *a -= b.clone());
     }
 }
@@ -261,7 +270,7 @@ impl Sub<Vector> for Matrix {
 impl SubAssign<Vector> for Matrix {
     fn sub_assign(&mut self, rhs: Vector) {
         assert!(self.shape().1 == rhs.dim());
-        self.data.iter_mut().for_each(|a| *a -= rhs.clone());
+        self.data.par_iter_mut().for_each(|a| *a -= rhs.clone());
     }
 }
 
@@ -270,14 +279,14 @@ impl Mul<f64> for Matrix {
     fn mul(self, rhs: f64) -> Self::Output {
         Self {
             dim: self.dim,
-            data: self.data.iter().map(|a| a.clone() * rhs).collect(),
+            data: self.data.par_iter().map(|a| a.clone() * rhs).collect(),
         }
     }
 }
 
 impl MulAssign<f64> for Matrix {
     fn mul_assign(&mut self, rhs: f64) {
-        self.data.iter_mut().for_each(|a| *a *= rhs);
+        self.data.par_iter_mut().for_each(|a| *a *= rhs);
     }
 }
 
@@ -286,13 +295,13 @@ impl Div<f64> for Matrix {
     fn div(self, rhs: f64) -> Self::Output {
         Self {
             dim: self.dim,
-            data: self.data.iter().map(|a| a.clone() / rhs).collect(),
+            data: self.data.par_iter().map(|a| a.clone() / rhs).collect(),
         }
     }
 }
 
 impl DivAssign<f64> for Matrix {
     fn div_assign(&mut self, rhs: f64) {
-        self.data.iter_mut().for_each(|a| *a /= rhs);
+        self.data.par_iter_mut().for_each(|a| *a /= rhs);
     }
 }

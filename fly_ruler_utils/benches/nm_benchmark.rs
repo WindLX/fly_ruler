@@ -14,8 +14,8 @@ fn nm() {
     let options = NelderMeadOptions {
         max_fun_evals: 500,
         max_iter: 100,
-        tol_fun: 1e-6,
-        tol_x: 1e-6,
+        tol_fun: 1e-4,
+        tol_x: 1e-4,
     };
     let _result = nelder_mead(Box::new(func), x_0, Some(options));
 }

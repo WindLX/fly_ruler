@@ -24,3 +24,7 @@ harness = false
 [[bench]]
 name = "nm_benchmark"
 harness = false
+
+[[bench]]
+name = "rk_benchmark"
+harness = false

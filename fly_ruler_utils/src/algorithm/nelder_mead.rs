@@ -24,15 +24,27 @@ impl Default for NelderMeadOptions {
     }
 }
 
+/// 单纯形搜索法结果
 #[derive(Debug, Clone)]
 pub struct NelderMeadResult {
+    /// 最小值所在点
     pub x: Vector,
+    /// 最小值
     pub fval: f64,
+    /// 迭代次数
     pub iter: usize,
+    /// 函数计算次数
     pub fun_evals: usize,
+    /// 计算日志
     pub output: Vec<String>,
 }
 
+/// nelder_mead 单纯形搜索法求解器
+/// 此求解器用于搜索目标函数最小值
+/// Args:
+///     func: Box<dyn Fn(&Vector) -> f64>: 目标函数
+///     x_0: Vector: 搜索的初始值
+///     options: Option<NelderMeadOptions>: 求解器设置
 pub fn nelder_mead(
     func: Box<dyn Fn(&Vector) -> f64>,
     x_0: Vector,
@@ -85,24 +97,22 @@ pub fn nelder_mead(
 
     while iter < options.max_iter && fun_evals < options.max_fun_evals {
         // 当顶点距离最大值或者目标值最大值小于一定值时，结束迭代
-        let is_tol_x = (Matrix::from(&sim[1..]) - sim[0].clone())
+        let tol_x = (Matrix::from(&sim[1..]) - sim[0].clone())
             .ravel()
             .abs()
-            .max()
-            < options.tol_x;
-        let is_tol_fun = (Vector::from(&fval_sim[1..]) - fval_sim[0]).abs().max() < options.tol_fun;
-        if is_tol_fun && is_tol_x {
+            .max();
+        let tol_fun = (Vector::from(&fval_sim[1..]) - fval_sim[0]).abs().max();
+        if tol_fun <= options.tol_fun && tol_x <= options.tol_x {
             break;
         }
 
         // 重心
-        let x_bar = Matrix::from(&sim[..sim.dim()]).mean();
+        let x_bar = Matrix::from(&sim[..n]).mean();
 
         // 反射值
         let x_r = x_bar.clone() * (1.0 + rho) - sim.last().unwrap() * rho;
         let fval_x_r = func(&x_r);
         fun_evals += 1;
-
         output.push(format!(
             "{}\t\t{}\t\t{}\t\t{}",
             iter,
@@ -231,13 +241,14 @@ mod nm_tests {
         };
         let x_0 = Vector::from(vec![-1.2, 1.0]);
         let options = NelderMeadOptions {
-            max_fun_evals: 500,
-            max_iter: 100,
+            max_fun_evals: 5000,
+            max_iter: 1000,
             tol_fun: 1e-10,
             tol_x: 1e-10,
         };
         let result = nelder_mead(Box::new(func), x_0, Some(options));
-        println!("{:#?} {:#?}", result.x, result.fval)
+        println!("{:#?} {:#?}", result.x, result.fval);
+        println!("{:#?} {:#?}", result.iter, result.fun_evals);
         // println!("{}", result.output.join("\n"));
     }
 }

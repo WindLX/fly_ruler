@@ -1,11 +1,8 @@
+use super::matrix::Matrix;
 use rayon::prelude::*;
 use std::ops::{
     Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, RangeFrom, Sub, SubAssign,
 };
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-use super::matrix::Matrix;
 
 #[derive(Debug, Clone)]
 pub struct Vector {
@@ -92,39 +89,22 @@ impl Vector {
     pub fn zip_sort(&mut self, other: &Matrix) -> Matrix {
         let data = self.data.clone();
         let mut data = data
-            .par_iter()
-            .zip(other.data.par_iter())
+            .iter()
+            .zip(other.data.iter())
             .map(|(a, b)| (*a, b.clone()))
             .collect::<Vec<_>>();
         data.par_sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         let mut vec_a = Vec::with_capacity(data.len());
-        let vec_b = Vec::with_capacity(data.len());
+        let mut vec_b = Vec::with_capacity(data.len());
 
         let len = data.len().clone();
-        let data_lock = Arc::new(Mutex::new(data));
-        let vec_b_lock = Arc::new(Mutex::new(vec_b));
-        let handle = thread::spawn({
-            let data_lock = data_lock.clone();
-            let vec_b = vec_b_lock.clone();
-            move || {
-                for i in 0..len {
-                    vec_b
-                        .lock()
-                        .unwrap()
-                        .push((data_lock.lock().unwrap()[i].1).clone())
-                }
-            }
-        });
         for i in 0..len {
-            vec_a.push(data_lock.lock().unwrap()[i].0)
+            vec_a.push(data[i].0.clone())
         }
-        handle.join().unwrap();
-
-        let vec_b = Arc::try_unwrap(vec_b_lock).unwrap().into_inner().unwrap();
+        for i in 0..len {
+            vec_b.push(data[i].1.clone())
+        }
         self.data = vec_a;
-        println!("{:#?}", &self);
-        println!("{:#?}", &vec_b);
-        println!("");
         Matrix::from(vec_b)
     }
 
@@ -145,7 +125,7 @@ impl Vector {
 
     pub fn max(&self) -> f64 {
         self.data
-            .par_iter()
+            .iter()
             .max_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap()
             .clone()
@@ -153,10 +133,14 @@ impl Vector {
 
     pub fn min(&self) -> f64 {
         self.data
-            .par_iter()
+            .iter()
             .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap()
             .clone()
+    }
+
+    pub fn map(&self, f: impl Fn(&f64) -> f64 + Send + Sync) -> Self {
+        Vector::from(self.data.par_iter().map(f).collect::<Vec<_>>())
     }
 }
 
@@ -215,8 +199,8 @@ impl Add for Vector {
             dim: self.dim,
             data: self
                 .data
-                .par_iter()
-                .zip(rhs.data.par_iter())
+                .iter()
+                .zip(rhs.data.iter())
                 .map(|(a, b)| a + b)
                 .collect(),
         }
@@ -227,8 +211,8 @@ impl AddAssign for Vector {
     fn add_assign(&mut self, rhs: Self) {
         assert!(self.dim_eq(&rhs));
         self.data
-            .par_iter_mut()
-            .zip(rhs.data.par_iter())
+            .iter_mut()
+            .zip(rhs.data.iter())
             .for_each(|(a, b)| *a += b);
     }
 }
@@ -241,8 +225,8 @@ impl Sub for Vector {
             dim: self.dim,
             data: self
                 .data
-                .par_iter()
-                .zip(rhs.data.par_iter())
+                .iter()
+                .zip(rhs.data.iter())
                 .map(|(a, b)| a - b)
                 .collect(),
         }
@@ -288,6 +272,58 @@ impl Sub<f64> for Vector {
 impl SubAssign<f64> for Vector {
     fn sub_assign(&mut self, rhs: f64) {
         self.data.par_iter_mut().for_each(|a| *a -= rhs);
+    }
+}
+
+impl Mul for Vector {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        assert!(self.dim_eq(&rhs));
+        Self {
+            dim: self.dim,
+            data: self
+                .data
+                .par_iter()
+                .zip(rhs.data.par_iter())
+                .map(|(a, b)| a * b)
+                .collect(),
+        }
+    }
+}
+
+impl MulAssign for Vector {
+    fn mul_assign(&mut self, rhs: Self) {
+        assert!(self.dim_eq(&rhs));
+        self.data
+            .par_iter_mut()
+            .zip(rhs.data.par_iter())
+            .for_each(|(a, b)| *a *= b);
+    }
+}
+
+impl Div for Vector {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self::Output {
+        assert!(self.dim_eq(&rhs));
+        Self {
+            dim: self.dim,
+            data: self
+                .data
+                .par_iter()
+                .zip(rhs.data.par_iter())
+                .map(|(a, b)| a / b)
+                .collect(),
+        }
+    }
+}
+
+impl DivAssign for Vector {
+    fn div_assign(&mut self, rhs: Self) {
+        assert!(self.dim_eq(&rhs));
+        self.data
+            .par_iter_mut()
+            .zip(rhs.data.par_iter())
+            .for_each(|(a, b)| *a /= b);
     }
 }
 
