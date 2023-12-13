@@ -91,7 +91,7 @@ pub fn nelder_mead(
             .max()
             < options.tol_x;
         let is_tol_fun = (Vector::from(&fval_sim[1..]) - fval_sim[0]).abs().max() < options.tol_fun;
-        if is_tol_fun || is_tol_x {
+        if is_tol_fun && is_tol_x {
             break;
         }
 

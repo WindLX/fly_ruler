@@ -122,6 +122,9 @@ impl Vector {
 
         let vec_b = Arc::try_unwrap(vec_b_lock).unwrap().into_inner().unwrap();
         self.data = vec_a;
+        println!("{:#?}", &self);
+        println!("{:#?}", &vec_b);
+        println!("");
         Matrix::from(vec_b)
     }
 
