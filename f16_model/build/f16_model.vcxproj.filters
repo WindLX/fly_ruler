@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="E:\Projects\Complex\FlyRuler\fly_ruler\f16_model\src\fly_ruler_ffi.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\Complex\FlyRuler\fly_ruler\f16_model\src\hifi_F16_AeroData.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\Complex\FlyRuler\fly_ruler\f16_model\src\lofi_F16_AeroData.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\Complex\FlyRuler\fly_ruler\f16_model\src\mexndinterp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\Complex\FlyRuler\fly_ruler\f16_model\src\nlplant.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\Complex\FlyRuler\fly_ruler\f16_model\src\utils.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="E:\Projects\Complex\FlyRuler\fly_ruler\f16_model\CMakelists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{5AFFB681-80DB-3B71-81EB-AADED849BE33}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
