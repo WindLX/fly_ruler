@@ -1,3 +1,0 @@
-E:/Projects/Complex/FlyRuler/fly_ruler/f16_model/build/CMakeFiles/f16_model.dir
-E:/Projects/Complex/FlyRuler/fly_ruler/f16_model/build/CMakeFiles/ALL_BUILD.dir
-E:/Projects/Complex/FlyRuler/fly_ruler/f16_model/build/CMakeFiles/ZERO_CHECK.dir
