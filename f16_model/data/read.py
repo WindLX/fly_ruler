@@ -7,8 +7,9 @@ def list_files_in_directory(folder_path):
 
         # 打印所有文件名
         print(f"Files in {folder_path}:")
-        for file in files:
-            print(f"\"{file}\",")
+        for (index, file) in enumerate(files):
+            d = file.split("_")
+            print(f"{d[0]},")
     except FileNotFoundError:
         print(f"Error: The specified folder '{folder_path}' does not exist.")
     except Exception as e:

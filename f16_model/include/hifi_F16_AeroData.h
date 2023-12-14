@@ -1,13 +1,19 @@
 #ifndef HIFI_F16_AERODATA_H
 #define HIFI_F16_AERODATA_H
 
-#include "utils.h"
+/*
+double *loadAxisData(char *fileName, int len);
+Tensor *loadAerodynamicData(char *fileName, int nDimension, char dataNameIndex);
+double **getAxisData(Tensor **hifiData, int nDimension, char dataNameIndex);
+*/
 
-#define DATA_LEN 10
+void setDataDir(char *dir);
+void initHifiData();
+void freeHifiData();
+void initAxisData();
+void freeAxisData();
 
-Tensor *loadAxisData(char *fileName, int len);
-Tensor *loadAerodynamicData(char *fileName, int nDimension, char **dataName);
-
+/*
 double _Cx(double alpha, double beta, double dele);
 double _Cz(double alpha, double beta, double dele);
 double _Cm(double alpha, double beta, double dele);
@@ -52,9 +58,7 @@ double _delta_CLbeta(double alpha);
 double _delta_Cm(double alpha);
 double _eta_el(double el);
 // double _delta_Cm_ds(double alpha, double el);
-
-Tensor **initHifiData();
-void freeHifiData(Tensor **data);
+*/
 
 void hifi_C(double alpha, double beta, double el, double *retVal);
 void hifi_damping(double alpha, double *retVal);

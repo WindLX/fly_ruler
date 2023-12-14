@@ -2,10 +2,58 @@
 #include <math.h>
 #include "lofi_F16_AeroData.h"
 #include "hifi_F16_AeroData.h"
-#include "utils.h"
-#include "nlplant.h"
+#include "fly_ruler_ffi.h"
 
-void nlplant(double *xu, double *xdot)
+void setLogCallback(LogCallback cb)
+{
+   log = cb;
+}
+
+void systemInitHook(int argLen, ...)
+{
+   char errorMsg[100];
+   if (argLen < 1)
+   {
+      sprintf(errorMsg, "Error: argLen is %d, should be at least 1", argLen);
+      log(errorMsg, WARN);
+      return;
+   }
+
+   va_list args;
+   va_start(args, argLen);
+
+   char *dataDir = va_arg(args, char *);
+   if (dataDir == NULL)
+   {
+      sprintf(errorMsg, "Error: dataDir is NULL");
+      log(errorMsg, WARN);
+      return;
+   }
+
+   if (strlen(dataDir) == 0)
+   {
+      sprintf(errorMsg, "Error: dataDir is empty");
+      log(errorMsg, WARN);
+      return;
+   }
+   va_end(args);
+
+   setDataDir(dataDir);
+   initHifiData();
+   initAxisData();
+}
+
+void systemStopHook(int argLen, ...)
+{
+   freeHifiData();
+   freeAxisData();
+}
+
+void systemStepHook(int argLen, ...)
+{
+}
+
+void getState(double *xu, double *xdot)
 {
    int fi_flag;
 
@@ -248,10 +296,10 @@ void nlplant(double *xu, double *xdot)
       Cnp = temp[8];
 
       dmomdcon(alpha, beta, temp);
-      delta_Cl_a20 = temp[0]; /* Formerly dLda in nlplant.c */
-      delta_Cl_r30 = temp[1]; /* Formerly dLdr in nlplant.c */
-      delta_Cn_a20 = temp[2]; /* Formerly dNda in nlplant.c */
-      delta_Cn_r30 = temp[3]; /* Formerly dNdr in nlplant.c */
+      delta_Cl_a20 = temp[0]; /* Formerly dLda in getState.c */
+      delta_Cl_r30 = temp[1]; /* Formerly dLdr in getState.c */
+      delta_Cn_a20 = temp[2]; /* Formerly dNda in getState.c */
+      delta_Cn_r30 = temp[3]; /* Formerly dNdr in getState.c */
 
       clcn(alpha, beta, temp);
       Cl = temp[0];

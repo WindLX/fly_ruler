@@ -1,4 +1,5 @@
-#include "stdio.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include "utils.h"
 
 int fix(double in)
@@ -120,15 +121,15 @@ void freeTensor(Tensor *tensor)
     free(tensor);
 }
 
-int getLinIndex(int *indexVector, TensorInfo ndinfo)
+int getLinIndex(int *indexVector, TensorInfo info)
 {
     int linIndex = 0;
     int i, j, P;
-    for (i = 0; i < ndinfo.nDimension; i++)
+    for (i = 0; i < info.nDimension; i++)
     {
         P = 1;
         for (j = 0; j < i; j++)
-            P = P * ndinfo.nPoints[j];
+            P = P * info.nPoints[j];
         linIndex += P * indexVector[i];
     }
     return (linIndex);
