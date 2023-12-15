@@ -1,6 +1,6 @@
-#![recursion_limit = "256"]
-
 pub mod algorithm;
 pub mod error;
 pub mod logger;
 pub mod model;
+
+pub use error::FrError;

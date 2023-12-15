@@ -1,5 +1,4 @@
-use libc::c_int;
-use std::ffi::c_double;
+use libc::{c_double, c_int};
 
 pub type FrModelInstallHook = unsafe extern "C" fn(arg_len: c_int, ...) -> c_int;
 pub type FrModelUninstallHook = unsafe extern "C" fn(arg_len: c_int, ...) -> c_int;
