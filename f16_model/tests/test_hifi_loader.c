@@ -1,4 +1,5 @@
 #include "test_utils.h"
+#include "hifi_F16_AeroData.h"
 
 int frsys_step()
 {

@@ -11,9 +11,9 @@
 
 #define DOUBLE_EQ(a, b) assert(fabs((a) - (b)) < 0.000001)
 
-const char *frutils_info_level_to_string(InfoLevel level);
+const char *frutils_info_level_to_string(LogLevel level);
 
-void frutils_log(const char *msg, InfoLevel level);
+void test_frutils_log(const char *msg, LogLevel level);
 
 int frsys_init();
 

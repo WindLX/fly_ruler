@@ -10,15 +10,15 @@
  */
 static int **get_hyper_cube(double **axisData, double *targetData, TensorInfo info)
 {
-	int **indexMatrix = create_intmatrix(info.nDimension, 2);
+	int **indexMatrix = create_imatrix(info.n_dimension, 2);
 	/* indexMatrix[i][0] => Lower, ...[1]=>Higher */
 	int i, j;
 	int indexMax;
 	double x, xmax, xmin;
 
-	for (i = 0; i < info.nDimension; i++)
+	for (i = 0; i < info.n_dimension; i++)
 	{
-		indexMax = info.nPoints[i];		  /* Get the total # of points in this dimension */
+		indexMax = info.n_points[i];		  /* Get the total # of points in this dimension */
 		xmax = axisData[i][indexMax - 1]; /* Get the upper bound along this axis */
 		xmin = axisData[i][0];			  /* Get the lower bound along this axis */
 
@@ -36,8 +36,8 @@ static int **get_hyper_cube(double **axisData, double *targetData, TensorInfo in
 		/* Check to see if this point is within the bound */
 		if (x < xmin || x > xmax)
 		{
-			free_intmatrix(indexMatrix, info.nDimension, 2);
-			frsys_log("Point lies out data grid (in get_hyper_cube)", ERROR);
+			free_imatrix(indexMatrix, info.n_dimension, 2);
+			frutils_log("Point lies out data grid (in get_hyper_cube)", ERROR);
 			return NULL;
 		}
 		else
@@ -74,15 +74,15 @@ static double linear_interpolate(double *T, double *targetData, double **axisDat
 	int m, i, j, k, nVertices;
 	double *oldT, *newT;
 	int mask, val;
-	int n = info.nDimension;
-	int *indexVector = create_intvector(n);
+	int n = info.n_dimension;
+	int *indexVector = create_ivector(n);
 	int index1, index2;
 	double f1, f2, lambda, result;
 	int dimNum;
 
 	nVertices = 1 << n;
 
-	oldT = create_doublevector(nVertices);
+	oldT = create_dvector(nVertices);
 	for (i = 0; i < nVertices; i++)
 		oldT[i] = T[i];
 
@@ -91,7 +91,7 @@ static double linear_interpolate(double *T, double *targetData, double **axisDat
 	{
 		m = n - 1;
 		nVertices = (1 << m);
-		newT = create_doublevector(nVertices);
+		newT = create_dvector(nVertices);
 		for (i = 0; i < nVertices; i++)
 		{
 			for (j = 0; j < m; j++)
@@ -117,7 +117,7 @@ static double linear_interpolate(double *T, double *targetData, double **axisDat
 				newT[index2] = f1;
 		} /*End of for i*/
 		free(oldT);
-		oldT = create_doublevector(nVertices);
+		oldT = create_dvector(nVertices);
 		for (i = 0; i < nVertices; i++)
 			oldT[i] = newT[i];
 		free(newT);
@@ -136,28 +136,28 @@ double interpn(double **axisData, Tensor *data, double *targetData)
 	double result;
 
 	int i, j, high, low, counter;
-	int mask, val, P, index, nVertices, nDimension;
+	int mask, val, P, index, nVertices, n_dimension;
 	int **indexMatrix, *indexVector;
 
-	indexVector = create_intvector(data->info->nDimension);
-	xPoint = create_doublematrix(data->info->nDimension, 2);
+	indexVector = create_ivector(data->info->n_dimension);
+	xPoint = create_dmatrix(data->info->n_dimension, 2);
 
-	nDimension = data->info->nDimension;
+	n_dimension = data->info->n_dimension;
 
 	/* Get the indices of the hypercube containing the point in argument */
 	indexMatrix = get_hyper_cube(axisData, targetData, *(data->info));
 	if (indexMatrix == NULL)
 	{
 		free(indexVector);
-		free_doublematrix(xPoint, nDimension, 2);
+		free_dmatrix(xPoint, n_dimension, 2);
 		return NAN;
 	}
 
-	nVertices = (1 << nDimension);
-	T = create_doublevector(nVertices);
+	nVertices = (1 << n_dimension);
+	T = create_dvector(nVertices);
 
 	/* Get the co-ordinates of the hyper cube */
-	for (i = 0; i < nDimension; i++)
+	for (i = 0; i < n_dimension; i++)
 	{
 		low = indexMatrix[i][0];
 		high = indexMatrix[i][1];
@@ -167,7 +167,7 @@ double interpn(double **axisData, Tensor *data, double *targetData)
 
 	for (i = 0; i < nVertices; i++)
 	{
-		for (j = 0; j < nDimension; j++)
+		for (j = 0; j < n_dimension; j++)
 		{
 			mask = 1 << j;
 			val = (mask & i) >> j;
@@ -179,7 +179,7 @@ double interpn(double **axisData, Tensor *data, double *targetData)
 	result = linear_interpolate(T, targetData, xPoint, *(data->info));
 	free(indexVector);
 	free(T);
-	free_intmatrix(indexMatrix, nDimension, 2);
-	free_doublematrix(xPoint, nDimension, 2);
+	free_imatrix(indexMatrix, n_dimension, 2);
+	free_dmatrix(xPoint, n_dimension, 2);
 	return (result);
 }

@@ -18,9 +18,15 @@ if (WIN32)
 endif()
 
 add_library(f16_model SHARED ${SOURCES})
+
+if (UNIX)
+    target_link_libraries(f16_model m)
+endif()
+
 set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR}/install CACHE PATH "f16_model default install prefix" FORCE)
 install(TARGETS f16_model DESTINATION lib)
 install(FILES ${CMAKE_SOURCE_DIR}/include/fly_ruler_model_ffi.h DESTINATION include)
+
 set(F16_MODEL_DIR ${CMAKE_INSTALL_PREFIX}/lib)
 
 # 测试目录

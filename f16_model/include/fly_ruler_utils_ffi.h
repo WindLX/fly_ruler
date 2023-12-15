@@ -1,6 +1,7 @@
 #ifndef FLY_RULER_UTILS_FFI_H
 #define FLY_RULER_UTILS_FFI_H
 
+/// @brief the level of the message
 typedef enum
 {
     TRACE,
@@ -9,13 +10,17 @@ typedef enum
     WARN,
     ERROR,
     FATAL
-} InfoLevel;
+} LogLevel;
 
-typedef void (*Logger)(const char *msg, InfoLevel level);
+/// @brief the type of logger callback function
+typedef void (*Logger)(const char *msg, LogLevel level);
 
-extern Logger frsys_log;
+/// @brief the instance of logger callback function
+extern Logger frutils_log;
 
-// register logger
+/// @brief register logger callback function,
+///        system will call this function when system initialization is complete
+/// @param lg the logger instance transfer from system
 void frutils_register_logger(Logger lg);
 
 #endif // FLY_RULER_UTILS_FFI_H

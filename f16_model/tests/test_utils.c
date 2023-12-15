@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "test_utils.h"
 
-const char *frutils_info_level_to_string(InfoLevel level)
+const char *frutils_info_level_to_string(LogLevel level)
 {
     switch (level)
     {
@@ -22,21 +22,21 @@ const char *frutils_info_level_to_string(InfoLevel level)
     }
 }
 
-void frutils_log(const char *msg, InfoLevel level)
+void test_frutils_log(const char *msg, LogLevel level)
 {
     printf("[%s] %s\n", frutils_info_level_to_string(level), msg);
 }
 
 int frsys_init()
 {
-    frutils_log("f16 model test start", INFO);
-    frutils_register_logger(frutils_log);
+    test_frutils_log("f16 model test start", INFO);
+    frutils_register_logger(test_frutils_log);
     return 0;
 }
 
 int frsys_stop()
 {
-    frutils_log("f16 model test end", INFO);
+    test_frutils_log("f16 model test end", INFO);
     return 0;
 }
 

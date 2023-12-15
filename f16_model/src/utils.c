@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <math.h>
 #include "utils.h"
 
 int fix(double in)
@@ -37,7 +39,6 @@ int sign(double in)
     return out;
 }
 
-/* Function for mach and qbar */
 void atmos(double alt, double vt, double *coeff)
 {
     double rho0 = 2.377e-3;
@@ -65,7 +66,6 @@ void atmos(double alt, double vt, double *coeff)
     coeff[2] = ps;
 }
 
-/* Calculate accelerations from states and state derivatives. */
 void accels(double *state,
             double *xdot,
             double *y)
@@ -96,18 +96,18 @@ void accels(double *state,
     y[2] = nz_cg;
 }
 
-Tensor *create_tensor(int nDimension, int *nPoints)
+Tensor *create_tensor(int n_dimension, int *n_points)
 {
     int length = 1;
     TensorInfo *info = (TensorInfo *)malloc(sizeof(TensorInfo));
-    info->nDimension = nDimension;
-    info->nPoints = (int *)malloc(nDimension * sizeof(int));
-    memcpy(info->nPoints, nPoints, nDimension * sizeof(int));
+    info->n_dimension = n_dimension;
+    info->n_points = (int *)malloc(n_dimension * sizeof(int));
+    memcpy(info->n_points, n_points, n_dimension * sizeof(int));
     Tensor *tensor = (Tensor *)malloc(sizeof(Tensor));
     tensor->info = info;
-    for (int i = 0; i < info->nDimension; i++)
+    for (int i = 0; i < info->n_dimension; i++)
     {
-        length *= info->nPoints[i];
+        length *= info->n_points[i];
     }
     tensor->data = (double *)malloc(length * sizeof(double));
     return (tensor);
@@ -115,7 +115,7 @@ Tensor *create_tensor(int nDimension, int *nPoints)
 
 void free_tensor(Tensor *tensor)
 {
-    free(tensor->info->nPoints);
+    free(tensor->info->n_points);
     free(tensor->info);
     free(tensor->data);
     free(tensor);
@@ -125,29 +125,29 @@ int get_lin_index(int *indexVector, TensorInfo info)
 {
     int linIndex = 0;
     int i, j, P;
-    for (i = 0; i < info.nDimension; i++)
+    for (i = 0; i < info.n_dimension; i++)
     {
         P = 1;
         for (j = 0; j < i; j++)
-            P = P * info.nPoints[j];
+            P = P * info.n_points[j];
         linIndex += P * indexVector[i];
     }
     return (linIndex);
 }
 
-int *create_intvector(int n)
+int *create_ivector(int n)
 {
     int *vec = (int *)malloc(n * sizeof(int));
     return (vec);
 }
 
-double *create_doublevector(int n)
+double *create_dvector(int n)
 {
     double *vec = (double *)malloc(n * sizeof(double));
     return (vec);
 }
 
-int **create_intmatrix(int n, int m)
+int **create_imatrix(int n, int m)
 {
     int i;
     int **mat = (int **)malloc(n * sizeof(int *));
@@ -156,7 +156,7 @@ int **create_intmatrix(int n, int m)
     return (mat);
 }
 
-double **create_doublematrix(int n, int m)
+double **create_dmatrix(int n, int m)
 {
     int i;
     double **mat = (double **)malloc(n * sizeof(double *));
@@ -165,7 +165,7 @@ double **create_doublematrix(int n, int m)
     return (mat);
 }
 
-void free_intmatrix(int **mat, int n, int m)
+void free_imatrix(int **mat, int n, int m)
 {
     /*
         the column size is not used but is required only
@@ -177,7 +177,7 @@ void free_intmatrix(int **mat, int n, int m)
     free(mat);
 }
 
-void free_doublematrix(double **mat, int n, int m)
+void free_dmatrix(double **mat, int n, int m)
 {
     /*
         the column size is not used but is required only

@@ -1,48 +1,49 @@
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include <math.h>
+#include "utils.h"
 #include "lofi_F16_AeroData.h"
 #include "hifi_F16_AeroData.h"
 #include "fly_ruler_model_ffi.h"
 #include "fly_ruler_utils_ffi.h"
-#include "stdio.h"
 
-Logger frsys_log = NULL;
+Logger frutils_log = NULL;
 
 void frutils_register_logger(Logger cb)
 {
-   frsys_log = cb;
+   frutils_log = cb;
 }
 
-int frmodel_install_hook(int argLen, ...)
+int frmodel_install_hook(int arg_len, ...)
 {
    int r = 0;
-   printf("111\n");
 
-   char errorMsg[100];
-   if (argLen < 1)
+   char error_msg[100];
+   if (arg_len < 1)
    {
-      sprintf(errorMsg, "argLen is %d, should be at least 1", argLen);
-      frsys_log(errorMsg, WARN);
+      sprintf(error_msg, "arg_len is %d, should be at least 1", arg_len);
+      frutils_log(error_msg, WARN);
    }
 
    va_list args;
-   va_start(args, argLen);
+   va_start(args, arg_len);
 
-   char *dataDir = va_arg(args, char *);
-   if (dataDir == NULL)
+   char *data_dir = va_arg(args, char *);
+   if (data_dir == NULL)
    {
-      sprintf(errorMsg, "dataDir is NULL");
-      frsys_log(errorMsg, WARN);
+      sprintf(error_msg, "data_dir is NULL");
+      frutils_log(error_msg, WARN);
    }
 
-   if (strlen(dataDir) == 0)
+   if (strlen(data_dir) == 0)
    {
-      sprintf(errorMsg, "dataDir is empty");
-      frsys_log(errorMsg, WARN);
+      sprintf(error_msg, "data_dir is empty");
+      frutils_log(error_msg, WARN);
    }
    va_end(args);
 
-   set_data_dir(dataDir);
+   set_data_dir(data_dir);
    r = init_hifi_data();
    if (r < 0)
    {
@@ -54,7 +55,7 @@ int frmodel_install_hook(int argLen, ...)
    return r;
 }
 
-int frmodel_uninstall_hook(int argLen, ...)
+int frmodel_uninstall_hook(int arg_len, ...)
 {
    free_hifi_data();
    free_axis_data();
@@ -321,8 +322,6 @@ int frmodel_get_state(double *xu, double *xdot)
 
       cz(alpha, beta, el, temp);
       Cz = temp[0];
-      /*##################################################
-
 
       /*##################################################
         ##  Set all higher order terms of hifi that are ##

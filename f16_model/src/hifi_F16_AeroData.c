@@ -109,11 +109,11 @@ static double *load_axis_data(char *fileName, int len)
 	if (fp == NULL)
 	{
 		sprintf(errorMsg, "can't find file %s", filePath);
-		frsys_log(errorMsg, ERROR);
+		frutils_log(errorMsg, ERROR);
 		return NULL;
 	}
 
-	double *data = create_doublevector(len);
+	double *data = create_dvector(len);
 
 	for (int i = 0; i < len; i++)
 	{
@@ -123,27 +123,27 @@ static double *load_axis_data(char *fileName, int len)
 			fclose(fp);
 			free(data);
 			sprintf(errorMsg, "file %s read failed", fileName);
-			frsys_log(errorMsg, ERROR);
+			frutils_log(errorMsg, ERROR);
 			return NULL;
 		}
 		data[i] = buffer;
 	}
 	fclose(fp);
 	sprintf(errorMsg, "load %s successfully", filePath);
-	frsys_log(errorMsg, INFO);
+	frutils_log(errorMsg, INFO);
 	return data;
 }
 
 /// @brief 加载气动数据
 /// @param fileName 数据文件名
-/// @param nDimension 数据维度长度
+/// @param n_dimension 数据维度长度
 /// @param dataNameIndex 数据名索引 由四位二进制数据构成
 ///			0b1000: ETA_DH1
 ///			从第三位至第一位分别代表 ALPHA BETA DH
 ///			0 代表 1, 1 代表 2
 ///			例如: 0b100 代表 ALPHA2 BETA1 DH1
 /// @return 数据
-static Tensor *load_aerodynamic_data(char *fileName, int nDimension, char dataNameIndex)
+static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataNameIndex)
 {
 	/**
 	 * dataNameIndex:
@@ -155,60 +155,60 @@ static Tensor *load_aerodynamic_data(char *fileName, int nDimension, char dataNa
 	char filePath[100];
 	char errorMsg[100];
 	int fileSize = 0;
-	int *nPoints = (int *)malloc(nDimension * sizeof(int));
+	int *n_points = (int *)malloc(n_dimension * sizeof(int));
 
-	if (nDimension > 0)
+	if (n_dimension > 0)
 	{
-		if (nDimension == 1 && GET_BIT(dataNameIndex, 3) == 1)
+		if (n_dimension == 1 && GET_BIT(dataNameIndex, 3) == 1)
 		{
-			nPoints[0] = 5;
+			n_points[0] = 5;
 		}
 		else if (GET_BIT(dataNameIndex, 2) == 0)
 		{
-			nPoints[0] = 20;
+			n_points[0] = 20;
 		}
 		else if (GET_BIT(dataNameIndex, 2) == 1)
 		{
-			nPoints[0] = 14;
+			n_points[0] = 14;
 		}
 		else
 		{
-			free(nPoints);
+			free(n_points);
 			sprintf(errorMsg, "invalid dataNameIndex");
-			frsys_log(errorMsg, ERROR);
+			frutils_log(errorMsg, ERROR);
 			return NULL;
 		}
-		fileSize = nPoints[0];
+		fileSize = n_points[0];
 
-		if (nDimension > 1)
+		if (n_dimension > 1)
 		{
-			nPoints[1] = 19;
-			fileSize *= nPoints[1];
+			n_points[1] = 19;
+			fileSize *= n_points[1];
 
-			if (nDimension == 3)
+			if (n_dimension == 3)
 			{
 				if (GET_BIT(dataNameIndex, 0) == 0)
 				{
-					nPoints[2] = 5;
+					n_points[2] = 5;
 				}
 				else if (GET_BIT(dataNameIndex, 0) == 1)
 				{
-					nPoints[2] = 3;
+					n_points[2] = 3;
 				}
 				else
 				{
-					free(nPoints);
+					free(n_points);
 					sprintf(errorMsg, "invalid dataNameIndex");
-					frsys_log(errorMsg, ERROR);
+					frutils_log(errorMsg, ERROR);
 					return NULL;
 				}
-				fileSize *= nPoints[2];
+				fileSize *= n_points[2];
 			}
 		}
 	}
 
-	Tensor *tensor = create_tensor(nDimension, nPoints);
-	free(nPoints);
+	Tensor *tensor = create_tensor(n_dimension, n_points);
+	free(n_points);
 
 	sprintf(filePath, "%s/%s", dataDir, fileName);
 	FILE *fp = fopen(filePath, "r");
@@ -216,7 +216,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int nDimension, char dataNa
 	{
 		free_tensor(tensor);
 		sprintf(errorMsg, "can't find file %s", filePath);
-		frsys_log(errorMsg, ERROR);
+		frutils_log(errorMsg, ERROR);
 		return NULL;
 	}
 
@@ -228,7 +228,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int nDimension, char dataNa
 			fclose(fp);
 			free_tensor(tensor);
 			sprintf(errorMsg, "file %s read failed", filePath);
-			frsys_log(errorMsg, ERROR);
+			frutils_log(errorMsg, ERROR);
 			return NULL;
 		}
 		tensor->data[i] = buffer;
@@ -236,7 +236,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int nDimension, char dataNa
 	fclose(fp);
 
 	sprintf(errorMsg, "load %s successfully", filePath);
-	frsys_log(errorMsg, INFO);
+	frutils_log(errorMsg, INFO);
 
 	return tensor;
 }
