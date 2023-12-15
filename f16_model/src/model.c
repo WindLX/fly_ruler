@@ -2,21 +2,27 @@
 #include <math.h>
 #include "lofi_F16_AeroData.h"
 #include "hifi_F16_AeroData.h"
-#include "fly_ruler_ffi.h"
+#include "fly_ruler_model_ffi.h"
+#include "fly_ruler_utils_ffi.h"
+#include "stdio.h"
 
-void setLogCallback(LogCallback cb)
+Logger frsys_log = NULL;
+
+void frutils_register_logger(Logger cb)
 {
-   log = cb;
+   frsys_log = cb;
 }
 
-void systemInitHook(int argLen, ...)
+int frmodel_install_hook(int argLen, ...)
 {
+   int r = 0;
+   printf("111\n");
+
    char errorMsg[100];
    if (argLen < 1)
    {
-      sprintf(errorMsg, "Error: argLen is %d, should be at least 1", argLen);
-      log(errorMsg, WARN);
-      return;
+      sprintf(errorMsg, "argLen is %d, should be at least 1", argLen);
+      frsys_log(errorMsg, WARN);
    }
 
    va_list args;
@@ -25,35 +31,37 @@ void systemInitHook(int argLen, ...)
    char *dataDir = va_arg(args, char *);
    if (dataDir == NULL)
    {
-      sprintf(errorMsg, "Error: dataDir is NULL");
-      log(errorMsg, WARN);
-      return;
+      sprintf(errorMsg, "dataDir is NULL");
+      frsys_log(errorMsg, WARN);
    }
 
    if (strlen(dataDir) == 0)
    {
-      sprintf(errorMsg, "Error: dataDir is empty");
-      log(errorMsg, WARN);
-      return;
+      sprintf(errorMsg, "dataDir is empty");
+      frsys_log(errorMsg, WARN);
    }
    va_end(args);
 
-   setDataDir(dataDir);
-   initHifiData();
-   initAxisData();
+   set_data_dir(dataDir);
+   r = init_hifi_data();
+   if (r < 0)
+   {
+      return r;
+   }
+
+   r = init_axis_data();
+
+   return r;
 }
 
-void systemStopHook(int argLen, ...)
+int frmodel_uninstall_hook(int argLen, ...)
 {
-   freeHifiData();
-   freeAxisData();
+   free_hifi_data();
+   free_axis_data();
+   return 0;
 }
 
-void systemStepHook(int argLen, ...)
-{
-}
-
-void getState(double *xu, double *xdot)
+int frmodel_get_state(double *xu, double *xdot)
 {
    int fi_flag;
 
@@ -296,10 +304,10 @@ void getState(double *xu, double *xdot)
       Cnp = temp[8];
 
       dmomdcon(alpha, beta, temp);
-      delta_Cl_a20 = temp[0]; /* Formerly dLda in getState.c */
-      delta_Cl_r30 = temp[1]; /* Formerly dLdr in getState.c */
-      delta_Cn_a20 = temp[2]; /* Formerly dNda in getState.c */
-      delta_Cn_r30 = temp[3]; /* Formerly dNdr in getState.c */
+      delta_Cl_a20 = temp[0]; /* Formerly dLda in frmodel_get_state.c */
+      delta_Cl_r30 = temp[1]; /* Formerly dLdr in frmodel_get_state.c */
+      delta_Cn_a20 = temp[2]; /* Formerly dNda in frmodel_get_state.c */
+      delta_Cn_r30 = temp[3]; /* Formerly dNdr in frmodel_get_state.c */
 
       clcn(alpha, beta, temp);
       Cl = temp[0];
@@ -478,4 +486,6 @@ void getState(double *xu, double *xdot)
    /*########################################*/
 
    free(temp);
+
+   return 0;
 };

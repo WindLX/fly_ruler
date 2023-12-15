@@ -96,7 +96,7 @@ void accels(double *state,
     y[2] = nz_cg;
 }
 
-Tensor *createTensor(int nDimension, int *nPoints)
+Tensor *create_tensor(int nDimension, int *nPoints)
 {
     int length = 1;
     TensorInfo *info = (TensorInfo *)malloc(sizeof(TensorInfo));
@@ -113,7 +113,7 @@ Tensor *createTensor(int nDimension, int *nPoints)
     return (tensor);
 }
 
-void freeTensor(Tensor *tensor)
+void free_tensor(Tensor *tensor)
 {
     free(tensor->info->nPoints);
     free(tensor->info);
@@ -121,7 +121,7 @@ void freeTensor(Tensor *tensor)
     free(tensor);
 }
 
-int getLinIndex(int *indexVector, TensorInfo info)
+int get_lin_index(int *indexVector, TensorInfo info)
 {
     int linIndex = 0;
     int i, j, P;
@@ -135,19 +135,19 @@ int getLinIndex(int *indexVector, TensorInfo info)
     return (linIndex);
 }
 
-int *intVector(int n)
+int *create_intvector(int n)
 {
     int *vec = (int *)malloc(n * sizeof(int));
     return (vec);
 }
 
-double *doubleVector(int n)
+double *create_doublevector(int n)
 {
     double *vec = (double *)malloc(n * sizeof(double));
     return (vec);
 }
 
-int **intMatrix(int n, int m)
+int **create_intmatrix(int n, int m)
 {
     int i;
     int **mat = (int **)malloc(n * sizeof(int *));
@@ -156,7 +156,7 @@ int **intMatrix(int n, int m)
     return (mat);
 }
 
-double **doubleMatrix(int n, int m)
+double **create_doublematrix(int n, int m)
 {
     int i;
     double **mat = (double **)malloc(n * sizeof(double *));
@@ -165,7 +165,7 @@ double **doubleMatrix(int n, int m)
     return (mat);
 }
 
-void freeIntMat(int **mat, int n, int m)
+void free_intmatrix(int **mat, int n, int m)
 {
     /*
         the column size is not used but is required only
@@ -177,7 +177,7 @@ void freeIntMat(int **mat, int n, int m)
     free(mat);
 }
 
-void freeDoubleMat(double **mat, int n, int m)
+void free_doublematrix(double **mat, int n, int m)
 {
     /*
         the column size is not used but is required only

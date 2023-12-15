@@ -2,29 +2,40 @@
 #include <stdlib.h>
 #include <math.h>
 #include "mexndinterp.h"
-#include "fly_ruler_ffi.h"
+#include "fly_ruler_utils_ffi.h"
+#include "fly_ruler_model_ffi.h"
+#include "utils.h"
 #include "hifi_F16_AeroData.h"
 
 #define DATA_LEN 44
 #define GET_BIT(num, pos) ((num >> pos) & 1)
 
-#define GET_COEFF_ALPHA(axisIndex, hifiIndex) \
-	double targetData[1] = {alpha};           \
-	return interpn(axisData[axisIndex], hifiData[hifiIndex], targetData)
+#define GET_COEFF_ALPHA(axisIndex, hifiIndex)                  \
+	double targetData[1] = {alpha};                            \
+	double **axis = get_axis_data(axisIndex);                  \
+	double r = interpn(axis, hifiData[hifiIndex], targetData); \
+	free(axis);                                                \
+	return r
 
-#define GET_COEFF2(axisIndex, hifiIndex)  \
-	double targetData[2] = {alpha, beta}; \
-	return interpn(axisData[axisIndex], hifiData[hifiIndex], targetData)
+#define GET_COEFF2(axisIndex, hifiIndex)                       \
+	double targetData[2] = {alpha, beta};                      \
+	double **axis = get_axis_data(axisIndex);                  \
+	double r = interpn(axis, hifiData[hifiIndex], targetData); \
+	free(axis);                                                \
+	return r
 
-#define GET_COEFF3(axisIndex, hifiIndex)        \
-	double targetData[3] = {alpha, beta, dele}; \
-	return interpn(axisData[axisIndex], hifiData[hifiIndex], targetData)
+#define GET_COEFF3(axisIndex, hifiIndex)                       \
+	double targetData[3] = {alpha, beta, dele};                \
+	double **axis = get_axis_data(axisIndex);                  \
+	double r = interpn(axis, hifiData[hifiIndex], targetData); \
+	free(axis);                                                \
+	return r
 
 static Tensor **hifiData;
-static double ***axisData;
+static double **axisData;
 static char *dataDir;
 
-enum AxisDataIndex
+typedef enum
 {
 	ALPHA1 = 0,
 	ALPHA2,
@@ -33,9 +44,9 @@ enum AxisDataIndex
 	ALPHA2_BETA1,
 	ALPHA1_BETA1_DH1,
 	ALPHA1_BETA1_DH2
-};
+} AxisDataIndex;
 
-enum HifiDataIndex
+typedef enum
 {
 	CL0120 = 0,
 	CL0620,
@@ -80,41 +91,66 @@ enum HifiDataIndex
 	CZ0820,
 	CZ1120,
 	CZ1420
-};
+} HifiDataIndex;
 
-double *loadAxisData(char *fileName, int len)
+/// @brief 加载轴向数据 alpha beta dh
+/// @param fileName 数据文件名
+/// @param len 数据长度
+/// @return 数据
+static double *load_axis_data(char *fileName, int len)
 {
-	FILE *fp = fopen(fileName, "r");
-	int i;
+	char filePath[100];
+	sprintf(filePath, "%s/%s", dataDir, fileName);
+	FILE *fp = fopen(filePath, "r");
+	int r = 0;
 	double buffer;
 	char errorMsg[50];
 
 	if (fp == NULL)
 	{
-		sprintf(errorMsg, "Can't find file %s", fileName);
-		fclose(fp);
-		log(errorMsg, ERROR);
+		sprintf(errorMsg, "can't find file %s", filePath);
+		frsys_log(errorMsg, ERROR);
 		return NULL;
 	}
 
-	double *data = doubleVector(len);
+	double *data = create_doublevector(len);
 
-	for (i = 0; i < len; i++)
+	for (int i = 0; i < len; i++)
 	{
-		fscanf(fp, "%lf", &buffer);
+		r = fscanf(fp, "%lf", &buffer);
+		if (r < 0)
+		{
+			fclose(fp);
+			free(data);
+			sprintf(errorMsg, "file %s read failed", fileName);
+			frsys_log(errorMsg, ERROR);
+			return NULL;
+		}
 		data[i] = buffer;
 	}
 	fclose(fp);
+	sprintf(errorMsg, "load %s successfully", filePath);
+	frsys_log(errorMsg, INFO);
 	return data;
 }
 
-Tensor *loadAerodynamicData(char *fileName, int nDimension, char dataNameIndex)
+/// @brief 加载气动数据
+/// @param fileName 数据文件名
+/// @param nDimension 数据维度长度
+/// @param dataNameIndex 数据名索引 由四位二进制数据构成
+///			0b1000: ETA_DH1
+///			从第三位至第一位分别代表 ALPHA BETA DH
+///			0 代表 1, 1 代表 2
+///			例如: 0b100 代表 ALPHA2 BETA1 DH1
+/// @return 数据
+static Tensor *load_aerodynamic_data(char *fileName, int nDimension, char dataNameIndex)
 {
 	/**
 	 * dataNameIndex:
 	 * 	000: ALPHA1 BETA1 DH1
 	 * 	special 0b1000 for ETA_DH1_brett
 	 */
+	int r = 0;
 	double buffer = 0.0;
 	char filePath[100];
 	char errorMsg[100];
@@ -123,7 +159,11 @@ Tensor *loadAerodynamicData(char *fileName, int nDimension, char dataNameIndex)
 
 	if (nDimension > 0)
 	{
-		if (GET_BIT(dataNameIndex, 2) == 0)
+		if (nDimension == 1 && GET_BIT(dataNameIndex, 3) == 1)
+		{
+			nPoints[0] = 5;
+		}
+		else if (GET_BIT(dataNameIndex, 2) == 0)
 		{
 			nPoints[0] = 20;
 		}
@@ -131,15 +171,11 @@ Tensor *loadAerodynamicData(char *fileName, int nDimension, char dataNameIndex)
 		{
 			nPoints[0] = 14;
 		}
-		else if (nDimension == 1 && GET_BIT(dataNameIndex, 3) == 1)
-		{
-			nPoints[0] = 5;
-		}
 		else
 		{
 			free(nPoints);
-			sprintf(errorMsg, "Invalid dataNameIndex");
-			log(errorMsg, ERROR);
+			sprintf(errorMsg, "invalid dataNameIndex");
+			frsys_log(errorMsg, ERROR);
 			return NULL;
 		}
 		fileSize = nPoints[0];
@@ -162,8 +198,8 @@ Tensor *loadAerodynamicData(char *fileName, int nDimension, char dataNameIndex)
 				else
 				{
 					free(nPoints);
-					sprintf(errorMsg, "Invalid dataNameIndex");
-					log(errorMsg, ERROR);
+					sprintf(errorMsg, "invalid dataNameIndex");
+					frsys_log(errorMsg, ERROR);
 					return NULL;
 				}
 				fileSize *= nPoints[2];
@@ -171,428 +207,402 @@ Tensor *loadAerodynamicData(char *fileName, int nDimension, char dataNameIndex)
 		}
 	}
 
-	Tensor *tensor = createTensor(nDimension, nPoints);
+	Tensor *tensor = create_tensor(nDimension, nPoints);
 	free(nPoints);
 
 	sprintf(filePath, "%s/%s", dataDir, fileName);
 	FILE *fp = fopen(filePath, "r");
 	if (fp == (FILE *)NULL)
 	{
-		freeTensor(tensor);
-		fclose(fp);
-		sprintf(errorMsg, "Can't find file %s", fileName);
-		log(errorMsg, ERROR);
+		free_tensor(tensor);
+		sprintf(errorMsg, "can't find file %s", filePath);
+		frsys_log(errorMsg, ERROR);
 		return NULL;
 	}
 
 	for (int i = 0; i < fileSize; i++)
 	{
-		fscanf(fp, "%lf", &buffer);
+		r = fscanf(fp, "%lf", &buffer);
+		if (r < 0)
+		{
+			fclose(fp);
+			free_tensor(tensor);
+			sprintf(errorMsg, "file %s read failed", filePath);
+			frsys_log(errorMsg, ERROR);
+			return NULL;
+		}
 		tensor->data[i] = buffer;
 	}
 	fclose(fp);
 
+	sprintf(errorMsg, "load %s successfully", filePath);
+	frsys_log(errorMsg, INFO);
+
 	return tensor;
 }
 
-double **getAxisData(Tensor **hifiData, int nDimension, char dataNameIndex)
+static double **get_axis_data(AxisDataIndex axisIndex)
 {
-	double **axisData = (double **)malloc(nDimension * sizeof(double *));
 	char errorMsg[100];
-	if (nDimension > 0)
+	double **axis;
+	switch (axisIndex)
 	{
-		if (GET_BIT(dataNameIndex, 2) == 0)
-		{
-			axisData[0] = hifiData[0]->data;
-		}
-		else if (GET_BIT(dataNameIndex, 2) == 1)
-		{
-			axisData[0] = hifiData[1]->data;
-		}
-		else if (nDimension == 1 && GET_BIT(dataNameIndex, 3) == 1)
-		{
-			axisData[0] = hifiData[3]->data;
-		}
-		else
-		{
-			free(axisData);
-			sprintf(errorMsg, "Invalid dataNameIndex");
-			log(errorMsg, ERROR);
-			return NULL;
-		}
+	case ALPHA1:
+		axis = (double **)malloc(sizeof(double *) * 1);
+		axis[0] = axisData[0];
+		break;
+	case ALPHA2:
+		axis = (double **)malloc(sizeof(double *) * 1);
+		axis[0] = axisData[1];
+		break;
+	case DH1:
+		axis = (double **)malloc(sizeof(double *) * 1);
+		axis[0] = axisData[3];
+		break;
+	case ALPHA1_BETA1:
+		axis = (double **)malloc(sizeof(double *) * 2);
+		axis[0] = axisData[0];
+		axis[1] = axisData[2];
+		break;
+	case ALPHA2_BETA1:
+		axis = (double **)malloc(sizeof(double *) * 2);
+		axis[0] = axisData[1];
+		axis[1] = axisData[2];
+		break;
+	case ALPHA1_BETA1_DH1:
+		axis = (double **)malloc(sizeof(double *) * 3);
+		axis[0] = axisData[0];
+		axis[1] = axisData[2];
+		axis[2] = axisData[3];
+		break;
+	case ALPHA1_BETA1_DH2:
+		axis = (double **)malloc(sizeof(double *) * 3);
+		axis[0] = axisData[0];
+		axis[1] = axisData[2];
+		axis[2] = axisData[4];
+		break;
+	default:
+		axis = NULL;
+		break;
+	}
+	return axis;
+}
 
-		if (nDimension > 1)
-		{
-			axisData[1] = hifiData[2]->data;
+int init_hifi_data()
+{
+	char errorMsg[100];
+	hifiData = (Tensor **)malloc(sizeof(Tensor *) * DATA_LEN);
+	hifiData[0] = load_aerodynamic_data("CL0120_ALPHA1_BETA1_DH2_601.dat", 3, 0b001);
+	hifiData[1] = load_aerodynamic_data("CL0620_ALPHA1_BETA1_604.dat", 2, 0b000);
+	hifiData[2] = load_aerodynamic_data("CL0720_ALPHA1_BETA1_603.dat", 2, 0b000);
+	hifiData[3] = load_aerodynamic_data("CL0820_ALPHA2_BETA1_602.dat", 2, 0b100);
+	hifiData[4] = load_aerodynamic_data("CL0920_ALPHA2_BETA1_605.dat", 2, 0b100);
+	hifiData[5] = load_aerodynamic_data("CL1220_ALPHA1_608.dat", 1, 0b000);
+	hifiData[6] = load_aerodynamic_data("CL1320_ALPHA1_606.dat", 1, 0b000);
+	hifiData[7] = load_aerodynamic_data("CL1520_ALPHA2_609.dat", 1, 0b100);
+	hifiData[8] = load_aerodynamic_data("CL1620_ALPHA2_607.dat", 1, 0b100);
+	hifiData[9] = load_aerodynamic_data("CL9999_ALPHA1_brett.dat", 1, 0b000);
+	hifiData[10] = load_aerodynamic_data("CM0120_ALPHA1_BETA1_DH1_101.dat", 3, 0b000);
+	hifiData[11] = load_aerodynamic_data("CM0820_ALPHA2_BETA1_102.dat", 2, 0b100);
+	hifiData[12] = load_aerodynamic_data("CM1020_ALPHA1_103.dat", 1, 0b000);
+	hifiData[13] = load_aerodynamic_data("CM1120_ALPHA1_104.dat", 1, 0b000);
+	hifiData[14] = load_aerodynamic_data("CM1420_ALPHA2_105.dat", 1, 0b100);
+	hifiData[15] = load_aerodynamic_data("CM9999_ALPHA1_brett.dat", 1, 0b000);
+	hifiData[16] = load_aerodynamic_data("CN0120_ALPHA1_BETA1_DH2_501.dat", 3, 0b001);
+	hifiData[17] = load_aerodynamic_data("CN0620_ALPHA1_BETA1_504.dat", 2, 0b000);
+	hifiData[18] = load_aerodynamic_data("CN0720_ALPHA1_BETA1_503.dat", 2, 0b000);
+	hifiData[19] = load_aerodynamic_data("CN0820_ALPHA2_BETA1_502.dat", 2, 0b100);
+	hifiData[20] = load_aerodynamic_data("CN0920_ALPHA2_BETA1_505.dat", 2, 0b100);
+	hifiData[21] = load_aerodynamic_data("CN1220_ALPHA1_508.dat", 1, 0b000);
+	hifiData[22] = load_aerodynamic_data("CN1320_ALPHA1_506.dat", 1, 0b000);
+	hifiData[23] = load_aerodynamic_data("CN1520_ALPHA2_509.dat", 1, 0b100);
+	hifiData[24] = load_aerodynamic_data("CN1620_ALPHA2_507.dat", 1, 0b100);
+	hifiData[25] = load_aerodynamic_data("CN9999_ALPHA1_brett.dat", 1, 0b000);
+	hifiData[26] = load_aerodynamic_data("CX0120_ALPHA1_BETA1_DH1_201.dat", 3, 0b000);
+	hifiData[27] = load_aerodynamic_data("CX0820_ALPHA2_BETA1_202.dat", 2, 0b100);
+	hifiData[28] = load_aerodynamic_data("CX1120_ALPHA1_204.dat", 1, 0b000);
+	hifiData[29] = load_aerodynamic_data("CX1420_ALPHA2_205.dat", 1, 0b100);
+	hifiData[30] = load_aerodynamic_data("CY0320_ALPHA1_BETA1_401.dat", 2, 0b000);
+	hifiData[31] = load_aerodynamic_data("CY0620_ALPHA1_BETA1_403.dat", 2, 0b000);
+	hifiData[32] = load_aerodynamic_data("CY0720_ALPHA1_BETA1_405.dat", 2, 0b000);
+	hifiData[33] = load_aerodynamic_data("CY0820_ALPHA2_BETA1_402.dat", 2, 0b100);
+	hifiData[34] = load_aerodynamic_data("CY0920_ALPHA2_BETA1_404.dat", 2, 0b100);
+	hifiData[35] = load_aerodynamic_data("CY1220_ALPHA1_408.dat", 1, 0b000);
+	hifiData[36] = load_aerodynamic_data("CY1320_ALPHA1_406.dat", 1, 0b000);
+	hifiData[37] = load_aerodynamic_data("CY1520_ALPHA2_409.dat", 1, 0b100);
+	hifiData[38] = load_aerodynamic_data("CY1620_ALPHA2_407.dat", 1, 0b100);
+	hifiData[39] = load_aerodynamic_data("CZ0120_ALPHA1_BETA1_DH1_301.dat", 3, 0b000);
+	hifiData[40] = load_aerodynamic_data("CZ0820_ALPHA2_BETA1_302.dat", 2, 0b100);
+	hifiData[41] = load_aerodynamic_data("CZ1120_ALPHA1_304.dat", 1, 0b000);
+	hifiData[42] = load_aerodynamic_data("CZ1420_ALPHA2_305.dat", 1, 0b100);
+	hifiData[43] = load_aerodynamic_data("ETA_DH1_brett.dat", 1, 0b1000);
 
-			if (nDimension == 3)
-			{
-				if (GET_BIT(dataNameIndex, 0) == 0)
-				{
-					axisData[2] = hifiData[3]->data;
-				}
-				else if (GET_BIT(dataNameIndex, 0) == 1)
-				{
-					axisData[2] = hifiData[4]->data;
-				}
-				else
-				{
-					free(axisData);
-					sprintf(errorMsg, "Invalid dataNameIndex");
-					log(errorMsg, ERROR);
-					return NULL;
-				}
-			}
+	for (int i = 0; i < DATA_LEN; i++)
+	{
+		if (hifiData[i] == NULL)
+		{
+			free(hifiData);
+			return -1;
 		}
 	}
-	return axisData;
+
+	return 0;
 }
 
-void initHifiData()
-{
-	hifiData = (Tensor **)malloc(sizeof(Tensor *) * DATA_LEN);
-	hifiData[0] = loadAerodynamicData("CL0120_ALPHA1_BETA1_DH2_601.dat", 3, 0b001);
-	hifiData[1] = loadAerodynamicData("CL0620_ALPHA1_BETA1_604.dat", 2, 0b000);
-	hifiData[2] = loadAerodynamicData("CL0720_ALPHA1_BETA1_603.dat", 2, 0b000);
-	hifiData[3] = loadAerodynamicData("CL0820_ALPHA2_BETA1_602.dat", 2, 0b100);
-	hifiData[4] = loadAerodynamicData("CL0920_ALPHA2_BETA1_605.dat", 2, 0b100);
-	hifiData[5] = loadAerodynamicData("CL1220_ALPHA1_608.dat", 1, 0b000);
-	hifiData[6] = loadAerodynamicData("CL1320_ALPHA1_606.dat", 1, 0b000);
-	hifiData[7] = loadAerodynamicData("CL1520_ALPHA2_609.dat", 1, 0b100);
-	hifiData[8] = loadAerodynamicData("CL1620_ALPHA2_607.dat", 1, 0b100);
-	hifiData[9] = loadAerodynamicData("CL9999_ALPHA1_brett.dat", 1, 0b000);
-	hifiData[10] = loadAerodynamicData("CM0120_ALPHA1_BETA1_DH1_101.dat", 3, 0b000);
-	hifiData[11] = loadAerodynamicData("CM0820_ALPHA2_BETA1_102.dat", 2, 0b100);
-	hifiData[12] = loadAerodynamicData("CM1020_ALPHA1_103.dat", 1, 0b000);
-	hifiData[13] = loadAerodynamicData("CM1120_ALPHA1_104.dat", 1, 0b000);
-	hifiData[14] = loadAerodynamicData("CM1420_ALPHA2_105.dat", 1, 0b100);
-	hifiData[15] = loadAerodynamicData("CM9999_ALPHA1_brett.dat", 1, 0b000);
-	hifiData[16] = loadAerodynamicData("CN0120_ALPHA1_BETA1_DH2_501.dat", 3, 0b001);
-	hifiData[17] = loadAerodynamicData("CN0620_ALPHA1_BETA1_504.dat", 2, 0b000);
-	hifiData[18] = loadAerodynamicData("CN0720_ALPHA1_BETA1_503.dat", 2, 0b000);
-	hifiData[19] = loadAerodynamicData("CN0820_ALPHA2_BETA1_502.dat", 2, 0b100);
-	hifiData[20] = loadAerodynamicData("CN0920_ALPHA2_BETA1_505.dat", 2, 0b100);
-	hifiData[21] = loadAerodynamicData("CN1220_ALPHA1_508.dat", 1, 0b000);
-	hifiData[22] = loadAerodynamicData("CN1320_ALPHA1_506.dat", 1, 0b000);
-	hifiData[23] = loadAerodynamicData("CN1520_ALPHA2_509.dat", 1, 0b100);
-	hifiData[24] = loadAerodynamicData("CN1620_ALPHA2_507.dat", 1, 0b100);
-	hifiData[25] = loadAerodynamicData("CN9999_ALPHA1_brett.dat", 1, 0b000);
-	hifiData[26] = loadAerodynamicData("CX0120_ALPHA1_BETA1_DH1_201.dat", 3, 0b000);
-	hifiData[27] = loadAerodynamicData("CX0820_ALPHA2_BETA1_202.dat", 2, 0b100);
-	hifiData[28] = loadAerodynamicData("CX1120_ALPHA1_204.dat", 1, 0b000);
-	hifiData[29] = loadAerodynamicData("CX1420_ALPHA2_205.dat", 1, 0b100);
-	hifiData[30] = loadAerodynamicData("CY0320_ALPHA1_BETA1_401.dat", 2, 0b000);
-	hifiData[31] = loadAerodynamicData("CY0620_ALPHA1_BETA1_403.dat", 2, 0b000);
-	hifiData[32] = loadAerodynamicData("CY0720_ALPHA1_BETA1_405.dat", 2, 0b000);
-	hifiData[33] = loadAerodynamicData("CY0820_ALPHA2_BETA1_402.dat", 2, 0b100);
-	hifiData[34] = loadAerodynamicData("CY0920_ALPHA2_BETA1_404.dat", 2, 0b100);
-	hifiData[35] = loadAerodynamicData("CY1220_ALPHA1_408.dat", 1, 0b000);
-	hifiData[36] = loadAerodynamicData("CY1320_ALPHA1_406.dat", 1, 0b000);
-	hifiData[37] = loadAerodynamicData("CY1520_ALPHA2_409.dat", 1, 0b100);
-	hifiData[38] = loadAerodynamicData("CY1620_ALPHA2_407.dat", 1, 0b100);
-	hifiData[39] = loadAerodynamicData("CZ0120_ALPHA1_BETA1_DH1_301.dat", 3, 0b000);
-	hifiData[40] = loadAerodynamicData("CZ0820_ALPHA2_BETA1_302.dat", 2, 0b100);
-	hifiData[41] = loadAerodynamicData("CZ1120_ALPHA1_304.dat", 1, 0b000);
-	hifiData[42] = loadAerodynamicData("CZ1420_ALPHA2_305.dat", 1, 0b100);
-	hifiData[43] = loadAerodynamicData("ETA_DH1_brett.dat", 1, 0b1000);
-
-	return hifiData;
-}
-
-void freeHifiData()
+void free_hifi_data()
 {
 	for (int i = 0; i < DATA_LEN; i++)
 	{
-		freeTensor(hifiData[i]);
+		free_tensor(hifiData[i]);
 	}
 	free(hifiData);
 }
 
-void initAxisData()
+int init_axis_data()
 {
-	double *alpha1 = loadAxisData("ALPHA1.dat", 20);
-	double *alpha2 = loadAxisData("ALPHA2.dat", 14);
-	double *beta1 = loadAxisData("BETA1.dat", 19);
-	double *dh1 = loadAxisData("DH1.dat", 5);
-	double *dh2 = loadAxisData("DH2.dat", 3);
+	char errorMsg[100];
 
-	// alpha1
-	double **axisSet0 = (double **)malloc(sizeof(double *) * 1);
-	axisSet0[0] = alpha1;
+	axisData = (double **)malloc(sizeof(double *) * 5);
+	axisData[0] = load_axis_data("ALPHA1.dat", 20);
+	axisData[1] = load_axis_data("ALPHA2.dat", 14);
+	axisData[2] = load_axis_data("BETA1.dat", 19);
+	axisData[3] = load_axis_data("DH1.dat", 5);
+	axisData[4] = load_axis_data("DH2.dat", 3);
 
-	// alpha2
-	double **axisSet1 = (double **)malloc(sizeof(double *) * 1);
-	axisSet1[0] = alpha2;
-
-	// dh1
-	double **axisSet2 = (double **)malloc(sizeof(double *) * 1);
-	axisSet2[0] = dh1;
-
-	// alpha1 beta1
-	double **axisSet3 = (double **)malloc(sizeof(double *) * 2);
-	axisSet3[0] = alpha1;
-	axisSet3[1] = beta1;
-
-	// alpha2 beta1
-	double **axisSet4 = (double **)malloc(sizeof(double *) * 2);
-	axisSet4[0] = alpha2;
-	axisSet4[1] = beta1;
-
-	// alpha1 beta1 dh1
-	double **axisSet5 = (double **)malloc(sizeof(double *) * 3);
-	axisSet5[0] = alpha1;
-	axisSet5[1] = beta1;
-	axisSet5[2] = dh1;
-
-	// alpha1 beta1 dh2
-	double **axisSet6 = (double **)malloc(sizeof(double *) * 3);
-	axisSet6[0] = alpha1;
-	axisSet6[1] = beta1;
-	axisSet6[2] = dh2;
-
-	axisData = (double ***)malloc(sizeof(double **) * 7);
-	axisData[0] = axisSet0;
-	axisData[1] = axisSet2;
-	axisData[2] = axisSet3;
-	axisData[3] = axisSet3;
-	axisData[4] = axisSet4;
-	axisData[5] = axisSet5;
-	axisData[6] = axisSet6;
+	return 0;
 }
 
-void freeAxisData()
+void free_axis_data()
 {
-	free(axisData[0][0]);
-	free(axisData[1][0]);
-	free(axisData[2][0]);
-	free(axisData[3][1]);
-	free(axisData[6][2]);
-	for (int i = 0; i < 7; i++)
+	for (int i = 0; i < 5; i++)
 	{
 		free(axisData[i]);
 	}
 	free(axisData);
 }
 
-void setDataDir(char *dir)
+void set_data_dir(char *dir)
 {
 	dataDir = dir;
 }
 
-double _Cx(double alpha, double beta, double dele)
+static double _Cx(double alpha, double beta, double dele)
 {
 	GET_COEFF3(ALPHA1_BETA1_DH1, CX0120);
 }
 
-double _Cz(double alpha, double beta, double dele)
+static double _Cz(double alpha, double beta, double dele)
 {
 	GET_COEFF3(ALPHA1_BETA1_DH1, CZ0120);
 }
 
-double _Cm(double alpha, double beta, double dele)
+static double _Cm(double alpha, double beta, double dele)
 {
 	GET_COEFF3(ALPHA1_BETA1_DH1, CM0120);
 }
 
-double _Cy(double alpha, double beta)
+static double _Cy(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA1_BETA1, CY0320);
 }
 
-double _Cn(double alpha, double beta, double dele)
+static double _Cn(double alpha, double beta, double dele)
 {
 	GET_COEFF3(ALPHA1_BETA1_DH2, CN0120);
 }
 
-double _Cl(double alpha, double beta, double dele)
+static double _Cl(double alpha, double beta, double dele)
 {
 	GET_COEFF3(ALPHA1_BETA1_DH2, CL0120);
 }
 
-double _Cx_lef(double alpha, double beta)
+static double _Cx_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CX0820);
 }
 
-double _Cz_lef(double alpha, double beta)
+static double _Cz_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CZ0820);
 }
 
-double _Cm_lef(double alpha, double beta)
+static double _Cm_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CM0820);
 }
 
-double _Cy_lef(double alpha, double beta)
+static double _Cy_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CY0820);
 }
 
-double _Cn_lef(double alpha, double beta)
+static double _Cn_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CN0820);
 }
 
-double _Cl_lef(double alpha, double beta)
+static double _Cl_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CL0820);
 }
 
-double _CXq(double alpha)
+static double _CXq(double alpha)
 {
-	GET_COEFF(ALPHA1, CX1120);
+	GET_COEFF_ALPHA(ALPHA1, CX1120);
 }
 
-double _CZq(double alpha)
+static double _CZq(double alpha)
 {
-	GET_COEFF(ALPHA1, CZ1120);
+	GET_COEFF_ALPHA(ALPHA1, CZ1120);
 }
 
-double _CMq(double alpha)
+static double _CMq(double alpha)
 {
-	GET_COEFF(ALPHA1, CM1120);
+	GET_COEFF_ALPHA(ALPHA1, CM1120);
 }
 
-double _CYp(double alpha)
+static double _CYp(double alpha)
 {
-	GET_COEFF(ALPHA1, CY1220);
+	GET_COEFF_ALPHA(ALPHA1, CY1220);
 }
 
-double _CYr(double alpha)
+static double _CYr(double alpha)
 {
-	GET_COEFF(ALPHA1, CY1320);
+	GET_COEFF_ALPHA(ALPHA1, CY1320);
 }
 
-double _CNr(double alpha)
+static double _CNr(double alpha)
 {
-	GET_COEFF(ALPHA1, CN1320);
+	GET_COEFF_ALPHA(ALPHA1, CN1320);
 }
 
-double _CNp(double alpha)
+static double _CNp(double alpha)
 {
-	GET_COEFF(ALPHA1, CN1220);
+	GET_COEFF_ALPHA(ALPHA1, CN1220);
 }
 
-double _CLp(double alpha)
+static double _CLp(double alpha)
 {
-	GET_COEFF(ALPHA1, CL1220);
+	GET_COEFF_ALPHA(ALPHA1, CL1220);
 }
 
-double _CLr(double alpha)
+static double _CLr(double alpha)
 {
-	GET_COEFF(ALPHA1, CL1320);
+	GET_COEFF_ALPHA(ALPHA1, CL1320);
 }
 
-double _delta_CXq_lef(double alpha)
+static double _delta_CXq_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CX1420);
+	GET_COEFF_ALPHA(ALPHA2, CX1420);
 }
 
-double _delta_CYr_lef(double alpha)
+static double _delta_CYr_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CY1620);
+	GET_COEFF_ALPHA(ALPHA2, CY1620);
 }
 
-double _delta_CYp_lef(double alpha)
+static double _delta_CYp_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CY1520);
+	GET_COEFF_ALPHA(ALPHA2, CY1520);
 }
 
-double _delta_CZq_lef(double alpha)
+static double _delta_CZq_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CZ1420);
+	GET_COEFF_ALPHA(ALPHA2, CZ1420);
 }
 
-double _delta_CLr_lef(double alpha)
+static double _delta_CLr_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CL1620);
+	GET_COEFF_ALPHA(ALPHA2, CL1620);
 }
 
-double _delta_CLp_lef(double alpha)
+static double _delta_CLp_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CL1520);
+	GET_COEFF_ALPHA(ALPHA2, CL1520);
 }
 
-double _delta_CMq_lef(double alpha)
+static double _delta_CMq_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CM1420);
+	GET_COEFF_ALPHA(ALPHA2, CM1420);
 }
 
-double _delta_CNr_lef(double alpha)
+static double _delta_CNr_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CN1620);
+	GET_COEFF_ALPHA(ALPHA2, CN1620);
 }
 
-double _delta_CNp_lef(double alpha)
+static double _delta_CNp_lef(double alpha)
 {
-	GET_COEFF(ALPHA2, CN1520);
+	GET_COEFF_ALPHA(ALPHA2, CN1520);
 }
 
-double _Cy_r30(double alpha, double beta)
+static double _Cy_r30(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA1_BETA1, CY0720);
 }
 
-double _Cn_r30(double alpha, double beta)
+static double _Cn_r30(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA1_BETA1, CN0720);
 }
 
-double _Cl_r30(double alpha, double beta)
+static double _Cl_r30(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA1_BETA1, CL0720);
 }
 
-double _Cy_a20(double alpha, double beta)
+static double _Cy_a20(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA1_BETA1, CY0620);
 }
 
-double _Cy_a20_lef(double alpha, double beta)
+static double _Cy_a20_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CY0920);
 }
 
-double _Cn_a20(double alpha, double beta)
+static double _Cn_a20(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA1_BETA1, CN0620);
 }
 
-double _Cn_a20_lef(double alpha, double beta)
+static double _Cn_a20_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CN0920);
 }
 
-double _Cl_a20(double alpha, double beta)
+static double _Cl_a20(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA1_BETA1, CL0620);
 }
 
-double _Cl_a20_lef(double alpha, double beta)
+static double _Cl_a20_lef(double alpha, double beta)
 {
 	GET_COEFF2(ALPHA2_BETA1, CL0920);
 }
 
-double _delta_CNbeta(double alpha)
+static double _delta_CNbeta(double alpha)
 {
-	GET_COEFF(ALPHA1, CN9999);
+	GET_COEFF_ALPHA(ALPHA1, CN9999);
 }
 
-double _delta_CLbeta(double alpha)
+static double _delta_CLbeta(double alpha)
 {
-	GET_COEFF(ALPHA1, CL9999);
+	GET_COEFF_ALPHA(ALPHA1, CL9999);
 }
 
-double _delta_Cm(double alpha)
+static double _delta_Cm(double alpha)
 {
-	GET_COEFF(ALPHA1, CM9999);
+	GET_COEFF_ALPHA(ALPHA1, CM9999);
 }
 
-double _eta_el(double el)
+static double _eta_el(double el)
 {
 	double targetData[1] = {el};
-	return interpn(axisData[DH1], hifiData[43], targetData);
+	double **axis = get_axis_data(DH1);
+	double r = interpn(axis, hifiData[43], targetData);
+	free(axis);
+	return r;
 }
 
 void hifi_C(double alpha, double beta, double el, double *retVal)

@@ -3,14 +3,14 @@
 #include <memory.h>
 #include <math.h>
 #include "mexndinterp.h"
-#include "fly_ruler_ffi.h"
+#include "fly_ruler_utils_ffi.h"
 
 /**
  * 找到目标点被围成的超立方体网格的顶点索引
  */
-int **getHyperCube(double **axisData, double *targetData, TensorInfo info)
+static int **get_hyper_cube(double **axisData, double *targetData, TensorInfo info)
 {
-	int **indexMatrix = intMatrix(info.nDimension, 2);
+	int **indexMatrix = create_intmatrix(info.nDimension, 2);
 	/* indexMatrix[i][0] => Lower, ...[1]=>Higher */
 	int i, j;
 	int indexMax;
@@ -36,8 +36,8 @@ int **getHyperCube(double **axisData, double *targetData, TensorInfo info)
 		/* Check to see if this point is within the bound */
 		if (x < xmin || x > xmax)
 		{
-			freeIntMat(indexMatrix, info.nDimension, 2);
-			log("Point lies out data grid (in getHyperCube)", ERROR);
+			free_intmatrix(indexMatrix, info.nDimension, 2);
+			frsys_log("Point lies out data grid (in get_hyper_cube)", ERROR);
 			return NULL;
 		}
 		else
@@ -69,20 +69,20 @@ int **getHyperCube(double **axisData, double *targetData, TensorInfo info)
 /**
  * 线性插值
  */
-double linearInterpolate(double *T, double *targetData, double **axisData, TensorInfo info)
+static double linear_interpolate(double *T, double *targetData, double **axisData, TensorInfo info)
 {
 	int m, i, j, k, nVertices;
 	double *oldT, *newT;
 	int mask, val;
 	int n = info.nDimension;
-	int *indexVector = intVector(n);
+	int *indexVector = create_intvector(n);
 	int index1, index2;
 	double f1, f2, lambda, result;
 	int dimNum;
 
 	nVertices = 1 << n;
 
-	oldT = doubleVector(nVertices);
+	oldT = create_doublevector(nVertices);
 	for (i = 0; i < nVertices; i++)
 		oldT[i] = T[i];
 
@@ -91,7 +91,7 @@ double linearInterpolate(double *T, double *targetData, double **axisData, Tenso
 	{
 		m = n - 1;
 		nVertices = (1 << m);
-		newT = doubleVector(nVertices);
+		newT = create_doublevector(nVertices);
 		for (i = 0; i < nVertices; i++)
 		{
 			for (j = 0; j < m; j++)
@@ -117,7 +117,7 @@ double linearInterpolate(double *T, double *targetData, double **axisData, Tenso
 				newT[index2] = f1;
 		} /*End of for i*/
 		free(oldT);
-		oldT = doubleVector(nVertices);
+		oldT = create_doublevector(nVertices);
 		for (i = 0; i < nVertices; i++)
 			oldT[i] = newT[i];
 		free(newT);
@@ -139,22 +139,22 @@ double interpn(double **axisData, Tensor *data, double *targetData)
 	int mask, val, P, index, nVertices, nDimension;
 	int **indexMatrix, *indexVector;
 
-	indexVector = intVector(data->info->nDimension);
-	xPoint = doubleMatrix(data->info->nDimension, 2);
+	indexVector = create_intvector(data->info->nDimension);
+	xPoint = create_doublematrix(data->info->nDimension, 2);
+
+	nDimension = data->info->nDimension;
 
 	/* Get the indices of the hypercube containing the point in argument */
-	indexMatrix = getHyperCube(axisData, targetData, *(data->info));
+	indexMatrix = get_hyper_cube(axisData, targetData, *(data->info));
 	if (indexMatrix == NULL)
 	{
 		free(indexVector);
-		freeDoubleMat(xPoint, nDimension, 2);
+		free_doublematrix(xPoint, nDimension, 2);
 		return NAN;
 	}
 
-	nVertices = (1 << data->info->nDimension);
-	T = doubleVector(nVertices);
-
-	nDimension = data->info->nDimension;
+	nVertices = (1 << nDimension);
+	T = create_doublevector(nVertices);
 
 	/* Get the co-ordinates of the hyper cube */
 	for (i = 0; i < nDimension; i++)
@@ -173,13 +173,13 @@ double interpn(double **axisData, Tensor *data, double *targetData)
 			val = (mask & i) >> j;
 			indexVector[j] = indexMatrix[j][val];
 		}
-		index = getLinIndex(indexVector, *(data->info));
+		index = get_lin_index(indexVector, *(data->info));
 		T[i] = data->data[index];
 	}
-	result = linearInterpolate(T, targetData, xPoint, *(data->info));
+	result = linear_interpolate(T, targetData, xPoint, *(data->info));
 	free(indexVector);
 	free(T);
-	freeIntMat(indexMatrix, nDimension, 2);
-	freeDoubleMat(xPoint, nDimension, 2);
+	free_intmatrix(indexMatrix, nDimension, 2);
+	free_doublematrix(xPoint, nDimension, 2);
 	return (result);
 }
