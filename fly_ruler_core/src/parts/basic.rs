@@ -1,6 +1,5 @@
 use fly_ruler_utils::Vector;
 use log::trace;
-use std::f64::consts::PI;
 
 #[derive(Debug, Clone)]
 pub struct Integrator {
@@ -58,7 +57,6 @@ impl VectorIntegrator {
     pub fn derivative_integrate(&mut self, derivative: impl Into<Vector>, t: f64) -> Vector {
         let derivative = derivative.into();
         let delta_t = t - self.last_time;
-        // let value = self.last_value.clone() + derivative;
         trace!("{:?}", derivative);
         self.past += derivative.clone() * delta_t;
         self.last_value = derivative;
@@ -109,13 +107,6 @@ pub fn step(init: f64, end: f64, step_time: f64, t: f64) -> f64 {
 
 /// Disturbance on the rudder surface
 pub fn disturbance(deflection: f64, t: f64) -> f64 {
-    // step time: 1
-    // let dis_1 = deflection;
-    // step time: 3
-    // let dis_2 = -2.0 * deflection;
-    // step time: 5
-    // let dis_3 = deflection;
-
     if t >= 1.0 && t <= 3.0 {
         deflection
     } else if t >= 3.0 && t <= 5.0 {
@@ -125,55 +116,47 @@ pub fn disturbance(deflection: f64, t: f64) -> f64 {
     }
 }
 
-pub fn rad2deg(xu: &mut Vector) {
-    assert!(xu.dim() >= 12);
-    xu[3] *= 180.0 / PI;
-    xu[4] *= 180.0 / PI;
-    xu[5] *= 180.0 / PI;
-    xu[7] *= 180.0 / PI;
-    xu[8] *= 180.0 / PI;
-    xu[9] *= 180.0 / PI;
-    xu[10] *= 180.0 / PI;
-    xu[11] *= 180.0 / PI;
+pub fn multi_to_deg(input: &Vector) -> Vector {
+    assert!(input.dim() >= 12);
+    let mut input = input.clone();
+    let index = [3, 4, 5, 7, 8, 9, 10, 11];
+    for i in 0..index.len() {
+        input[index[i]] = input[index[i]].to_degrees();
+    }
+    input
 }
 
-pub fn atmos(alt: f64, vt: f64) -> [f64; 2] {
+pub fn atmos(altitude: f64, velocity: f64) -> (f64, f64) {
     let rho0 = 2.377e-3;
-    let tfac;
-    let mut temp;
-    let rho;
-    let qbar;
-    let mut ps;
+    let tfac = 1.0 - 0.703e-5 * altitude;
 
-    tfac = 1.0 - 0.703e-5 * alt;
-    temp = 519.0 * tfac;
-    if alt >= 35000.0 {
+    let mut temp = 519.0 * tfac;
+    if altitude >= 35000.0 {
         temp = 390.0;
     }
 
-    rho = rho0 * tfac.powf(4.14);
-    qbar = 0.5 * rho * vt.powi(2);
-    ps = 1715.0 * rho * temp;
+    let rho = rho0 * tfac.powf(4.14);
+    let qbar = 0.5 * rho * velocity.powi(2);
+    let mut ps = 1715.0 * rho * temp;
 
-    if ps.abs() < 1.0e-10 {
+    if ps.abs() < 1.0e-6 {
         ps = 1715.0;
     }
 
-    let coeff = [qbar, ps];
-    coeff
+    (qbar, ps)
 }
 
 #[cfg(test)]
-mod core_basic_tests {
+mod core_parts_tests {
     use super::Integrator;
     use crate::parts::VectorIntegrator;
-    use fly_ruler_utils::logger::test_init;
+    use fly_ruler_utils::logger::test_logger_init;
     use log::{info, trace};
     use std::time::{Duration, SystemTime};
 
     #[test]
     fn test_integrator() {
-        test_init();
+        test_logger_init();
         let mut i = Integrator::new(0.0);
         let start_time = SystemTime::now();
         let mut r;
@@ -191,7 +174,7 @@ mod core_basic_tests {
 
     #[test]
     fn test_vector_integrator() {
-        test_init();
+        test_logger_init();
         let mut i = VectorIntegrator::new(vec![0.0, 0.0]);
         let start_time = SystemTime::now();
         let mut r;

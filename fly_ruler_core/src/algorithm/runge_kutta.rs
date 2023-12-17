@@ -31,7 +31,7 @@ pub fn runge_kutta(
 }
 
 #[cfg(test)]
-mod rk_tests {
+mod core_algorithm_tests {
     use super::*;
 
     #[test]

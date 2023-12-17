@@ -1,11 +1,11 @@
-use super::ffi::FrModelGetState;
+use super::ffi::FrModelStep;
 use crate::plugin::{IsPlugin, Plugin, PluginError};
 use fly_ruler_utils::error::FatalPluginError;
-use fly_ruler_utils::Vector;
+use fly_ruler_utils::model::{ModelInput, ModelOutput};
 use libc::c_double;
 use std::path::Path;
 
-pub type ModelGetStateFn = dyn Fn(&Vector) -> Result<Vector, FatalPluginError>;
+pub type ModelStepFn = dyn Fn(&ModelInput) -> Result<ModelOutput, FatalPluginError>;
 
 #[derive(Debug)]
 pub struct Model {
@@ -18,38 +18,43 @@ impl Model {
         Ok(Model { plugin })
     }
 
-    pub fn get_state_handler(&self) -> Result<FrModelGetState, FatalPluginError> {
-        let get_state = self
-            .load_function::<FrModelGetState>("frmodel_get_state")
+    pub fn get_step_handler(&self) -> Result<FrModelStep, FatalPluginError> {
+        let step = self
+            .load_function::<FrModelStep>("frmodel_step")
             .map_err(|e| FatalPluginError::new(&self.info().name, -2, &e.to_string()))?;
-        Ok(*get_state)
+        Ok(*step)
     }
 }
 
-pub fn get_state_handler_constructor(
-    handler: FrModelGetState,
+pub fn step_handler_constructor(
+    handler: FrModelStep,
     name: String,
-) -> Box<dyn Fn(&Vector) -> Result<Vector, FatalPluginError>> {
+) -> Box<dyn Fn(&ModelInput) -> Result<ModelOutput, FatalPluginError>> {
     let name = name.clone();
-    let h = move |xu: &Vector| {
-        let xu = &xu.data;
-        let mut xdot = [0.0; 18];
-        let xdot_ptr = xdot.as_mut_ptr() as *mut f64;
+    let h = move |input: &ModelInput| {
+        let state = input.state.as_slice();
+        let control = input.control.as_slice();
+        let mut state_dot = [0.0; 12];
+        let mut state_extend = [0.0; 6];
+        let state_dot_ptr = state_dot.as_mut_ptr() as *mut c_double;
+        let state_extend_ptr = state_extend.as_mut_ptr() as *mut c_double;
         unsafe {
-            let res = handler(xu.as_ptr() as *const c_double, xdot_ptr);
+            let res = handler(
+                state.as_ptr() as *const c_double,
+                control.as_ptr() as *const c_double,
+                input.lef,
+                state_dot_ptr,
+                state_extend_ptr,
+            );
             if res < 0 {
-                return Err(FatalPluginError::new(
-                    &name,
-                    res,
-                    "when call frmodel_get_state",
-                ));
+                return Err(FatalPluginError::new(&name, res, "when call frmodel_step"));
             } else {
-                let xdot = std::slice::from_raw_parts_mut(xdot_ptr, 18).to_vec();
-                Ok(Vector::from(xdot))
+                let state_dot = std::slice::from_raw_parts(state_dot_ptr, 12);
+                let state_extend = std::slice::from_raw_parts(state_extend_ptr, 6);
+                Ok(ModelOutput::new(state_dot, state_extend))
             }
         }
     };
-    // Rc::new(RefCell::new(h))
     Box::new(h)
 }
 
@@ -66,10 +71,11 @@ impl IsPlugin for Model {
 #[cfg(test)]
 mod plugin_model_tests {
     use super::Model;
-    use crate::model::get_state_handler_constructor;
+    use crate::model::step_handler_constructor;
     use crate::plugin::plugin::IsPlugin;
-    use fly_ruler_utils::logger::test_init;
-    use fly_ruler_utils::model::Vector;
+    use fly_ruler_utils::logger::test_logger_init;
+    use fly_ruler_utils::model::ModelInput;
+    use log::debug;
 
     #[test]
     fn test_model_info() {
@@ -79,7 +85,7 @@ mod plugin_model_tests {
          *  author = "windlx"
          *  version = "0.1.0"
          */
-        test_init();
+        test_logger_init();
         let model = Model::new("./install");
         assert!(matches!(model, Ok(_)));
         let model = model.unwrap();
@@ -92,7 +98,7 @@ mod plugin_model_tests {
 
     #[test]
     fn test_model_load() {
-        test_init();
+        test_logger_init();
         let model = Model::new("./install");
         assert!(matches!(model, Ok(_)));
         let model = model.unwrap();
@@ -104,14 +110,17 @@ mod plugin_model_tests {
 
     #[test]
     fn test_model_step() {
-        test_init();
+        test_logger_init();
+
         let model = Model::new("./install");
         assert!(matches!(model, Ok(_)));
+
         let model = model.unwrap();
         let res = model.plugin().install(vec![Box::new("./data")]);
         assert!(matches!(res, Ok(Ok(_))));
-        let res = model.get_state_handler();
-        let d = Vector::from(vec![
+
+        let res = model.get_step_handler();
+        let state = [
             0.0,
             0.0,
             15000.0,
@@ -124,17 +133,19 @@ mod plugin_model_tests {
             0.0,
             0.0,
             0.0,
+        ];
+        let control = [
             2109.41286903712,
             -2.24414978017729,
             -0.0935778861396136,
             0.0944687551889544,
-            6.28161378774449,
-            1.0,
-        ]);
+        ];
+        let d_lef = 6.28161378774449;
         let h = res.unwrap();
-        let f = get_state_handler_constructor(h, model.info().name.clone());
-        let r = f(&d);
-        dbg!(&r);
+        let f = step_handler_constructor(h, model.info().name.clone());
+        let r = f(&ModelInput::new(state, control, d_lef));
+        debug!("{:?}", &r);
+
         let res = model.plugin().uninstall(Vec::new());
         assert!(matches!(res, Ok(Ok(_))));
     }

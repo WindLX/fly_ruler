@@ -106,10 +106,12 @@ int frplugin_uninstall_hook(int argc, char **argv)
    return 0;
 }
 
-int frmodel_get_state(double *xu, double *xdot)
+int frmodel_step(
+    double *state, double *control, double d_lef,
+    double *state_dot, double *state_extend)
 {
    char msg[256];
-   sprintf(msg, "get state start");
+   sprintf(msg, "f16 step start");
    frplugin_log(msg, TRACE);
 
    /* #include f16_constants */
@@ -159,25 +161,25 @@ int frmodel_get_state(double *xu, double *xdot)
             States
       %%%%%%%%%%%%%%%%%%% */
 
-   npos = xu[0]; /* north position */
-   epos = xu[1]; /* east position */
-   alt = xu[2];  /* altitude */
-   phi = xu[3];  /* orientation angles in rad. */
-   theta = xu[4];
-   psi = xu[5];
+   npos = state[0]; /* north position */
+   epos = state[1]; /* east position */
+   alt = state[2];  /* altitude */
+   phi = state[3];  /* orientation angles in rad. */
+   theta = state[4];
+   psi = state[5];
 
-   vt = xu[6];          /* total velocity */
-   alpha = xu[7] * r2d; /* angle of attack in degrees */
-   beta = xu[8] * r2d;  /* sideslip angle in degrees */
-   P = xu[9];           /* Roll Rate --- rolling  moment is Lbar */
-   Q = xu[10];          /* Pitch Rate--- pitching moment is M */
-   R = xu[11];          /* Yaw Rate  --- yawing   moment is N */
+   vt = state[6];          /* total velocity */
+   alpha = state[7] * r2d; /* angle of attack in degrees */
+   beta = state[8] * r2d;  /* sideslip angle in degrees */
+   P = state[9];           /* Roll Rate --- rolling  moment is Lbar */
+   Q = state[10];          /* Pitch Rate--- pitching moment is M */
+   R = state[11];          /* Yaw Rate  --- yawing   moment is N */
 
-   sa = sin(xu[7]); /* sin(alpha) */
-   ca = cos(xu[7]); /* cos(alpha) */
-   sb = sin(xu[8]); /* sin(beta)  */
-   cb = cos(xu[8]); /* cos(beta)  */
-   tb = tan(xu[8]); /* tan(beta)  */
+   sa = sin(state[7]); /* sin(alpha) */
+   ca = cos(state[7]); /* cos(alpha) */
+   sb = sin(state[8]); /* sin(beta)  */
+   cb = cos(state[8]); /* cos(beta)  */
+   tb = tan(state[8]); /* tan(beta)  */
 
    st = sin(theta);
    ct = cos(theta);
@@ -196,11 +198,11 @@ int frmodel_get_state(double *xu, double *xdot)
       Control inputs
       %%%%%%%%%%%%%%%%%%% */
 
-   T = xu[12];   /* thrust */
-   el = xu[13];  /* Elevator setting in degrees. */
-   ail = xu[14]; /* Ailerons mex setting in degrees. */
-   rud = xu[15]; /* Rudder setting in degrees. */
-   lef = xu[16]; /* Leading edge flap setting in degrees */
+   T = control[0];   /* thrust */
+   el = control[1];  /* Elevator setting in degrees. */
+   ail = control[2]; /* Ailerons mex setting in degrees. */
+   rud = control[3]; /* Rudder setting in degrees. */
+   lef = d_lef;      /* Leading edge flap setting in degrees */
 
    /* dail  = ail/20.0;   aileron normalized against max angle */
    /* The aileron was normalized using 20.0 but the NASA report and
@@ -235,29 +237,29 @@ int frmodel_get_state(double *xu, double *xdot)
    W = vt * sa * cb;
 
    /* nposdot */
-   xdot[0] = U * (ct * cpsi) +
-             V * (sphi * cpsi * st - cphi * spsi) +
-             W * (cphi * st * cpsi + sphi * spsi);
+   state_dot[0] = U * (ct * cpsi) +
+                  V * (sphi * cpsi * st - cphi * spsi) +
+                  W * (cphi * st * cpsi + sphi * spsi);
 
    /* eposdot */
-   xdot[1] = U * (ct * spsi) +
-             V * (sphi * spsi * st + cphi * cpsi) +
-             W * (cphi * st * spsi - sphi * cpsi);
+   state_dot[1] = U * (ct * spsi) +
+                  V * (sphi * spsi * st + cphi * cpsi) +
+                  W * (cphi * st * spsi - sphi * cpsi);
 
    /* altdot */
-   xdot[2] = U * st - V * (sphi * ct) - W * (cphi * ct);
+   state_dot[2] = U * st - V * (sphi * ct) - W * (cphi * ct);
 
    /* %%%%%%%%%%%%%%%%%%%
       Kinematic equations
       %%%%%%%%%%%%%%%%%%% */
    /* phidot */
-   xdot[3] = P + tt * (Q * sphi + R * cphi);
+   state_dot[3] = P + tt * (Q * sphi + R * cphi);
 
    /* theta dot */
-   xdot[4] = Q * cphi - R * sphi;
+   state_dot[4] = Q * cphi - R * sphi;
 
    /* psidot */
-   xdot[5] = (Q * sphi + R * cphi) / ct;
+   state_dot[5] = (Q * sphi + R * cphi) / ct;
 
    /* %%%%%%%%%%%%%%%%%%
            Table lookup
@@ -469,19 +471,19 @@ int frmodel_get_state(double *xu, double *xdot)
       vt_dot equation (from S&L, p82)
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% */
 
-   xdot[6] = (U * Udot + V * Vdot + W * Wdot) / vt;
+   state_dot[6] = (U * Udot + V * Vdot + W * Wdot) / vt;
 
    /* %%%%%%%%%%%%%%%%%%
       alpha_dot equation
       %%%%%%%%%%%%%%%%%% */
 
-   xdot[7] = (U * Wdot - W * Udot) / (U * U + W * W);
+   state_dot[7] = (U * Wdot - W * Udot) / (U * U + W * W);
 
    /* %%%%%%%%%%%%%%%%%
       beta_dot equation
       %%%%%%%%%%%%%%%%% */
 
-   xdot[8] = (Vdot * vt - V * xdot[6]) / (vt * vt * cb);
+   state_dot[8] = (Vdot * vt - V * state_dot[6]) / (vt * vt * cb);
 
    /* %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       compute Pdot, Qdot, and Rdot (as in Stevens and Lewis p32)
@@ -497,40 +499,40 @@ int frmodel_get_state(double *xu, double *xdot)
       Pdot
       %%%%%%%%%%%%%%%%%%%%%%% */
 
-   xdot[9] = (Jz * L_tot + Jxz * N_tot - (Jz * (Jz - Jy) + Jxz * Jxz) * Q * R + Jxz * (Jx - Jy + Jz) * P * Q + Jxz * Q * Heng) / denom;
+   state_dot[9] = (Jz * L_tot + Jxz * N_tot - (Jz * (Jz - Jy) + Jxz * Jxz) * Q * R + Jxz * (Jx - Jy + Jz) * P * Q + Jxz * Q * Heng) / denom;
 
    /* %%%%%%%%%%%%%%%%%%%%%%%
       Qdot
       %%%%%%%%%%%%%%%%%%%%%%% */
 
-   xdot[10] = (M_tot + (Jz - Jx) * P * R - Jxz * (P * P - R * R) - R * Heng) / Jy;
+   state_dot[10] = (M_tot + (Jz - Jx) * P * R - Jxz * (P * P - R * R) - R * Heng) / Jy;
 
    /* %%%%%%%%%%%%%%%%%%%%%%%
       Rdot
       %%%%%%%%%%%%%%%%%%%%%%% */
 
-   xdot[11] = (Jx * N_tot + Jxz * L_tot + (Jx * (Jx - Jy) + Jxz * Jxz) * P * Q - Jxz * (Jx - Jy + Jz) * Q * R + Jx * Q * Heng) / denom;
+   state_dot[11] = (Jx * N_tot + Jxz * L_tot + (Jx * (Jx - Jy) + Jxz * Jxz) * P * Q - Jxz * (Jx - Jy + Jz) * Q * R + Jx * Q * Heng) / denom;
 
    /*########################################*/
    /*### Create accelerations anx_cg, any_cg */
    /*### ans anz_cg as outputs ##############*/
    /*########################################*/
 
-   accels(xu, xdot, temp);
+   accels(state, state_dot, temp);
 
-   xdot[12] = temp[0]; /* anx_cg */
-   xdot[13] = temp[1]; /* any_cg */
-   xdot[14] = temp[2]; /* anz_cg */
-   xdot[15] = mach;
-   xdot[16] = qbar;
-   xdot[17] = ps;
+   state_extend[0] = temp[0]; /* anx_cg */
+   state_extend[1] = temp[1]; /* any_cg */
+   state_extend[2] = temp[2]; /* anz_cg */
+   state_extend[3] = mach;
+   state_extend[4] = qbar;
+   state_extend[5] = ps;
 
    /*########################################*/
    /*########################################*/
 
    free(temp);
 
-   sprintf(msg, "get state finished");
+   sprintf(msg, "f16 step finished");
    frplugin_log(msg, TRACE);
 
    return 0;

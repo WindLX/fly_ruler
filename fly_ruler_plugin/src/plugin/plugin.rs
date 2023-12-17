@@ -92,9 +92,7 @@ impl Plugin {
         match r {
             Ok(r) => {
                 let argc = args.len();
-
                 trace!("{}: trigger hook: {}", self.info.name, name);
-
                 let arg_string: Result<Vec<CString>, PluginError> = args
                     .iter()
                     .map(|s| {
@@ -111,7 +109,6 @@ impl Plugin {
                 };
 
                 let args: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
-
                 let argv = args.as_ptr();
                 unsafe {
                     let res = r(argc as c_int, argv as *const *const c_char);

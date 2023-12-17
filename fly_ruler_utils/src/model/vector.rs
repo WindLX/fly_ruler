@@ -403,7 +403,7 @@ impl DivAssign<f64> for Vector {
 }
 
 #[cfg(test)]
-mod vector_tests {
+mod utils_model_tests {
     use super::*;
 
     #[test]

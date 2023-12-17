@@ -231,7 +231,7 @@ pub fn nelder_mead(
 }
 
 #[cfg(test)]
-mod nm_tests {
+mod core_algorithm_tests {
     use super::*;
 
     #[test]

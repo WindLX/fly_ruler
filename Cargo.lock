@@ -309,16 +309,12 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "csv",
- "env_logger",
  "fly_ruler_plugin",
  "fly_ruler_utils",
  "lazy_static",
  "log",
  "rand",
  "rayon",
- "serde",
- "serde_json",
- "serde_toml",
  "tokio",
  "tokio-test",
 ]
@@ -341,8 +337,11 @@ dependencies = [
 name = "fly_ruler_system"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "stick",
  "tokio",
+ "toml",
 ]
 
 [[package]]
@@ -354,9 +353,6 @@ dependencies = [
  "log",
  "rand",
  "rayon",
- "serde",
- "serde_json",
- "serde_toml",
 ]
 
 [[package]]
@@ -818,12 +814,6 @@ checksum = "12022b835073e5b11e90a14f86838ceb1c8fb0325b72416845c487ac0fa95e80"
 dependencies = [
  "serde",
 ]
-
-[[package]]
-name = "serde_toml"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e68184169792863bfb6d8b5de8e15456ebf4302f28236f0ff1136591eb66541"
 
 [[package]]
 name = "signal-hook-registry"

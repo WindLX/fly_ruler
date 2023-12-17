@@ -1,6 +1,6 @@
 use log::{debug, error, info, trace, warn, Level};
 
-pub fn test_init() {
+pub fn test_logger_init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 

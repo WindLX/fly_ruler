@@ -2,13 +2,14 @@ extern crate fly_ruler_core;
 extern crate fly_ruler_utils;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fly_ruler_core::trim::trim;
+use fly_ruler_core::{trim::trim, TrimTarget};
 use fly_ruler_plugin::{model::Model, plugin::IsPlugin};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 fn tr(model: Arc<Mutex<Model>>) {
-    let _result = tokio_test::block_on(trim(500.0, 15000.0, 1, model, None, None));
+    let trim_target = TrimTarget::new(15000.0, 500.0);
+    let _result = tokio_test::block_on(trim(trim_target, None, true, model, None, None));
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

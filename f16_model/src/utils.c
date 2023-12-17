@@ -66,8 +66,8 @@ void atmos(double alt, double vt, double *coeff)
     coeff[2] = ps;
 }
 
-void accels(double *xu,
-            double *xdot,
+void accels(double *state,
+            double *state_dot,
             double *y)
 {
 #define GRAV 32.174
@@ -77,19 +77,19 @@ void accels(double *xu,
     double u_dot, v_dot, w_dot;
     double nx_cg, ny_cg, nz_cg;
 
-    sina = sin(xu[7]);
-    cosa = cos(xu[7]);
-    sinb = sin(xu[8]);
-    cosb = cos(xu[8]);
-    vel_u = xu[6] * cosb * cosa;
-    vel_v = xu[6] * sinb;
-    vel_w = xu[6] * cosb * sina;
-    u_dot = cosb * cosa * xdot[6] - xu[6] * sinb * cosa * xdot[8] - xu[6] * cosb * sina * xdot[7];
-    v_dot = sinb * xdot[6] + xu[6] * cosb * xdot[8];
-    w_dot = cosb * sina * xdot[6] - xu[6] * sinb * sina * xdot[8] + xu[6] * cosb * cosa * xdot[7];
-    nx_cg = 1.0 / GRAV * (u_dot + xu[10] * vel_w - xu[11] * vel_v) + sin(xu[4]);
-    ny_cg = 1.0 / GRAV * (v_dot + xu[11] * vel_u - xu[9] * vel_w) - cos(xu[4]) * sin(xu[3]);
-    nz_cg = -1.0 / GRAV * (w_dot + xu[9] * vel_v - xu[10] * vel_u) + cos(xu[4]) * cos(xu[3]);
+    sina = sin(state[7]);
+    cosa = cos(state[7]);
+    sinb = sin(state[8]);
+    cosb = cos(state[8]);
+    vel_u = state[6] * cosb * cosa;
+    vel_v = state[6] * sinb;
+    vel_w = state[6] * cosb * sina;
+    u_dot = cosb * cosa * state_dot[6] - state[6] * sinb * cosa * state_dot[8] - state[6] * cosb * sina * state_dot[7];
+    v_dot = sinb * state_dot[6] + state[6] * cosb * state_dot[8];
+    w_dot = cosb * sina * state_dot[6] - state[6] * sinb * sina * state_dot[8] + state[6] * cosb * cosa * state_dot[7];
+    nx_cg = 1.0 / GRAV * (u_dot + state[10] * vel_w - state[11] * vel_v) + sin(state[4]);
+    ny_cg = 1.0 / GRAV * (v_dot + state[11] * vel_u - state[9] * vel_w) - cos(state[4]) * sin(state[3]);
+    nz_cg = -1.0 / GRAV * (w_dot + state[9] * vel_v - state[10] * vel_u) + cos(state[4]) * cos(state[3]);
 
     y[0] = nx_cg;
     y[1] = ny_cg;
