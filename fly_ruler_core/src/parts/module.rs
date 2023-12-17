@@ -160,7 +160,8 @@ mod core_block_tests {
     use std::fs::File;
     use std::path::Path;
     use std::sync::Arc;
-    use std::time::{Duration, SystemTime};
+    use std::thread;
+    use std::time::{Duration, Instant, SystemTime};
     use tokio::sync::Mutex;
 
     #[test]
@@ -296,7 +297,6 @@ mod core_block_tests {
         let path = Path::new("output.csv");
         let file = File::create(&path).unwrap();
         let mut writer = Writer::from_writer(file);
-        let start_time = SystemTime::now();
         writer
             .write_record(&[
                 "time(s)",
@@ -321,18 +321,27 @@ mod core_block_tests {
             ])
             .unwrap();
         debug!("{:?}", control);
+        let start_time = Instant::now();
+        let mut next_write_time = start_time + Duration::from_millis(100);
+
         loop {
-            let current_time = SystemTime::now();
-            let delta_time = current_time.duration_since(start_time).unwrap();
+            let current_time = Instant::now();
+            let delta_time = current_time.duration_since(start_time);
             let mut result = f16_block.update(control, delta_time.as_secs_f64());
-            rad2deg(&mut result);
-            trace!("time: {:?} \n{:?}\n", delta_time, result.data);
-            let data: Vec<String> = result.data.iter().map(|d| d.to_string()).collect();
-            let mut record = vec![delta_time.as_secs_f32().to_string()];
-            record.extend(data);
-            writer.write_record(&record).unwrap();
-            writer.flush().unwrap();
-            if delta_time > Duration::from_secs_f32(30.0) {
+            if current_time >= next_write_time {
+                rad2deg(&mut result);
+                trace!("time: {:?} \n{:?}\n", delta_time, result.data);
+                let data: Vec<String> = result.data.iter().map(|d| d.to_string()).collect();
+                let mut record = vec![delta_time.as_secs_f32().to_string()];
+                record.extend(data);
+
+                writer.write_record(&record).unwrap();
+                writer.flush().unwrap();
+
+                next_write_time += Duration::from_millis(100);
+            }
+
+            if delta_time >= Duration::from_secs_f32(30.0) {
                 break;
             }
         }
