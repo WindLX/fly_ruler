@@ -24,10 +24,15 @@ if (UNIX)
 endif()
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR}/install CACHE PATH "f16_model default install prefix" FORCE)
-install(TARGETS f16_model DESTINATION lib)
-install(FILES ${CMAKE_SOURCE_DIR}/include/fly_ruler_model_ffi.h DESTINATION include)
 
-set(F16_MODEL_DIR ${CMAKE_INSTALL_PREFIX}/lib)
+if (NOT EXISTS ${CMAKE_INSTALL_PREFIX})
+    file(MAKE_DIRECTORY ${CMAKE_INSTALL_PREFIX})
+endif()
+
+install(TARGETS f16_model DESTINATION ${CMAKE_INSTALL_PREFIX})
+install(FILES ${CMAKE_SOURCE_DIR}/info.toml DESTINATION ${CMAKE_INSTALL_PREFIX})
+
+set(F16_MODEL_DIR ${CMAKE_INSTALL_PREFIX})
 
 # 测试目录
 enable_testing()

@@ -1,4 +1,4 @@
-#![recursion_limit = "256"]
-
+pub mod algorithm;
 pub mod model;
-pub mod utils;
+pub mod parts;
+pub mod trim;

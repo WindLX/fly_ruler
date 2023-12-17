@@ -1,59 +1,76 @@
-use std::{error::Error, fmt::Display};
-
-pub trait FrError: Error + Send + Sync {
-    fn log_level(&self) -> log::Level;
+/// fatal error which may cause critical problem and must be transmit to the fly_ruler system level
+#[derive(Debug)]
+pub enum FrError {
+    /// The system has been used in an unsupported way
+    Unsupported(String),
+    /// An unexpected bug has happened, please contact the author
+    ReportableBug(String),
+    /// A read or write error has happened when interacting with file system
+    Io(std::io::Error),
+    /// Error cause by fly_ruler_core
+    // Core(FatalCoreError),
+    /// Error caused by fly_ruler_plugin
+    Plugin(FatalPluginError),
+    /// a failpoint has been triggered for testing purposes
+    #[doc(hidden)]
+    #[cfg(feature = "failpoints")]
+    FailPoint,
 }
 
-#[derive(Debug, Clone)]
-pub enum CoreError {
-    TestError,
-}
-
-impl Error for CoreError {}
-
-impl Display for CoreError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl std::error::Error for FrError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::TestError => write!(f, "CoreError"),
+            Self::Io(e) => Some(e),
+            // Self::Core(e) => Some(e),
+            Self::Plugin(e) => Some(e),
+            _ => None,
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum SystemError {}
-
-#[derive(Debug, Clone)]
-pub enum ModelError {
-    ModelSearchError(String, String),
-    ModelLoadError(String, String),
-    ModelInstallError(String, String),
-    ModelUninstallError(String, String),
-    ModelGetStateError(String, String),
-}
-
-impl Error for ModelError {}
-
-impl Display for ModelError {
+impl std::fmt::Display for FrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ModelSearchError(name, version) => {
-                write!(f, "ModelSearchError: {}:{}", name, version)
-            }
-            Self::ModelLoadError(name, version) => {
-                write!(f, "ModelLoadError: {}:{}", name, version)
-            }
-            Self::ModelInstallError(name, version) => {
-                write!(f, "ModelInstallError: {}:{}", name, version)
-            }
-            Self::ModelUninstallError(name, version) => {
-                write!(f, "ModelUninstallError: {}:{}", name, version)
-            }
-            Self::ModelGetStateError(name, version) => {
-                write!(f, "ModelGetStateError: {}:{}", name, version)
-            }
+            Self::Unsupported(s) => write!(f, "Unsupported: {}", s),
+            Self::ReportableBug(s) => write!(f, "ReportableBug: {}", s),
+            Self::Io(e) => write!(f, "Io: {}", e),
+            // Self::Core(e) => write!(f, "Core: {}", e),
+            Self::Plugin(e) => write!(f, "Plugin: {}", e),
+            #[cfg(feature = "failpoints")]
+            Self::FailPoint => write!(f, "FailPoint"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum PluginError {}
+/// fatal error which occured in fly_ruler_core
+#[derive(Debug)]
+pub enum FatalCoreError {}
+
+#[derive(Debug)]
+pub struct FatalPluginError {
+    pub name: String,
+    pub result: i32,
+    pub reason: String,
+}
+
+impl FatalPluginError {
+    pub fn new(name: &str, result: i32, reason: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            result,
+            reason: reason.to_string(),
+        }
+    }
+}
+
+impl std::error::Error for FatalPluginError {}
+
+impl std::fmt::Display for FatalPluginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "plugin {} failed with code {}: {}",
+            self.name, self.result, self.reason
+        )
+    }
+}

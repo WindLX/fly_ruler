@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "test_utils.h"
 
-const char *frutils_info_level_to_string(LogLevel level)
+const char *frplugin_info_level_to_string(LogLevel level)
 {
     switch (level)
     {
@@ -15,42 +15,41 @@ const char *frutils_info_level_to_string(LogLevel level)
         return "WARN";
     case ERROR:
         return "ERROR";
-    case FATAL:
-        return "FATAL";
     default:
         return "INFO";
     }
 }
 
-void test_frutils_log(const char *msg, LogLevel level)
+void test_frplugin_log(const char *msg, LogLevel level)
 {
-    printf("[%s] %s\n", frutils_info_level_to_string(level), msg);
+    printf("[%s] %s\n", frplugin_info_level_to_string(level), msg);
 }
 
 int frsys_init()
 {
-    test_frutils_log("f16 model test start", INFO);
-    frutils_register_logger(test_frutils_log);
+    test_frplugin_log("f16 model test start", INFO);
+    frplugin_register_logger(test_frplugin_log);
     return 0;
 }
 
 int frsys_stop()
 {
-    test_frutils_log("f16 model test end", INFO);
+    test_frplugin_log("f16 model test end", INFO);
     return 0;
 }
 
 int frmodel_install()
 {
     int r = 0;
-    r = frmodel_install_hook(1, "./data");
+    char *argv[] = {"./data"};
+    r = frplugin_install_hook(1, argv);
     return r;
 }
 
 int frmodel_uninstall()
 {
     int r = 0;
-    r = frmodel_uninstall_hook(0);
+    r = frplugin_uninstall_hook(0, NULL);
     return r;
 }
 

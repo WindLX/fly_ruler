@@ -1,7 +1,11 @@
 use super::matrix::Matrix;
 use rayon::prelude::*;
-use std::ops::{
-    Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, RangeFrom, Sub, SubAssign,
+use std::{
+    cmp::Ordering,
+    ops::{
+        Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Range, RangeFrom,
+        RangeFull, RangeTo, Sub, SubAssign,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -93,7 +97,12 @@ impl Vector {
             .zip(other.data.iter())
             .map(|(a, b)| (*a, b.clone()))
             .collect::<Vec<_>>();
-        data.par_sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        data.par_sort_by(|a, b| {
+            if a.0.is_nan() || b.0.is_nan() {
+                return Ordering::Equal;
+            };
+            a.0.partial_cmp(&b.0).unwrap()
+        });
         let mut vec_a = Vec::with_capacity(data.len());
         let mut vec_b = Vec::with_capacity(data.len());
 
@@ -126,7 +135,12 @@ impl Vector {
     pub fn max(&self) -> f64 {
         self.data
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| {
+                if a.is_nan() || b.is_nan() {
+                    return Ordering::Equal;
+                }
+                a.partial_cmp(b).unwrap()
+            })
             .unwrap()
             .clone()
     }
@@ -134,7 +148,12 @@ impl Vector {
     pub fn min(&self) -> f64 {
         self.data
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| {
+                if a.is_nan() || b.is_nan() {
+                    return Ordering::Equal;
+                }
+                a.partial_cmp(b).unwrap()
+            })
             .unwrap()
             .clone()
     }
@@ -187,6 +206,30 @@ impl Index<RangeFrom<usize>> for Vector {
     type Output = [f64];
 
     fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl Index<RangeTo<usize>> for Vector {
+    type Output = [f64];
+
+    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl Index<Range<usize>> for Vector {
+    type Output = [f64];
+
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl Index<RangeFull> for Vector {
+    type Output = [f64];
+
+    fn index(&self, index: RangeFull) -> &Self::Output {
         &self.data[index]
     }
 }

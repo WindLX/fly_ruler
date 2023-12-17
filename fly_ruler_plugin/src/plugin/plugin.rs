@@ -1,0 +1,225 @@
+use super::ffi::{logger_callback, FrPluginHook, FrPluginLogRegister};
+use fly_ruler_utils::error::FatalPluginError;
+use libc::{c_char, c_int};
+use libloading::Library;
+use log::trace;
+use serde::{Deserialize, Serialize};
+use std::{ffi::CString, fs::read_to_string, path::Path};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PluginInfo {
+    pub name: String,
+    pub author: String,
+    pub version: String,
+    pub description: String,
+}
+
+impl PluginInfo {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<PluginInfo, PluginError> {
+        let content = read_to_string(path).map_err(|e| PluginError::Io(e))?;
+        toml::from_str(&content).map_err(|e| PluginError::Info(e.message().to_string()))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginState {
+    Installed,
+    Uninstalled,
+    Failed,
+}
+
+impl Default for PluginState {
+    fn default() -> Self {
+        Self::Uninstalled
+    }
+}
+
+#[derive(Debug)]
+pub struct Plugin {
+    info: PluginInfo,
+    lib: Library,
+    state: PluginState,
+}
+
+impl Plugin {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, PluginError> {
+        let p = path.as_ref().to_path_buf();
+        let info = PluginInfo::load(p.join("info.toml"))?;
+        let lib_path = if cfg!(target_os = "windows") {
+            p.join(info.name.clone() + ".dll")
+        } else if cfg!(target_os = "linux") {
+            p.join(format!("lib{}.so", info.name))
+        } else {
+            return Err(PluginError::UnknownPlatform);
+        };
+        unsafe {
+            let lib = Library::new(&lib_path).map_err(|e| PluginError::Lib(e))?;
+            Ok(Self {
+                info,
+                lib,
+                state: PluginState::default(),
+            })
+        }
+    }
+
+    fn load_function<F>(&self, name: &str) -> Result<libloading::Symbol<'_, F>, PluginError> {
+        unsafe {
+            let f: libloading::Symbol<'_, F> = self.lib.get(name.as_bytes()).map_err(|e| {
+                PluginError::Symbol(self.info.name.to_string(), name.to_string(), e)
+            })?;
+            Ok(f)
+        }
+    }
+
+    fn register_logger(&self) -> Result<(), PluginError> {
+        let r = self.load_function::<FrPluginLogRegister>("frplugin_register_logger")?;
+        unsafe {
+            r(logger_callback);
+        }
+        Ok(())
+    }
+
+    fn call_hook_function(
+        &self,
+        name: &str,
+        args: Vec<Box<dyn ToString>>,
+    ) -> Result<Result<(), PluginError>, FatalPluginError> {
+        if let Err(e) = self.register_logger() {
+            return Ok(Err(e));
+        };
+
+        let r = self.load_function::<FrPluginHook>(name);
+        match r {
+            Ok(r) => {
+                let argc = args.len();
+
+                trace!("{}: trigger hook: {}", self.info.name, name);
+
+                let arg_string: Result<Vec<CString>, PluginError> = args
+                    .iter()
+                    .map(|s| {
+                        trace!("{}: hook_arg: {:?}", self.info.name, s.to_string());
+                        CString::new(s.to_string()).map_err(|_| {
+                            PluginError::Args(self.info.name.to_string(), name.to_string())
+                        })
+                    })
+                    .collect();
+
+                let args: Vec<CString> = match arg_string {
+                    Ok(args) => args.clone(),
+                    Err(e) => return Ok(Err(e)),
+                };
+
+                let args: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
+
+                let argv = args.as_ptr();
+                unsafe {
+                    let res = r(argc as c_int, argv as *const *const c_char);
+                    if res < 0 {
+                        return Err(FatalPluginError::new(
+                            &self.info.name,
+                            res,
+                            format!("when call {name}").as_str(),
+                        ));
+                    } else {
+                        return Ok(Ok(()));
+                    }
+                }
+            }
+            Err(e) => return Ok(Err(e)),
+        }
+    }
+
+    pub fn install(
+        &self,
+        args: Vec<Box<dyn ToString>>,
+    ) -> Result<Result<(), PluginError>, FatalPluginError> {
+        if let Err(e) = self.register_logger() {
+            return Ok(Err(e));
+        };
+        trace!("{} logger is registered", self.info.name);
+        self.call_hook_function("frplugin_install_hook", args)
+    }
+
+    pub fn uninstall(
+        &self,
+        args: Vec<Box<dyn ToString>>,
+    ) -> Result<Result<(), PluginError>, FatalPluginError> {
+        self.call_hook_function("frplugin_uninstall_hook", args)
+    }
+}
+
+pub trait IsPlugin {
+    fn plugin(&self) -> &Plugin;
+
+    fn plugin_mut(&mut self) -> &mut Plugin;
+
+    fn info(&self) -> &PluginInfo {
+        &self.plugin().info
+    }
+
+    fn state(&self) -> &PluginState {
+        &self.plugin().state
+    }
+
+    fn set_state(&mut self, state: PluginState) {
+        self.plugin_mut().state = state;
+    }
+
+    fn load_function<F>(&self, name: &str) -> Result<libloading::Symbol<'_, F>, PluginError> {
+        self.plugin().load_function::<F>(name)
+    }
+}
+
+impl IsPlugin for Plugin {
+    fn plugin(&self) -> &Plugin {
+        self
+    }
+
+    fn plugin_mut(&mut self) -> &mut Plugin {
+        self
+    }
+}
+
+impl IsPlugin for Box<Plugin> {
+    fn plugin(&self) -> &Plugin {
+        self
+    }
+
+    fn plugin_mut(&mut self) -> &mut Plugin {
+        self
+    }
+}
+
+#[derive(Debug)]
+pub enum PluginError {
+    UnknownPlatform,
+    Io(std::io::Error),
+    Info(String),
+    Lib(libloading::Error),
+    Symbol(String, String, libloading::Error),
+    Args(String, String),
+}
+
+impl std::error::Error for PluginError {}
+
+impl std::fmt::Display for PluginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PluginError::UnknownPlatform => write!(f, "unknown platform"),
+            PluginError::Io(s) => write!(f, "failed to load plugin: {}", s),
+            PluginError::Info(s) => write!(f, "failed to parse plugin info: {}", s),
+            PluginError::Lib(s) => write!(f, "failed to load plugin library: {}", s),
+            PluginError::Symbol(name, symbol, s) => {
+                write!(
+                    f,
+                    "failed to load symbol {} in plugin: {} due to {}",
+                    symbol, name, s
+                )
+            }
+            PluginError::Args(name, s) => {
+                write!(f, "invalid args when call symbol {} in plugin {}", s, name)
+            }
+        }
+    }
+}

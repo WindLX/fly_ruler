@@ -5,45 +5,81 @@
 #include "utils.h"
 #include "lofi_F16_AeroData.h"
 #include "hifi_F16_AeroData.h"
-#include "fly_ruler_model_ffi.h"
-#include "fly_ruler_utils_ffi.h"
+#include "fr_model.h"
+#include "fr_plugin.h"
 
-Logger frutils_log = NULL;
+static int fi_flag = 1;
+Logger frplugin_log = NULL;
 
-void frutils_register_logger(Logger cb)
+void frplugin_register_logger(Logger cb)
 {
-   frutils_log = cb;
+   frplugin_log = cb;
 }
 
-int frmodel_install_hook(int arg_len, ...)
+int frplugin_install_hook(int argc, char **argv)
 {
    int r = 0;
 
-   char error_msg[100];
-   if (arg_len < 1)
+   char msg[100];
+
+   if (argc < 1)
    {
-      sprintf(error_msg, "arg_len is %d, should be at least 1", arg_len);
-      frutils_log(error_msg, WARN);
+      sprintf(msg, "argc is %d, should be at least 1", argc);
+      frplugin_log(msg, WARN);
    }
 
-   va_list args;
-   va_start(args, arg_len);
+   char *data_dir = argv[0];
+   sprintf(msg, "data_dir pointer address: %p", data_dir);
+   frplugin_log(msg, DEBUG);
 
-   char *data_dir = va_arg(args, char *);
    if (data_dir == NULL)
    {
-      sprintf(error_msg, "data_dir is NULL");
-      frutils_log(error_msg, WARN);
+      sprintf(msg, "data_dir is NULL");
+      frplugin_log(msg, WARN);
+      data_dir = "";
    }
-
-   if (strlen(data_dir) == 0)
+   else if (strlen(data_dir) == 0)
    {
-      sprintf(error_msg, "data_dir is empty");
-      frutils_log(error_msg, WARN);
+      sprintf(msg, "data_dir is set to current");
+      frplugin_log(msg, INFO);
+      data_dir = "";
    }
-   va_end(args);
+   else
+   {
+      sprintf(msg, "data_dir is set to %s", data_dir);
+      frplugin_log(msg, INFO);
+   }
 
    set_data_dir(data_dir);
+
+   char *fi_flag_str = argv[1];
+   sprintf(msg, "fi_flag pointer address: %p", fi_flag_str);
+   frplugin_log(msg, DEBUG);
+
+   if (argc == 2)
+   {
+      if (fi_flag_str == NULL)
+      {
+         sprintf(msg, "fi_flag is NULL");
+         frplugin_log(msg, WARN);
+      }
+      else if (strlen(fi_flag_str) == 0)
+      {
+         sprintf(msg, "fi_flag is empty");
+         frplugin_log(msg, WARN);
+      }
+      else if (strcmp(fi_flag_str, "1") == 0)
+      {
+         sprintf(msg, "fi_flag is set to hifi");
+         frplugin_log(msg, INFO);
+      }
+      else if (strcmp(fi_flag_str, "0") == 0)
+      {
+         sprintf(msg, "fi_flag is set to lofi");
+         frplugin_log(msg, INFO);
+      }
+   }
+
    r = init_hifi_data();
    if (r < 0)
    {
@@ -55,16 +91,26 @@ int frmodel_install_hook(int arg_len, ...)
    return r;
 }
 
-int frmodel_uninstall_hook(int arg_len, ...)
+int frplugin_uninstall_hook(int argc, char **argv)
 {
+   char msg[100];
+
    free_hifi_data();
+   sprintf(msg, "free hifi data successfully");
+   frplugin_log(msg, TRACE);
+
    free_axis_data();
+   sprintf(msg, "free axis data successfully");
+   frplugin_log(msg, TRACE);
+
    return 0;
 }
 
 int frmodel_get_state(double *xu, double *xdot)
 {
-   int fi_flag;
+   char msg[256];
+   sprintf(msg, "get state start");
+   frplugin_log(msg, TRACE);
 
    /* #include f16_constants */
    double g = 32.17;    /* gravity, ft/s^2 */
@@ -155,8 +201,6 @@ int frmodel_get_state(double *xu, double *xdot)
    ail = xu[14]; /* Ailerons mex setting in degrees. */
    rud = xu[15]; /* Rudder setting in degrees. */
    lef = xu[16]; /* Leading edge flap setting in degrees */
-
-   fi_flag = xu[17] / 1; /* fi_flag */
 
    /* dail  = ail/20.0;   aileron normalized against max angle */
    /* The aileron was normalized using 20.0 but the NASA report and
@@ -485,6 +529,9 @@ int frmodel_get_state(double *xu, double *xdot)
    /*########################################*/
 
    free(temp);
+
+   sprintf(msg, "get state finished");
+   frplugin_log(msg, TRACE);
 
    return 0;
 };

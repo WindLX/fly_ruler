@@ -3,7 +3,7 @@
 #include <memory.h>
 #include <math.h>
 #include "mexndinterp.h"
-#include "fly_ruler_utils_ffi.h"
+#include "fr_plugin.h"
 
 /**
  * 找到目标点被围成的超立方体网格的顶点索引
@@ -18,7 +18,7 @@ static int **get_hyper_cube(double **axisData, double *targetData, TensorInfo in
 
 	for (i = 0; i < info.n_dimension; i++)
 	{
-		indexMax = info.n_points[i];		  /* Get the total # of points in this dimension */
+		indexMax = info.n_points[i];	  /* Get the total # of points in this dimension */
 		xmax = axisData[i][indexMax - 1]; /* Get the upper bound along this axis */
 		xmin = axisData[i][0];			  /* Get the lower bound along this axis */
 
@@ -37,7 +37,7 @@ static int **get_hyper_cube(double **axisData, double *targetData, TensorInfo in
 		if (x < xmin || x > xmax)
 		{
 			free_imatrix(indexMatrix, info.n_dimension, 2);
-			frutils_log("Point lies out data grid (in get_hyper_cube)", ERROR);
+			frplugin_log("Point lies out data grid (in get_hyper_cube)", ERROR);
 			return NULL;
 		}
 		else

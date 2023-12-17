@@ -1,22 +1,16 @@
 [package]
-name = "fly_ruler_utils"
+name = "fly_ruler_plugin"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-env_logger = "0.10.1"
+fly_ruler_utils = { path = "../fly_ruler_utils" }
+libc = "0.2.151"
+libloading = "0.8.1"
 log = "0.4.20"
-rayon = "1.8.0"
 serde = { version = "1.0.193", features = ["derive"] }
-serde_json = "1.0.108"
-serde_toml = "0.0.1"
-
-[dev-dependencies]
-criterion = "0.5.1"
-rand = "0.8.5"
-
-[[bench]]
-name = "zip_sort_benchmark"
-harness = false
+tokio = { version = "1.35.0", features = ["sync"] }
+toml = "0.8.8"
+walkdir = "2.4.0"

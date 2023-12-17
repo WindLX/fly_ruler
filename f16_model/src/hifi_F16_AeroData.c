@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include "mexndinterp.h"
-#include "fly_ruler_utils_ffi.h"
-#include "fly_ruler_model_ffi.h"
+#include "fr_plugin.h"
+#include "fr_model.h"
 #include "utils.h"
 #include "hifi_F16_AeroData.h"
 
@@ -109,7 +109,7 @@ static double *load_axis_data(char *fileName, int len)
 	if (fp == NULL)
 	{
 		sprintf(errorMsg, "can't find file %s", filePath);
-		frutils_log(errorMsg, ERROR);
+		frplugin_log(errorMsg, ERROR);
 		return NULL;
 	}
 
@@ -123,14 +123,14 @@ static double *load_axis_data(char *fileName, int len)
 			fclose(fp);
 			free(data);
 			sprintf(errorMsg, "file %s read failed", fileName);
-			frutils_log(errorMsg, ERROR);
+			frplugin_log(errorMsg, ERROR);
 			return NULL;
 		}
 		data[i] = buffer;
 	}
 	fclose(fp);
 	sprintf(errorMsg, "load %s successfully", filePath);
-	frutils_log(errorMsg, INFO);
+	frplugin_log(errorMsg, INFO);
 	return data;
 }
 
@@ -175,7 +175,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 		{
 			free(n_points);
 			sprintf(errorMsg, "invalid dataNameIndex");
-			frutils_log(errorMsg, ERROR);
+			frplugin_log(errorMsg, ERROR);
 			return NULL;
 		}
 		fileSize = n_points[0];
@@ -199,7 +199,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 				{
 					free(n_points);
 					sprintf(errorMsg, "invalid dataNameIndex");
-					frutils_log(errorMsg, ERROR);
+					frplugin_log(errorMsg, ERROR);
 					return NULL;
 				}
 				fileSize *= n_points[2];
@@ -210,13 +210,21 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 	Tensor *tensor = create_tensor(n_dimension, n_points);
 	free(n_points);
 
-	sprintf(filePath, "%s/%s", dataDir, fileName);
+	if (!strcmp(filePath, ""))
+	{
+		sprintf(filePath, "%s", fileName);
+	}
+	else
+	{
+		sprintf(filePath, "%s/%s", dataDir, fileName);
+	}
+
 	FILE *fp = fopen(filePath, "r");
 	if (fp == (FILE *)NULL)
 	{
 		free_tensor(tensor);
 		sprintf(errorMsg, "can't find file %s", filePath);
-		frutils_log(errorMsg, ERROR);
+		frplugin_log(errorMsg, ERROR);
 		return NULL;
 	}
 
@@ -228,7 +236,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 			fclose(fp);
 			free_tensor(tensor);
 			sprintf(errorMsg, "file %s read failed", filePath);
-			frutils_log(errorMsg, ERROR);
+			frplugin_log(errorMsg, ERROR);
 			return NULL;
 		}
 		tensor->data[i] = buffer;
@@ -236,7 +244,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 	fclose(fp);
 
 	sprintf(errorMsg, "load %s successfully", filePath);
-	frutils_log(errorMsg, INFO);
+	frplugin_log(errorMsg, INFO);
 
 	return tensor;
 }

@@ -5,15 +5,14 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
-#include "fly_ruler_model_ffi.h"
-#include "fly_ruler_system_ffi.h"
-#include "fly_ruler_utils_ffi.h"
+#include "fr_model.h"
+#include "fr_plugin.h"
 
 #define DOUBLE_EQ(a, b) assert(fabs((a) - (b)) < 0.000001)
 
-const char *frutils_info_level_to_string(LogLevel level);
+const char *frplugin_info_level_to_string(LogLevel level);
 
-void test_frutils_log(const char *msg, LogLevel level);
+void test_frplugin_log(const char *msg, LogLevel level);
 
 int frsys_init();
 

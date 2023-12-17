@@ -1,5 +1,9 @@
 use log::{debug, error, info, trace, warn, Level};
 
+pub fn test_init() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
 pub fn log_output(level: Level, msg: &str) {
     match level {
         Level::Trace => trace!("{}", msg),
