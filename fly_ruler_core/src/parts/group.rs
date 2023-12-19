@@ -43,7 +43,8 @@ impl Actuator {
         let r_4 = clamp(r_3, self.rate_saturation, -self.rate_saturation);
         let r_5 = self.integrator.integrate(r_4, t);
         self.feedback = r_5;
-        r_5
+        let r_6 = clamp(r_5, self.command_saturation, self.command_saturation_bottom);
+        r_6
     }
 
     pub fn past(&self) -> f64 {
