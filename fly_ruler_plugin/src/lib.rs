@@ -1,5 +1,8 @@
-pub mod controller;
-pub mod manager;
-pub mod model;
-pub mod plugin;
-pub mod system;
+pub(crate) mod controller;
+pub(crate) mod manager;
+pub(crate) mod model;
+pub(crate) mod plugin;
+pub(crate) mod system;
+
+pub use model::{step_handler_constructor, Model, ModelStepFn, PlantConstants, C};
+pub use plugin::IsPlugin;

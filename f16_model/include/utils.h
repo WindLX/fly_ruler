@@ -1,6 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include "fr_model.h"
+
 typedef struct
 {
     int n_dimension; /* Number of dimensions*/
@@ -50,6 +52,6 @@ int sign(double in);
 void atmos(double alt, double vt, double *coeff);
 
 // Calculate accelerations from states and state derivatives.
-void accels(double *state, double *xdot, double *y);
+void accels(const State *state, const State *xdot, double *y);
 
 #endif // UTILS_H

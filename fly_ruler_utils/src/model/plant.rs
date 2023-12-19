@@ -1,16 +1,17 @@
 use crate::Vector;
+use std::ops::{Index, IndexMut};
 
 /// The Input of the Model
 /// d_lef (deg) delta of leading edge flap
 #[derive(Debug, Clone)]
 pub struct ModelInput {
-    pub state: Vec<f64>,
-    pub control: Vec<f64>,
+    pub state: State,
+    pub control: Control,
     pub lef: f64,
 }
 
 impl ModelInput {
-    pub fn new(state: impl Into<Vec<f64>>, control: impl Into<Vec<f64>>, d_lef: f64) -> Self {
+    pub fn new(state: impl Into<State>, control: impl Into<Control>, d_lef: f64) -> Self {
         Self {
             state: state.into(),
             control: control.into(),
@@ -26,7 +27,8 @@ impl ModelInput {
 /// velocity (ft/s)
 /// alpha (rad) beta (rad)
 /// p (rad/s) q (rad/s) r (rad/s)
-#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct State {
     pub npos: f64,
     pub epos: f64,
@@ -125,12 +127,44 @@ impl Into<Vector> for State {
 
 /// What the `control` represent
 /// thrust (lbs) ele (deg) ail (deg) rud (deg)
-#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Control {
     pub thrust: f64,
     pub elevator: f64,
     pub aileron: f64,
     pub rudder: f64,
+}
+
+impl Index<usize> for Control {
+    type Output = f64;
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.thrust,
+            1 => &self.elevator,
+            2 => &self.aileron,
+            3 => &self.rudder,
+            _ => panic!(
+                "index out of bounds: the len is 4 and the index is {}",
+                index
+            ),
+        }
+    }
+}
+
+impl IndexMut<usize> for Control {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        match index {
+            0 => &mut self.thrust,
+            1 => &mut self.elevator,
+            2 => &mut self.aileron,
+            3 => &mut self.rudder,
+            _ => panic!(
+                "index out of bounds: the len is 4 but the index is {}",
+                index
+            ),
+        }
+    }
 }
 
 impl From<&[f64]> for Control {
@@ -189,7 +223,8 @@ impl Into<Vector> for Control {
 /// nx(g) ny(g) nz(g)
 /// mach
 /// qbar(lb/ft ft) ps(lb/ft ft)
-#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct StateExtend {
     pub nx: f64,
     pub ny: f64,
@@ -283,5 +318,24 @@ pub enum FlightCondition {
 impl Default for FlightCondition {
     fn default() -> Self {
         FlightCondition::WingsLevel
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PlantBlockOutput {
+    pub state: State,
+    pub control: Control,
+    pub d_lef: f64,
+    pub state_extend: StateExtend,
+}
+
+impl PlantBlockOutput {
+    pub fn new(state: State, control: Control, d_lef: f64, state_extend: StateExtend) -> Self {
+        Self {
+            state,
+            control,
+            d_lef,
+            state_extend,
+        }
     }
 }

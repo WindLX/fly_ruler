@@ -311,7 +311,6 @@ dependencies = [
  "csv",
  "fly_ruler_plugin",
  "fly_ruler_utils",
- "lazy_static",
  "log",
  "rand",
  "rayon",
@@ -337,6 +336,11 @@ dependencies = [
 name = "fly_ruler_system"
 version = "0.1.0"
 dependencies = [
+ "env_logger",
+ "fly_ruler_core",
+ "fly_ruler_plugin",
+ "fly_ruler_utils",
+ "log",
  "serde",
  "serde_json",
  "stick",
@@ -353,6 +357,7 @@ dependencies = [
  "log",
  "rand",
  "rayon",
+ "tokio",
 ]
 
 [[package]]
@@ -446,12 +451,6 @@ checksum = "cee9c64da59eae3b50095c18d3e74f8b73c0b86d2792824ff01bbce68ba229ca"
 dependencies = [
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "lazy_static"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"

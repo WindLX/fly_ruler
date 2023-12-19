@@ -1,7 +1,7 @@
 extern crate fly_ruler_utils;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use fly_ruler_utils::model::{Matrix, Vector};
+use fly_ruler_utils::{Matrix, Vector};
 use rand::Rng;
 
 fn generate_random_vector(dim: usize) -> Vector {

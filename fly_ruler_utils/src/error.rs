@@ -1,3 +1,5 @@
+use std::error::Error;
+
 /// fatal error which may cause critical problem and must be transmit to the fly_ruler system level
 #[derive(Debug)]
 pub enum FrError {
@@ -42,19 +44,16 @@ impl std::fmt::Display for FrError {
     }
 }
 
-/// fatal error which occured in fly_ruler_core
+/// inner error which occurred in a extern plugin
 #[derive(Debug)]
-pub enum FatalCoreError {}
-
-#[derive(Debug)]
-pub struct FatalPluginError {
-    pub name: String,
-    pub result: i32,
-    pub reason: String,
+pub struct PluginInner {
+    name: String,
+    result: i32,
+    reason: String,
 }
 
-impl FatalPluginError {
-    pub fn new(name: &str, result: i32, reason: &str) -> Self {
+impl PluginInner {
+    pub(crate) fn new(name: &str, result: i32, reason: &str) -> Self {
         Self {
             name: name.to_string(),
             result,
@@ -63,14 +62,79 @@ impl FatalPluginError {
     }
 }
 
-impl std::error::Error for FatalPluginError {}
+impl std::error::Error for PluginInner {}
 
-impl std::fmt::Display for FatalPluginError {
+impl std::fmt::Display for PluginInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "plugin {} failed with code {}: {}",
+            "plugin {} fail with code {}: {}",
             self.name, self.result, self.reason
         )
+    }
+}
+
+/// fatal error which occured in fly_ruler_core
+/// Model: error occured in extern model
+#[derive(Debug)]
+pub struct FatalCoreError {
+    source: FatalPluginError,
+}
+
+impl FatalCoreError {}
+
+impl std::error::Error for FatalCoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+impl std::fmt::Display for FatalCoreError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.source().unwrap())
+    }
+}
+
+impl From<FatalPluginError> for FatalCoreError {
+    fn from(value: FatalPluginError) -> Self {
+        Self { source: value }
+    }
+}
+
+/// fatal error which occured in fly_ruler_plugin
+/// Symbol: fail to find target Symbol in dll/so
+/// Inner: error occured in extern plugin
+#[derive(Debug)]
+pub enum FatalPluginError {
+    Symbol(String),
+    Inner(PluginInner),
+}
+
+impl FatalPluginError {
+    pub fn symbol(msg: String) -> Self {
+        Self::Symbol(msg)
+    }
+
+    pub fn inner(name: &str, result: i32, reason: &str) -> Self {
+        Self::Inner(PluginInner::new(name, result, reason))
+    }
+}
+
+impl std::error::Error for FatalPluginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if let Self::Inner(inner) = self {
+            Some(inner)
+        } else {
+            None
+        }
+    }
+}
+
+impl std::fmt::Display for FatalPluginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Symbol(msg) => write!(f, "{}", msg),
+            Self::Inner(_) => write!(f, "{:?}", self.source().unwrap()),
+        }
     }
 }

@@ -1,18 +1,17 @@
 use crate::{
-    algorithm::nelder_mead::{nelder_mead, NelderMeadOptions, NelderMeadResult},
-    parts::{atmos, clamp},
-};
-use fly_ruler_plugin::{
-    model::{step_handler_constructor, Model, ModelStepFn},
-    plugin::IsPlugin,
+    algorithm::nelder_mead::*,
+    parts::{
+        basic::clamp,
+        flight::{Atmos, Plant},
+    },
 };
 use fly_ruler_utils::{
-    model::{Control, FlightCondition, ModelInput, State, StateExtend},
+    error::FatalCoreError,
+    plant_model::{Control, FlightCondition, ModelInput, State, StateExtend},
     Vector,
 };
 use log::trace;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
-use tokio::sync::Mutex;
 
 /// alpha is radians
 #[derive(Debug, Clone, Copy)]
@@ -82,14 +81,14 @@ impl TrimOutput {
 
 /// Trim aircraft to desired altitude and velocity
 /// fi_flag: true means hifi model
-pub async fn trim(
+pub fn trim(
     trim_target: TrimTarget,
     trim_init: Option<TrimInit>,
     fi_flag: bool,
-    model: Arc<Mutex<Model>>,
+    plant: Arc<std::sync::Mutex<Plant>>,
     flight_condition: Option<FlightCondition>,
     optim_options: Option<NelderMeadOptions>,
-) -> TrimOutput {
+) -> Result<TrimOutput, FatalCoreError> {
     // Initial Guess for free parameters
     // free parameters: two control values & angle of attack
     let x_0: Vec<f64> = trim_init.unwrap_or_default().into();
@@ -126,39 +125,33 @@ pub async fn trim(
         trim_target.velocity,
     ];
 
-    let model = model.lock().await;
-    let handler = model.get_step_handler().unwrap();
-
-    let name = model.info().name.clone();
-
     let output = Rc::new(RefCell::new(Vec::<f64>::new()));
     let output_ = output.clone();
 
-    let trim_func = move |x: &Vector| -> f64 {
-        let h = step_handler_constructor(handler, name.clone());
-        trim_func(x, h, fi_flag, output_.clone(), &globals)
+    let trim_func = move |x: &Vector| -> Result<f64, FatalCoreError> {
+        trim_func(x, plant.clone(), fi_flag, output_.clone(), &globals)
     };
 
-    let res = nelder_mead(Box::new(trim_func), Vector::from(x_0), optim_options);
+    let res = nelder_mead(Box::new(trim_func), Vector::from(x_0), optim_options)?;
 
     let o = Rc::into_inner(output).unwrap().into_inner();
 
-    TrimOutput::new(
+    Ok(TrimOutput::new(
         State::from(&o[..12]),
         Control::from(&res.x[..4]),
         StateExtend::from(&o[12..18]),
         o[18],
         res,
-    )
+    ))
 }
 
 fn trim_func(
     x: &Vector,
-    step_fn: Box<ModelStepFn>,
+    plant: Arc<std::sync::Mutex<Plant>>,
     fi_flag: bool,
     output_vec: Rc<RefCell<Vec<f64>>>,
     globals: &Vec<f64>,
-) -> f64 {
+) -> Result<f64, FatalCoreError> {
     // global phi psi p q r phi_weight theta_weight psi_weight
     let psi = globals[0];
     let q = globals[1];
@@ -194,7 +187,7 @@ fn trim_func(
     if fi_flag {
         // Calculating qbar, ps and steady state leading edge flap deflection:
         // (see pg. 43 NASA report)
-        let (qbar, ps) = atmos(altitude, velocity);
+        let (_mach, qbar, ps) = Atmos::atmos(altitude, velocity).into();
         lef = 1.38 * alpha.to_degrees() - 9.05 * qbar / ps + 1.45;
     }
 
@@ -235,7 +228,11 @@ fn trim_func(
         10.0,
     ]);
 
-    let output = step_fn(&ModelInput::new(state, control, lef)).unwrap();
+    let output = plant
+        .lock()
+        .unwrap()
+        .step(&ModelInput::new(state, control, lef))?;
+
     let state_dot = Vector::from(Into::<Vec<f64>>::into(output.state_dot));
     trace!("{:?}", &state_dot);
     let cost = weight.dot(&(state_dot.clone() * state_dot));
@@ -246,13 +243,19 @@ fn trim_func(
     state_out.push(lef);
     *output_vec.borrow_mut() = state_out;
 
-    cost
+    Ok(cost)
 }
 
 #[cfg(test)]
 mod core_trim_tests {
-    use crate::{algorithm::nelder_mead::NelderMeadOptions, trim::trim, TrimTarget};
-    use fly_ruler_plugin::{model::Model, plugin::IsPlugin};
+    use crate::{
+        algorithm::nelder_mead::NelderMeadOptions,
+        parts::{
+            flight::Plant,
+            trim::{trim, TrimTarget},
+        },
+    };
+    use fly_ruler_plugin::{IsPlugin, Model};
     use fly_ruler_utils::logger::test_logger_init;
     use log::{debug, trace};
     use std::sync::Arc;
@@ -269,6 +272,9 @@ mod core_trim_tests {
         assert!(matches!(res, Ok(Ok(_))));
 
         let model = Arc::new(Mutex::new(model));
+        let plant = Arc::new(std::sync::Mutex::new(
+            tokio_test::block_on(Plant::new(model.clone())).unwrap(),
+        ));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
@@ -280,14 +286,15 @@ mod core_trim_tests {
             tol_x: 1e-6,
         });
 
-        let result = tokio_test::block_on(trim(
+        let result = trim(
             trim_target,
             trim_init,
             fi_flag,
-            model.clone(),
+            plant.clone(),
             None,
             nm_options,
-        ));
+        )
+        .unwrap();
 
         let nm_result = result.nelder_mead_result;
         debug!("{:#?} {:#?}", nm_result.x, nm_result.fval);

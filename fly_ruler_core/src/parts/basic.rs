@@ -1,12 +1,11 @@
 use fly_ruler_utils::Vector;
-use log::trace;
 
 #[derive(Debug, Clone)]
 pub struct Integrator {
-    pub init: f64,
-    pub last_time: f64,
-    pub last_value: f64,
-    pub past: f64,
+    init: f64,
+    last_time: f64,
+    last_value: f64,
+    past: f64,
 }
 
 impl Integrator {
@@ -25,14 +24,24 @@ impl Integrator {
         self.last_time = t;
         self.past
     }
+
+    pub fn past(&self) -> f64 {
+        self.past
+    }
+
+    pub fn reset(&mut self) {
+        self.last_value = self.init;
+        self.past = self.init;
+        self.last_time = 0.0;
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct VectorIntegrator {
-    pub init: Vector,
-    pub last_time: f64,
-    pub last_value: Vector,
-    pub past: Vector,
+    init: Vector,
+    last_time: f64,
+    last_value: Vector,
+    past: Vector,
 }
 
 impl VectorIntegrator {
@@ -54,21 +63,30 @@ impl VectorIntegrator {
         self.past.clone()
     }
 
-    pub fn derivative_integrate(&mut self, derivative: impl Into<Vector>, t: f64) -> Vector {
+    pub fn derivative_add(&mut self, derivative: impl Into<Vector>, t: f64) -> Vector {
         let derivative = derivative.into();
         let delta_t = t - self.last_time;
-        trace!("{:?}", derivative);
         self.past += derivative.clone() * delta_t;
         self.last_value = derivative;
         self.last_time = t;
         self.past.clone()
     }
+
+    pub fn past(&self) -> Vector {
+        self.past.clone()
+    }
+
+    pub fn reset(&mut self) {
+        self.last_value = self.init.clone();
+        self.past = self.init.clone();
+        self.last_time = 0.0;
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Differentiator {
-    pub last_value: f64,
-    pub last_time: f64,
+    last_value: f64,
+    last_time: f64,
 }
 
 impl Differentiator {
@@ -105,51 +123,10 @@ pub fn step(init: f64, end: f64, step_time: f64, t: f64) -> f64 {
     }
 }
 
-/// Disturbance on the rudder surface
-pub fn disturbance(deflection: f64, t: f64) -> f64 {
-    if t >= 1.0 && t <= 3.0 {
-        deflection
-    } else if t >= 3.0 && t <= 5.0 {
-        -deflection
-    } else {
-        0.0
-    }
-}
-
-pub fn multi_to_deg(input: &Vector) -> Vector {
-    assert!(input.dim() >= 12);
-    let mut input = input.clone();
-    let index = [3, 4, 5, 7, 8, 9, 10, 11];
-    for i in 0..index.len() {
-        input[index[i]] = input[index[i]].to_degrees();
-    }
-    input
-}
-
-pub fn atmos(altitude: f64, velocity: f64) -> (f64, f64) {
-    let rho0 = 2.377e-3;
-    let tfac = 1.0 - 0.703e-5 * altitude;
-
-    let mut temp = 519.0 * tfac;
-    if altitude >= 35000.0 {
-        temp = 390.0;
-    }
-
-    let rho = rho0 * tfac.powf(4.14);
-    let qbar = 0.5 * rho * velocity.powi(2);
-    let mut ps = 1715.0 * rho * temp;
-
-    if ps.abs() < 1.0e-6 {
-        ps = 1715.0;
-    }
-
-    (qbar, ps)
-}
-
 #[cfg(test)]
 mod core_parts_tests {
     use super::Integrator;
-    use crate::parts::VectorIntegrator;
+    use crate::parts::basic::VectorIntegrator;
     use fly_ruler_utils::logger::test_logger_init;
     use log::{info, trace};
     use std::time::{Duration, SystemTime};

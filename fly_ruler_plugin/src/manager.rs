@@ -1,6 +1,6 @@
 use crate::plugin::{IsPlugin, PluginError, PluginInfo, PluginState};
 use crate::{model::Model, plugin::Plugin};
-use fly_ruler_utils::FrError;
+use fly_ruler_utils::error::FrError;
 use log::{trace, warn};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

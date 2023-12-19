@@ -1,11 +1,10 @@
-use super::ffi::FrModelStep;
+use super::ffi::{FrModelLoadConstants, FrModelStep, PlantConstants, C};
 use crate::plugin::{IsPlugin, Plugin, PluginError};
 use fly_ruler_utils::error::FatalPluginError;
-use fly_ruler_utils::model::{ModelInput, ModelOutput};
-use libc::c_double;
+use fly_ruler_utils::plant_model::ModelInput;
 use std::path::Path;
 
-pub type ModelStepFn = dyn Fn(&ModelInput) -> Result<ModelOutput, FatalPluginError>;
+pub type ModelStepFn = dyn Fn(&ModelInput) -> Result<C, FatalPluginError>;
 
 #[derive(Debug)]
 pub struct Model {
@@ -18,10 +17,31 @@ impl Model {
         Ok(Model { plugin })
     }
 
+    pub fn load_constants(&self) -> Result<PlantConstants, FatalPluginError> {
+        let load_constants = self
+            .load_function::<FrModelLoadConstants>("frmodel_load_constants")
+            .map_err(|e| FatalPluginError::symbol(e.to_string()))?;
+        let mut constants = Box::new(PlantConstants::default());
+        let constants_ptr = &mut *constants;
+        unsafe {
+            let res = load_constants(constants_ptr);
+            if res < 0 {
+                return Err(FatalPluginError::inner(
+                    &self.info().name,
+                    res,
+                    "when call frmodel_load_constants",
+                ));
+            } else {
+                let constants = *constants_ptr;
+                Ok(constants)
+            }
+        }
+    }
+
     pub fn get_step_handler(&self) -> Result<FrModelStep, FatalPluginError> {
         let step = self
             .load_function::<FrModelStep>("frmodel_step")
-            .map_err(|e| FatalPluginError::new(&self.info().name, -2, &e.to_string()))?;
+            .map_err(|e| FatalPluginError::symbol(e.to_string()))?;
         Ok(*step)
     }
 }
@@ -29,29 +49,24 @@ impl Model {
 pub fn step_handler_constructor(
     handler: FrModelStep,
     name: String,
-) -> Box<dyn Fn(&ModelInput) -> Result<ModelOutput, FatalPluginError>> {
+) -> Box<dyn Fn(&ModelInput) -> Result<C, FatalPluginError>> {
     let name = name.clone();
     let h = move |input: &ModelInput| {
-        let state = input.state.as_slice();
-        let control = input.control.as_slice();
-        let mut state_dot = [0.0; 12];
-        let mut state_extend = [0.0; 6];
-        let state_dot_ptr = state_dot.as_mut_ptr() as *mut c_double;
-        let state_extend_ptr = state_extend.as_mut_ptr() as *mut c_double;
+        let state = Box::new(input.state);
+        let control = Box::new(input.control);
+        let mut c = Box::new(C::default());
+        let c_ptr = &mut *c;
         unsafe {
-            let res = handler(
-                state.as_ptr() as *const c_double,
-                control.as_ptr() as *const c_double,
-                input.lef,
-                state_dot_ptr,
-                state_extend_ptr,
-            );
+            let res = handler(&*state, &*control, input.lef, c_ptr);
             if res < 0 {
-                return Err(FatalPluginError::new(&name, res, "when call frmodel_step"));
+                return Err(FatalPluginError::inner(
+                    &name,
+                    res,
+                    "when call frmodel_step",
+                ));
             } else {
-                let state_dot = std::slice::from_raw_parts(state_dot_ptr, 12);
-                let state_extend = std::slice::from_raw_parts(state_extend_ptr, 6);
-                Ok(ModelOutput::new(state_dot, state_extend))
+                let c = *c_ptr;
+                Ok(c)
             }
         }
     };
@@ -71,10 +86,11 @@ impl IsPlugin for Model {
 #[cfg(test)]
 mod plugin_model_tests {
     use super::Model;
+    use crate::model::ffi::PlantConstants;
     use crate::model::step_handler_constructor;
     use crate::plugin::plugin::IsPlugin;
     use fly_ruler_utils::logger::test_logger_init;
-    use fly_ruler_utils::model::ModelInput;
+    use fly_ruler_utils::plant_model::ModelInput;
     use log::debug;
 
     #[test]
@@ -104,6 +120,28 @@ mod plugin_model_tests {
         let model = model.unwrap();
         let res = model.plugin().install(vec![Box::new("./data")]);
         assert!(matches!(res, Ok(Ok(_))));
+        let res = model.plugin().uninstall(Vec::new());
+        assert!(matches!(res, Ok(Ok(_))));
+    }
+
+    #[test]
+    fn test_model_load_constants() {
+        test_logger_init();
+        let model = Model::new("./install");
+        assert!(matches!(model, Ok(_)));
+        let model = model.unwrap();
+        let res = model.plugin().install(vec![Box::new("./data")]);
+        assert!(matches!(res, Ok(Ok(_))));
+
+        let constants = model.load_constants();
+        assert!(matches!(constants, Ok(_)));
+        assert_eq!(
+            constants.unwrap(),
+            PlantConstants::new(
+                636.94, 30.0, 300.0, 11.32, 0.35, 0.30, 0.0, 55814.0, 982.0, 63100.0, 9496.0
+            )
+        );
+
         let res = model.plugin().uninstall(Vec::new());
         assert!(matches!(res, Ok(Ok(_))));
     }

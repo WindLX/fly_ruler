@@ -1,4 +1,4 @@
-use fly_ruler_utils::{Matrix, Vector};
+use fly_ruler_utils::{error::FatalCoreError, Matrix, Vector};
 
 /// 单纯形搜索法设置
 #[derive(Debug, Clone)]
@@ -42,14 +42,14 @@ pub struct NelderMeadResult {
 /// nelder_mead 单纯形搜索法求解器
 /// 此求解器用于搜索目标函数最小值
 /// Args:
-///     func: Box<dyn Fn(&Vector) -> f64>: 目标函数
+///     func: Box<dyn Fn(&Vector) -> Result<f64, FatalCoreError>>: 目标函数
 ///     x_0: Vector: 搜索的初始值
 ///     options: Option<NelderMeadOptions>: 求解器设置
 pub fn nelder_mead(
-    func: Box<dyn Fn(&Vector) -> f64>,
+    func: Box<dyn Fn(&Vector) -> Result<f64, FatalCoreError>>,
     x_0: Vector,
     options: Option<NelderMeadOptions>,
-) -> NelderMeadResult {
+) -> Result<NelderMeadResult, FatalCoreError> {
     let options = options.unwrap_or_default();
     let mut output = Vec::new();
     output.push(String::from("Iteration\tFunc-count\tf(x)\t\t\t\tProcedure"));
@@ -80,7 +80,7 @@ pub fn nelder_mead(
     let mut iter = 1;
 
     for k in 0..n + 1 {
-        fval_sim[k] = func(&sim[k]);
+        fval_sim[k] = func(&sim[k])?;
     }
 
     fun_evals += n;
@@ -111,7 +111,7 @@ pub fn nelder_mead(
 
         // 反射值
         let x_r = x_bar.clone() * (1.0 + rho) - sim.last().unwrap() * rho;
-        let fval_x_r = func(&x_r);
+        let fval_x_r = func(&x_r)?;
         fun_evals += 1;
         output.push(format!(
             "{}\t\t{}\t\t{}\t\t{}",
@@ -128,7 +128,7 @@ pub fn nelder_mead(
         if fval_x_r < fval_sim[0] {
             // 扩展点
             let x_e = x_bar.clone() * (1.0 + rho * gamma) - sim.last().unwrap() * rho * gamma;
-            let fval_x_e = func(&x_e);
+            let fval_x_e = func(&x_e)?;
             fun_evals += 1;
             if fval_x_e < fval_x_r {
                 // 如果扩展点优于反射点，将最差点替换为扩展点
@@ -160,7 +160,7 @@ pub fn nelder_mead(
                     let x_c =
                         x_bar.clone() * (1.0 + alpha * rho) - sim.last().unwrap() * alpha * rho;
 
-                    let fval_x_c = func(&x_c);
+                    let fval_x_c = func(&x_c)?;
                     fun_evals += 1;
                     if fval_x_c <= fval_x_r {
                         // 如果收缩点优于反射点
@@ -180,7 +180,7 @@ pub fn nelder_mead(
                     // 反射点差于最差点
                     // 内收缩点
                     let x_c_c = x_bar.clone() * (1.0 - alpha) + sim.last().unwrap() * alpha;
-                    let fval_x_c_c = func(&x_c_c);
+                    let fval_x_c_c = func(&x_c_c)?;
                     fun_evals += 1;
                     if fval_x_c_c < fval_sim[n] {
                         // 如果内收缩点优于最差点，替代最差点
@@ -202,7 +202,7 @@ pub fn nelder_mead(
                 // 回退
                 for j in 1..n + 1 {
                     sim[j] = sim[0].clone() + (sim[j].clone() - sim[0].clone()) * sigma;
-                    fval_sim[j] = func(&sim[j])
+                    fval_sim[j] = func(&sim[j])?
                 }
                 fun_evals += n;
                 output.push(format!(
@@ -221,13 +221,13 @@ pub fn nelder_mead(
     let x = sim[0].clone();
     let fval = fval_sim.min();
 
-    NelderMeadResult {
+    Ok(NelderMeadResult {
         x,
         fval,
         iter,
         fun_evals,
         output,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -236,9 +236,7 @@ mod core_algorithm_tests {
 
     #[test]
     fn test_nm() {
-        let func = |x: &Vector| {
-            return 100.0 * (x[1] - x[0].powi(2)).powi(2) + (1.0 - x[1]).powi(2);
-        };
+        let func = |x: &Vector| Ok(100.0 * (x[1] - x[0].powi(2)).powi(2) + (1.0 - x[1]).powi(2));
         let x_0 = Vector::from(vec![-1.2, 1.0]);
         let options = NelderMeadOptions {
             max_fun_evals: 5000,
@@ -246,7 +244,7 @@ mod core_algorithm_tests {
             tol_fun: 1e-10,
             tol_x: 1e-10,
         };
-        let result = nelder_mead(Box::new(func), x_0, Some(options));
+        let result = nelder_mead(Box::new(func), x_0, Some(options)).unwrap();
         println!("{:#?} {:#?}", result.x, result.fval);
         println!("{:#?} {:#?}", result.iter, result.fun_evals);
         // println!("{}", result.output.join("\n"));

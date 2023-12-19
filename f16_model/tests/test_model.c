@@ -5,7 +5,7 @@ int frsys_step()
 {
     printf("[INFO] f16 model test step\n");
 
-    double state[12] = {
+    State state = {
         // north_position east_position altitude
         0, 0, 15000,
         // orientation angles in rad
@@ -15,7 +15,7 @@ int frsys_step()
         // roll pitch yaw rate
         0, 0, 0};
 
-    double control[4] = {
+    Control control = {
         // thrust
         2109.41286903712,
         // Elevator setting in degrees
@@ -28,19 +28,10 @@ int frsys_step()
     // Leading edge flap setting in degrees
     double d_lef = 6.28161378774449;
 
-    double state_dot[12] = {0};
-    double state_extend[6] = {0};
+    C c = {0};
 
-    frmodel_step(state, control, d_lef, state_dot, state_extend);
+    frmodel_step(&state, &control, d_lef, &c);
 
-    for (int i = 0; i < 13; i++)
-    {
-        printf("[INFO] state_dot[%d] = %f\n", i, state_dot[i]);
-    }
-    for (int i = 0; i < 7; i++)
-    {
-        printf("[INFO] state_extend[%d] = %f\n", i, state_extend[i]);
-    }
     return 0;
 }
 

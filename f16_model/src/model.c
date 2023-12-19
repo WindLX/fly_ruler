@@ -8,6 +8,26 @@
 #include "fr_model.h"
 #include "fr_plugin.h"
 
+#define CHECK_LOAD(res) \
+   if (res < 0)         \
+   {                    \
+      free(temp);       \
+      return res;       \
+   }
+
+static PlantConstants consts = {
+    .m = 636.94,
+    .b = 30.0,
+    .s = 300.0,
+    .c_bar = 11.32,
+    .x_cg_r = 0.35,
+    .x_cg = 0.30,
+    .h_eng = 0.0,
+    .j_y = 55814.0,
+    .j_xz = 982.0,
+    .j_z = 63100.0,
+    .j_x = 9496.0};
+
 static int fi_flag = 1;
 Logger frplugin_log = NULL;
 
@@ -106,42 +126,55 @@ int frplugin_uninstall_hook(int argc, char **argv)
    return 0;
 }
 
+int frmodel_load_constants(PlantConstants *constants)
+{
+   constants->m = consts.m;
+   constants->b = consts.b;
+   constants->s = consts.s;
+   constants->c_bar = consts.c_bar;
+   constants->x_cg_r = consts.x_cg_r;
+   constants->x_cg = consts.x_cg;
+   constants->h_eng = consts.h_eng;
+   constants->j_y = consts.j_y;
+   constants->j_z = consts.j_z;
+   constants->j_xz = consts.j_xz;
+   constants->j_x = consts.j_x;
+
+   char msg[100];
+   sprintf(msg, "f16 consts load successfully");
+   frplugin_log(msg, TRACE);
+
+   return 0;
+};
+
 int frmodel_step(
-    double *state, double *control, double d_lef,
-    double *state_dot, double *state_extend)
+    const State *state, const Control *control, double d_lef,
+    C *c)
 {
    char msg[256];
    sprintf(msg, "f16 step start");
    frplugin_log(msg, TRACE);
 
-   /* #include f16_constants */
-   double g = 32.17;    /* gravity, ft/s^2 */
-   double m = 636.94;   /* mass, slugs */
-   double B = 30.0;     /* span, ft */
-   double S = 300.0;    /* planform area, ft^2 */
-   double cbar = 11.32; /* mean aero chord, ft */
-   double xcgr = 0.35;  /* reference center of gravity as a fraction of cbar */
-   double xcg = 0.30;   /* center of gravity as a fraction of cbar. */
+   double m = consts.m;
+   double B = consts.b;
+   double S = consts.s;
+   double cbar = consts.c_bar;
+   double xcgr = consts.x_cg_r;
+   double xcg = consts.x_cg;
 
-   double Heng = 0.0; /* turbine momentum along roll axis. */
-   double pi = acos(-1);
-   double r2d; /* radians to degrees */
+   double Heng = consts.h_eng;
+   double r2d = 180.0 / acos(-1);
 
-   /*NasaData        %translated via eq. 2.4-6 on pg 80 of Stevens and Lewis*/
-
-   double Jy = 55814.0; /* slug-ft^2 */
-   double Jxz = 982.0;  /* slug-ft^2 */
-   double Jz = 63100.0; /* slug-ft^2 */
-   double Jx = 9496.0;  /* slug-ft^2 */
+   double Jy = consts.j_y;
+   double Jxz = consts.j_xz;
+   double Jz = consts.j_z;
+   double Jx = consts.j_x;
 
    double *temp;
+   int res = 0;
 
-   double npos, epos, alt, phi, theta, psi, vt, alpha, beta, P, Q, R;
-   double sa, ca, sb, cb, tb, st, ct, tt, sphi, cphi, spsi, cpsi;
-   double T, el, ail, rud, dail, drud, lef, dlef;
-   double qbar, mach, ps;
-   double U, V, W, Udot, Vdot, Wdot;
-   double L_tot, M_tot, N_tot, denom;
+   double vt, alpha, beta, P, Q, R;
+   double el, ail, rud, dail, drud, lef, dlef;
 
    double Cx_tot, Cx, delta_Cx_lef, dXdQ, Cxq, delta_Cxq_lef;
    double Cz_tot, Cz, delta_Cz_lef, dZdQ, Czq, delta_Czq_lef;
@@ -153,121 +186,41 @@ int frmodel_step(
    double Cl_tot, Cl, delta_Cl_lef, dLdail, delta_Cl_r30, dLdR, dLdP, delta_Clbeta;
    double delta_Cl_a20, delta_Cl_a20_lef, Clr, delta_Clr_lef, Clp, delta_Clp_lef;
 
-   temp = (double *)malloc(9 * sizeof(double)); /*size of 9.1 array*/
+   temp = (double *)malloc(9 * sizeof(double));
 
-   r2d = 180.0 / pi; /* radians to degrees */
-
-   /* %%%%%%%%%%%%%%%%%%%
-            States
-      %%%%%%%%%%%%%%%%%%% */
-
-   npos = state[0]; /* north position */
-   epos = state[1]; /* east position */
-   alt = state[2];  /* altitude */
-   phi = state[3];  /* orientation angles in rad. */
-   theta = state[4];
-   psi = state[5];
-
-   vt = state[6];          /* total velocity */
-   alpha = state[7] * r2d; /* angle of attack in degrees */
-   beta = state[8] * r2d;  /* sideslip angle in degrees */
-   P = state[9];           /* Roll Rate --- rolling  moment is Lbar */
-   Q = state[10];          /* Pitch Rate--- pitching moment is M */
-   R = state[11];          /* Yaw Rate  --- yawing   moment is N */
-
-   sa = sin(state[7]); /* sin(alpha) */
-   ca = cos(state[7]); /* cos(alpha) */
-   sb = sin(state[8]); /* sin(beta)  */
-   cb = cos(state[8]); /* cos(beta)  */
-   tb = tan(state[8]); /* tan(beta)  */
-
-   st = sin(theta);
-   ct = cos(theta);
-   tt = tan(theta);
-   sphi = sin(phi);
-   cphi = cos(phi);
-   spsi = sin(psi);
-   cpsi = cos(psi);
+   vt = state->velocity;       /* total velocity */
+   alpha = state->alpha * r2d; /* angle of attack in degrees */
+   beta = state->beta * r2d;   /* sideslip angle in degrees */
+   P = state->p;               /* Roll Rate --- rolling  moment is Lbar */
+   Q = state->q;               /* Pitch Rate--- pitching moment is M */
+   R = state->r;               /* Yaw Rate  --- yawing   moment is N */
 
    if (vt <= 0.01)
    {
       vt = 0.01;
    }
 
-   /* %%%%%%%%%%%%%%%%%%%
-      Control inputs
-      %%%%%%%%%%%%%%%%%%% */
+   /// Control Input
 
-   T = control[0];   /* thrust */
-   el = control[1];  /* Elevator setting in degrees. */
-   ail = control[2]; /* Ailerons mex setting in degrees. */
-   rud = control[3]; /* Rudder setting in degrees. */
-   lef = d_lef;      /* Leading edge flap setting in degrees */
+   el = control->elevator; /* Elevator setting in degrees. */
+   ail = control->aileron; /* Ailerons mex setting in degrees. */
+   rud = control->rudder;  /* Rudder setting in degrees. */
+   lef = d_lef;            /* Leading edge flap setting in degrees */
 
    /* dail  = ail/20.0;   aileron normalized against max angle */
    /* The aileron was normalized using 20.0 but the NASA report and
       S&L both have 21.5 deg. as maximum deflection. */
    /* As a result... */
+
    dail = ail / 21.5;
-   drud = rud / 30.0;       /* rudder normalized against max angle */
-   dlef = (1 - lef / 25.0); /* leading edge flap normalized against max angle */
+   drud = rud / 30.0;
+   dlef = (1 - lef / 25.0);
 
-   /* %%%%%%%%%%%%%%%%%%
-      Atmospheric effects
-      sets dynamic pressure and mach number
-      %%%%%%%%%%%%%%%%%% */
-
-   atmos(alt, vt, temp);
-   mach = temp[0];
-   qbar = temp[1];
-   ps = temp[2];
-
-   /*
-   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-   %%%%%%%%%%%%%%%%Dynamics%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-   */
-
-   /* %%%%%%%%%%%%%%%%%%
-      Navigation Equations
-      %%%%%%%%%%%%%%%%%% */
-
-   U = vt * ca * cb; /* directional velocities. */
-   V = vt * sb;
-   W = vt * sa * cb;
-
-   /* nposdot */
-   state_dot[0] = U * (ct * cpsi) +
-                  V * (sphi * cpsi * st - cphi * spsi) +
-                  W * (cphi * st * cpsi + sphi * spsi);
-
-   /* eposdot */
-   state_dot[1] = U * (ct * spsi) +
-                  V * (sphi * spsi * st + cphi * cpsi) +
-                  W * (cphi * st * spsi - sphi * cpsi);
-
-   /* altdot */
-   state_dot[2] = U * st - V * (sphi * ct) - W * (cphi * ct);
-
-   /* %%%%%%%%%%%%%%%%%%%
-      Kinematic equations
-      %%%%%%%%%%%%%%%%%%% */
-   /* phidot */
-   state_dot[3] = P + tt * (Q * sphi + R * cphi);
-
-   /* theta dot */
-   state_dot[4] = Q * cphi - R * sphi;
-
-   /* psidot */
-   state_dot[5] = (Q * sphi + R * cphi) / ct;
-
-   /* %%%%%%%%%%%%%%%%%%
-           Table lookup
-        %%%%%%%%%%%%%%%%%% */
-
-   if (fi_flag == 1) /* HIFI Table */
+   if (fi_flag == 1)
    {
-      hifi_C(alpha, beta, el, temp);
+      /// Hifi Table Look-Up
+      res = hifi_C(alpha, beta, el, temp);
+      CHECK_LOAD(res)
       Cx = temp[0];
       Cz = temp[1];
       Cm = temp[2];
@@ -275,7 +228,8 @@ int frmodel_step(
       Cn = temp[4];
       Cl = temp[5];
 
-      hifi_damping(alpha, temp);
+      res = hifi_damping(alpha, temp);
+      CHECK_LOAD(res)
       Cxq = temp[0];
       Cyr = temp[1];
       Cyp = temp[2];
@@ -286,7 +240,8 @@ int frmodel_step(
       Cnr = temp[7];
       Cnp = temp[8];
 
-      hifi_C_lef(alpha, beta, temp);
+      res = hifi_C_lef(alpha, beta, temp);
+      CHECK_LOAD(res)
       delta_Cx_lef = temp[0];
       delta_Cz_lef = temp[1];
       delta_Cm_lef = temp[2];
@@ -294,7 +249,8 @@ int frmodel_step(
       delta_Cn_lef = temp[4];
       delta_Cl_lef = temp[5];
 
-      hifi_damping_lef(alpha, temp);
+      res = hifi_damping_lef(alpha, temp);
+      CHECK_LOAD(res)
       delta_Cxq_lef = temp[0];
       delta_Cyr_lef = temp[1];
       delta_Cyp_lef = temp[2];
@@ -305,12 +261,14 @@ int frmodel_step(
       delta_Cnr_lef = temp[7];
       delta_Cnp_lef = temp[8];
 
-      hifi_rudder(alpha, beta, temp);
+      res = hifi_rudder(alpha, beta, temp);
+      CHECK_LOAD(res)
       delta_Cy_r30 = temp[0];
       delta_Cn_r30 = temp[1];
       delta_Cl_r30 = temp[2];
 
-      hifi_ailerons(alpha, beta, temp);
+      res = hifi_ailerons(alpha, beta, temp);
+      CHECK_LOAD(res)
       delta_Cy_a20 = temp[0];
       delta_Cy_a20_lef = temp[1];
       delta_Cn_a20 = temp[2];
@@ -318,24 +276,24 @@ int frmodel_step(
       delta_Cl_a20 = temp[4];
       delta_Cl_a20_lef = temp[5];
 
-      hifi_other_coeffs(alpha, el, temp);
+      res = hifi_other_coeffs(alpha, el, temp);
+      CHECK_LOAD(res)
       delta_Cnbeta = temp[0];
       delta_Clbeta = temp[1];
       delta_Cm = temp[2];
       eta_el = temp[3];
-      delta_Cm_ds = 0; /* ignore deep-stall effect */
+      delta_Cm_ds = 0; // ignore deep-stall effect
    }
-
    else if (fi_flag == 0)
    {
-      /* ##############################################
-         ##########LOFI Table Look-up #################
-         ##############################################*/
+      /// Lofi Table Look-Up
 
-      /* The lofi model does not include the
+      /*
+         The lofi model does not include the
          leading edge flap.  All terms multiplied
          dlef have been set to zero but just to
-         be sure we will set it to zero. */
+         be sure we will set it to zero.
+      */
 
       dlef = 0.0;
 
@@ -351,10 +309,10 @@ int frmodel_step(
       Cnp = temp[8];
 
       dmomdcon(alpha, beta, temp);
-      delta_Cl_a20 = temp[0]; /* Formerly dLda in frmodel_get_state.c */
-      delta_Cl_r30 = temp[1]; /* Formerly dLdr in frmodel_get_state.c */
-      delta_Cn_a20 = temp[2]; /* Formerly dNda in frmodel_get_state.c */
-      delta_Cn_r30 = temp[3]; /* Formerly dNdr in frmodel_get_state.c */
+      delta_Cl_a20 = temp[0];
+      delta_Cl_r30 = temp[1];
+      delta_Cn_a20 = temp[2];
+      delta_Cn_r30 = temp[3];
 
       clcn(alpha, beta, temp);
       Cl = temp[0];
@@ -369,10 +327,10 @@ int frmodel_step(
       cz(alpha, beta, el, temp);
       Cz = temp[0];
 
-      /*##################################################
-        ##  Set all higher order terms of hifi that are ##
-        ##  not applicable to lofi equal to zero. ########
-        ##################################################*/
+      /*
+         Set all higher order terms of hifi that are
+         not applicable to lofi equal to zero.
+      */
 
       delta_Cx_lef = 0.0;
       delta_Cz_lef = 0.0;
@@ -399,35 +357,36 @@ int frmodel_step(
       delta_Cm = 0.0;
       eta_el = 1.0; /* Needs to be one. See equation for Cm_tot*/
       delta_Cm_ds = 0.0;
-
-      /*##################################################
-        ##################################################*/
    }
 
-   /* %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-   compute Cx_tot, Cz_tot, Cm_tot, Cy_tot, Cn_tot, and Cl_tot
-   (as on NASA report p37-40)
-   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% */
+   /// compute Cx_tot, Cz_tot, Cm_tot, Cy_tot, Cn_tot, and Cl_tot
+   /// (as on NASA report p37-40)
 
-   /* XXXXXXXX Cx_tot XXXXXXXX */
+#pragma region Cx_tot
 
    dXdQ = (cbar / (2 * vt)) * (Cxq + delta_Cxq_lef * dlef);
 
    Cx_tot = Cx + delta_Cx_lef * dlef + dXdQ * Q;
 
-   /* ZZZZZZZZ Cz_tot ZZZZZZZZ */
+#pragma endregion
+
+#pragma region Cz_tot
 
    dZdQ = (cbar / (2 * vt)) * (Czq + delta_Cz_lef * dlef);
 
    Cz_tot = Cz + delta_Cz_lef * dlef + dZdQ * Q;
 
-   /* MMMMMMMM Cm_tot MMMMMMMM */
+#pragma endregion
+
+#pragma region Cm_tot
 
    dMdQ = (cbar / (2 * vt)) * (Cmq + delta_Cmq_lef * dlef);
 
    Cm_tot = Cm * eta_el + Cz_tot * (xcgr - xcg) + delta_Cm_lef * dlef + dMdQ * Q + delta_Cm + delta_Cm_ds;
 
-   /* YYYYYYYY Cy_tot YYYYYYYY */
+#pragma endregion
+
+#pragma region Cy_tot
 
    dYdail = delta_Cy_a20 + delta_Cy_a20_lef * dlef;
 
@@ -437,7 +396,9 @@ int frmodel_step(
 
    Cy_tot = Cy + delta_Cy_lef * dlef + dYdail * dail + delta_Cy_r30 * drud + dYdR * R + dYdP * P;
 
-   /* NNNNNNNN Cn_tot NNNNNNNN */
+#pragma endregion
+
+#pragma region Cn_tot
 
    dNdail = delta_Cn_a20 + delta_Cn_a20_lef * dlef;
 
@@ -447,7 +408,9 @@ int frmodel_step(
 
    Cn_tot = Cn + delta_Cn_lef * dlef - Cy_tot * (xcgr - xcg) * (cbar / B) + dNdail * dail + delta_Cn_r30 * drud + dNdR * R + dNdP * P + delta_Cnbeta * beta;
 
-   /* LLLLLLLL Cl_tot LLLLLLLL */
+#pragma endregion
+
+#pragma region Cl_tot
 
    dLdail = delta_Cl_a20 + delta_Cl_a20_lef * dlef;
 
@@ -457,78 +420,17 @@ int frmodel_step(
 
    Cl_tot = Cl + delta_Cl_lef * dlef + dLdail * dail + delta_Cl_r30 * drud + dLdR * R + dLdP * P + delta_Clbeta * beta;
 
-   /* %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      compute Udot,Vdot, Wdot,(as on NASA report p36)
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% */
+#pragma endregion
 
-   Udot = R * V - Q * W - g * st + qbar * S * Cx_tot / m + T / m;
+   sprintf(msg, "f16 coeff Cl=%f, Cm=%f, Cn=%f, Cx=%f, Cy=%f, Cz=%f", Cl_tot, Cm_tot, Cn_tot, Cx_tot, Cy_tot, Cz_tot);
+   frplugin_log(msg, TRACE);
 
-   Vdot = P * W - R * U + g * ct * sphi + qbar * S * Cy_tot / m;
-
-   Wdot = Q * U - P * V + g * ct * cphi + qbar * S * Cz_tot / m;
-
-   /* %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      vt_dot equation (from S&L, p82)
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% */
-
-   state_dot[6] = (U * Udot + V * Vdot + W * Wdot) / vt;
-
-   /* %%%%%%%%%%%%%%%%%%
-      alpha_dot equation
-      %%%%%%%%%%%%%%%%%% */
-
-   state_dot[7] = (U * Wdot - W * Udot) / (U * U + W * W);
-
-   /* %%%%%%%%%%%%%%%%%
-      beta_dot equation
-      %%%%%%%%%%%%%%%%% */
-
-   state_dot[8] = (Vdot * vt - V * state_dot[6]) / (vt * vt * cb);
-
-   /* %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      compute Pdot, Qdot, and Rdot (as in Stevens and Lewis p32)
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% */
-
-   L_tot = Cl_tot * qbar * S * B; /* get moments from coefficients */
-   M_tot = Cm_tot * qbar * S * cbar;
-   N_tot = Cn_tot * qbar * S * B;
-
-   denom = Jx * Jz - Jxz * Jxz;
-
-   /* %%%%%%%%%%%%%%%%%%%%%%%
-      Pdot
-      %%%%%%%%%%%%%%%%%%%%%%% */
-
-   state_dot[9] = (Jz * L_tot + Jxz * N_tot - (Jz * (Jz - Jy) + Jxz * Jxz) * Q * R + Jxz * (Jx - Jy + Jz) * P * Q + Jxz * Q * Heng) / denom;
-
-   /* %%%%%%%%%%%%%%%%%%%%%%%
-      Qdot
-      %%%%%%%%%%%%%%%%%%%%%%% */
-
-   state_dot[10] = (M_tot + (Jz - Jx) * P * R - Jxz * (P * P - R * R) - R * Heng) / Jy;
-
-   /* %%%%%%%%%%%%%%%%%%%%%%%
-      Rdot
-      %%%%%%%%%%%%%%%%%%%%%%% */
-
-   state_dot[11] = (Jx * N_tot + Jxz * L_tot + (Jx * (Jx - Jy) + Jxz * Jxz) * P * Q - Jxz * (Jx - Jy + Jz) * Q * R + Jx * Q * Heng) / denom;
-
-   /*########################################*/
-   /*### Create accelerations anx_cg, any_cg */
-   /*### ans anz_cg as outputs ##############*/
-   /*########################################*/
-
-   accels(state, state_dot, temp);
-
-   state_extend[0] = temp[0]; /* anx_cg */
-   state_extend[1] = temp[1]; /* any_cg */
-   state_extend[2] = temp[2]; /* anz_cg */
-   state_extend[3] = mach;
-   state_extend[4] = qbar;
-   state_extend[5] = ps;
-
-   /*########################################*/
-   /*########################################*/
+   c->c_l = Cl_tot;
+   c->c_m = Cm_tot;
+   c->c_n = Cn_tot;
+   c->c_x = Cx_tot;
+   c->c_y = Cy_tot;
+   c->c_z = Cz_tot;
 
    free(temp);
 

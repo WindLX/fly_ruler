@@ -1,82 +1,87 @@
-use super::atmos;
-use super::Integrator;
-use super::VectorIntegrator;
-use crate::parts::disturbance;
-use crate::parts::Actuator;
-use crate::TrimOutput;
-use fly_ruler_plugin::model::step_handler_constructor;
-use fly_ruler_plugin::model::Model;
-use fly_ruler_plugin::plugin::IsPlugin;
-use fly_ruler_utils::error::FatalPluginError;
-use fly_ruler_utils::model::Control;
-use fly_ruler_utils::model::ModelInput;
-use fly_ruler_utils::model::ModelOutput;
-use fly_ruler_utils::model::State;
-use fly_ruler_utils::model::StateExtend;
-use fly_ruler_utils::Vector;
-use log::debug;
+use crate::parts::{
+    basic::{Integrator, VectorIntegrator},
+    flight::{disturbance, Atmos, Plant},
+    group::Actuator,
+    trim::TrimOutput,
+};
+use fly_ruler_plugin::Model;
+use fly_ruler_utils::{
+    error::FatalCoreError,
+    plant_model::{Control, ModelInput, PlantBlockOutput, State, StateExtend},
+    Vector,
+};
+use log::{debug, trace};
 use std::f64::consts::PI;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
-pub struct Controller {
-    pub actuators: Vec<Actuator>,
-    pub deflection: Vec<f64>,
+pub(crate) struct ControllerBlock {
+    actuators: Vec<Actuator>,
+    deflection: Vec<f64>,
 }
 
-impl Controller {
+impl ControllerBlock {
     pub fn new(control_init: impl Into<Control>, deflection: &[f64]) -> Self {
-        let control_init = control_init.into();
-        let control_init: [f64; 4] = control_init.into();
-        let thrust_ac = Actuator::new(control_init[0], 19000.0, Some(1000.0), 10000.0, 1.0);
-        let elevator_ac = Actuator::new(control_init[1], 25.0, None, 60.0, 20.2);
-        let aileron_ac = Actuator::new(control_init[2], 21.5, None, 80.0, 20.2);
-        let rudder_ac = Actuator::new(control_init[3], 30.0, None, 120.0, 20.2);
-        Controller {
+        let control_init: Control = control_init.into();
+        let thrust_ac = Actuator::new(control_init.thrust, 19000.0, Some(1000.0), 10000.0, 1.0);
+        let elevator_ac = Actuator::new(control_init.elevator, 25.0, None, 60.0, 20.2);
+        let aileron_ac = Actuator::new(control_init.aileron, 21.5, None, 80.0, 20.2);
+        let rudder_ac = Actuator::new(control_init.rudder, 30.0, None, 120.0, 20.2);
+        ControllerBlock {
             actuators: vec![thrust_ac, elevator_ac, aileron_ac, rudder_ac],
             deflection: deflection.to_vec(),
         }
     }
 
-    /// elevator aileron rudder thrust
-    pub fn update(&mut self, control_input: [f64; 4], t: f64) -> [f64; 4] {
-        let mut output = [0.0; 4];
-        let mut control_input = Vec::from(control_input);
-        for i in 1..4 {
-            if self.deflection[i - 1].abs() < 1e-10 {
-                continue;
+    pub fn update(&mut self, control_input: impl Into<Control>, t: f64) -> Control {
+        let mut control_input: Control = control_input.into();
+        control_input.thrust = self.actuators[0].update(control_input[0], t);
+        for i in 0..4 {
+            if i < 3 {
+                if self.deflection[i].abs() < 1e-10 {
+                    control_input[i + 1] += disturbance(self.deflection[i], t);
+                }
             }
-            control_input[i] += disturbance(self.deflection[i], t);
+            if control_input[i] < 1e-10 {
+                let last = self.actuators[i].last();
+                control_input[i] = self.actuators[i].update(last, t)
+            } else {
+                control_input[i] = self.actuators[i].update(control_input[i], t)
+            }
         }
-        for i in 0..self.actuators.len() {
-            output[i] = self.actuators[i].update(control_input[i], t);
-        }
-        output
+        debug!("\n{:?}", control_input);
+        control_input
     }
 
-    pub fn past(&self) -> [f64; 4] {
-        [
+    pub fn past(&self) -> Control {
+        Control::from([
             self.actuators[0].past(),
             self.actuators[1].past(),
             self.actuators[2].past(),
             self.actuators[3].past(),
-        ]
+        ])
+    }
+
+    pub fn reset(&mut self) {
+        for a in &mut self.actuators {
+            a.reset()
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct LeadingEdgeFlap {
-    pub lef_actuator: Actuator,
-    pub integrator: Integrator,
-    pub feedback: f64,
+pub(crate) struct LeadingEdgeFlapBlock {
+    lef_actuator: Actuator,
+    integrator: Integrator,
+    feedback: f64,
 }
 
-impl LeadingEdgeFlap {
+impl LeadingEdgeFlapBlock {
     pub fn new(alpha_init: f64, d_lef: f64) -> Self {
         let lef_actuator = Actuator::new(d_lef, 25.0, Some(0.0), 25.0, 1.0 / 0.136);
         let integrator = Integrator::new(-alpha_init * 180.0 / PI);
-        LeadingEdgeFlap {
+        LeadingEdgeFlapBlock {
             lef_actuator,
             integrator,
             feedback: 0.0,
@@ -84,8 +89,8 @@ impl LeadingEdgeFlap {
     }
 
     pub fn update(&mut self, alpha: f64, alt: f64, vt: f64, t: f64) -> f64 {
-        let atmos = atmos(alt, vt);
-        let r_1 = atmos.0 / atmos.1 * 9.05;
+        let atmos = Atmos::atmos(alt, vt);
+        let r_1 = atmos.qbar / atmos.ps * 9.05;
         let alpha = alpha * 180.0 / PI;
         let r_2 = (alpha - self.feedback) * 7.25;
         let r_3 = self.integrator.integrate(r_2, t);
@@ -98,85 +103,112 @@ impl LeadingEdgeFlap {
     pub fn past(&self) -> f64 {
         self.lef_actuator.past()
     }
-}
 
-pub struct F16Block {
-    pub control: Controller,
-    pub flap: LeadingEdgeFlap,
-    pub integrator: VectorIntegrator,
-    pub model_func: Box<dyn Fn(&ModelInput) -> Result<ModelOutput, FatalPluginError>>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct BlockOutput {
-    pub state: State,
-    pub control: Control,
-    pub d_lef: f64,
-    pub state_extend: StateExtend,
-}
-
-impl BlockOutput {
-    pub fn new(state: State, control: Control, d_lef: f64, state_extend: StateExtend) -> Self {
-        Self {
-            state,
-            control,
-            d_lef,
-            state_extend,
-        }
+    pub fn reset(&mut self) {
+        self.lef_actuator.reset();
+        self.integrator.reset();
+        self.feedback = 0.0;
     }
 }
 
-impl F16Block {
-    pub async fn new(model: Arc<Mutex<Model>>, init: &TrimOutput, deflection: &[f64]) -> Self {
-        let model = model.lock().await;
-        let handler = model.get_step_handler().unwrap();
-        let name = model.info().name.clone();
-        let model_func = step_handler_constructor(handler, name.clone());
-        let flap = LeadingEdgeFlap::new(init.state.alpha, init.d_lef);
-        let control = Controller::new(init.control, deflection);
+pub struct PlantBlock {
+    control: ControllerBlock,
+    flap: LeadingEdgeFlapBlock,
+    integrator: VectorIntegrator,
+    plant: Plant,
+    extend: Option<StateExtend>,
+}
+
+impl PlantBlock {
+    pub async fn new(
+        model: Arc<Mutex<Model>>,
+        init: &TrimOutput,
+        deflection: &[f64],
+    ) -> Result<Self, FatalCoreError> {
+        let flap = LeadingEdgeFlapBlock::new(init.state.alpha, init.d_lef);
+        let control = ControllerBlock::new(init.control, deflection);
         let integrator = VectorIntegrator::new(Into::<Vector>::into(init.state));
-        F16Block {
+        let plant = Plant::new(model).await?;
+
+        Ok(PlantBlock {
             control,
             flap,
             integrator,
-            model_func,
-        }
+            plant,
+            extend: None,
+        })
     }
 
-    pub fn update(&mut self, control: [f64; 4], t: f64) -> BlockOutput {
-        let state = &self.integrator.past;
+    pub fn update(
+        &mut self,
+        control: impl Into<Control>,
+        t: f64,
+    ) -> Result<PlantBlockOutput, FatalCoreError> {
+        let state = &self.integrator.past();
         let control = self.control.update(control, t);
         let lef = self.flap.past();
-        debug!("{}", self.flap.past());
-        let model_output = (self.model_func)(&ModelInput::new(state.data.clone(), control, lef));
-        let model_output = model_output.unwrap();
+        trace!("{}", self.flap.past());
+
+        let model_output = self
+            .plant
+            .step(&ModelInput::new(state.data.clone(), control, lef))?;
+
+        trace!("{:?}", model_output);
+
         let state = self
             .integrator
-            .derivative_integrate(Vector::from(model_output.state_dot), t);
+            .derivative_add(Vector::from(model_output.state_dot), t);
+
         let alpha = state[7];
         let alt = state[2];
         let vt = state[6];
+
         self.flap.update(alpha, alt, vt, t);
         let state = state.data;
         let control = self.control.past();
         let d_lef = self.flap.past();
         let extend = model_output.state_extend;
-        BlockOutput::new(
+        self.extend = Some(StateExtend::from(extend));
+
+        Ok(PlantBlockOutput::new(
             State::from(state),
             Control::from(control),
             d_lef,
-            StateExtend::from(extend),
-        )
+            self.extend.unwrap(),
+        ))
+    }
+
+    pub fn reset(&mut self) {
+        self.flap.reset();
+        self.control.reset();
+        self.integrator.reset();
+    }
+
+    pub fn state(&self) -> Result<PlantBlockOutput, FatalCoreError> {
+        let state = &self.integrator.past();
+        let control = self.control.past();
+        let d_lef = self.flap.past();
+
+        Ok(PlantBlockOutput::new(
+            State::from(state.clone()),
+            Control::from(control),
+            d_lef,
+            self.extend.unwrap_or_default(),
+        ))
     }
 }
 
 #[cfg(test)]
 mod core_parts_tests {
-    use crate::parts::{multi_to_deg, step, Controller, LeadingEdgeFlap};
-    use crate::TrimOutput;
-    use crate::{algorithm::nelder_mead::NelderMeadOptions, parts::F16Block, trim::trim};
+    use crate::algorithm::nelder_mead::NelderMeadOptions;
+    use crate::parts::{
+        basic::step,
+        block::{ControllerBlock, LeadingEdgeFlapBlock, PlantBlock},
+        flight::{multi_to_deg, Plant},
+        trim::{trim, TrimOutput, TrimTarget},
+    };
     use csv::Writer;
-    use fly_ruler_plugin::{model::Model, plugin::IsPlugin};
+    use fly_ruler_plugin::{IsPlugin, Model};
     use fly_ruler_utils::logger::test_logger_init;
     use log::{debug, trace};
     use std::fs::File;
@@ -195,7 +227,11 @@ mod core_parts_tests {
         assert!(matches!(res, Ok(Ok(_))));
 
         let model = Arc::new(Mutex::new(model));
-        let trim_target = crate::TrimTarget::new(15000.0, 500.0);
+        let plant = Arc::new(std::sync::Mutex::new(
+            tokio_test::block_on(Plant::new(model.clone())).unwrap(),
+        ));
+
+        let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
         let fi_flag = true;
         let nm_options = Some(NelderMeadOptions {
@@ -207,14 +243,15 @@ mod core_parts_tests {
 
         (
             model.clone(),
-            tokio_test::block_on(trim(
+            trim(
                 trim_target,
                 trim_init,
                 fi_flag,
-                model,
+                plant.clone(),
                 None,
                 nm_options,
-            )),
+            )
+            .unwrap(),
         )
     }
 
@@ -240,7 +277,7 @@ mod core_parts_tests {
             .unwrap();
 
         let control_init = result.control;
-        let mut control = Controller::new(control_init, &[0.0, 0.0, 0.0]);
+        let mut control = ControllerBlock::new(control_init, &[0.0, 0.0, 0.0]);
 
         loop {
             let current_time = SystemTime::now();
@@ -262,7 +299,10 @@ mod core_parts_tests {
             );
             trace!("time: {:?} \n{:?}\n", delta_time, result);
 
-            let data: Vec<String> = result.iter().map(|d| d.to_string()).collect();
+            let data: Vec<String> = Into::<Vec<f64>>::into(result)
+                .iter()
+                .map(|d| d.to_string())
+                .collect();
             let mut record = vec![delta_time.as_secs_f32().to_string()];
             record.extend(data);
             writer.write_record(&record).unwrap();
@@ -287,7 +327,7 @@ mod core_parts_tests {
             result.state.altitude,
             result.state.velocity,
         );
-        let mut flap = LeadingEdgeFlap::new(alpha, d_lef);
+        let mut flap = LeadingEdgeFlapBlock::new(alpha, d_lef);
 
         let path = Path::new("output_flap.csv");
         let file = File::create(&path).unwrap();
@@ -321,12 +361,13 @@ mod core_parts_tests {
     }
 
     #[test]
-    fn test_f16() {
+    fn test_plant() {
         let (model, result) = test_core_init();
+        // set_time_scale(5.0).unwrap();
 
         let control: [f64; 4] = result.control.into();
-        let f16_block = F16Block::new(model.clone(), &result, &[0.0, 0.0, 0.0]);
-        let mut f16_block = tokio_test::block_on(f16_block);
+        let f16_block = PlantBlock::new(model.clone(), &result, &[0.0, 0.0, 0.0]);
+        let mut f16_block = tokio_test::block_on(f16_block).unwrap();
 
         let path = Path::new("output.csv");
         let file = File::create(&path).unwrap();
@@ -361,7 +402,7 @@ mod core_parts_tests {
         loop {
             let current_time = Instant::now();
             let delta_time = current_time.duration_since(start_time);
-            let result = f16_block.update(control, delta_time.as_secs_f64());
+            let result = f16_block.update(control, delta_time.as_secs_f64()).unwrap();
             if current_time >= next_write_time {
                 let state = multi_to_deg(&result.state.into());
 
@@ -381,7 +422,7 @@ mod core_parts_tests {
                 next_write_time += Duration::from_millis(100);
             }
 
-            if delta_time >= Duration::from_secs_f32(30.0) {
+            if delta_time >= Duration::from_secs_f32(15.0) {
                 break;
             }
         }

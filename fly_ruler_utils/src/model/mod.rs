@@ -1,7 +1,8 @@
-pub mod matrix;
+pub(crate) mod matrix;
 pub mod plant;
-pub mod vector;
+pub(crate) mod sync;
+pub(crate) mod vector;
 
 pub use matrix::Matrix;
-pub use plant::*;
+pub use sync::*;
 pub use vector::Vector;

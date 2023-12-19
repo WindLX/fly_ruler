@@ -32,6 +32,16 @@
 	free(axis);                                                \
 	return r
 
+#define CHECK_NAN(len)            \
+	for (int i = 0; i < len; i++) \
+	{                             \
+		if (isnan(retVal[i]))     \
+		{                         \
+			return -1;            \
+		}                         \
+	}                             \
+	return 0
+
 static Tensor **hifiData;
 static double **axisData;
 static char *dataDir;
@@ -395,6 +405,7 @@ void set_data_dir(char *dir)
 	dataDir = dir;
 }
 
+#pragma region
 static double _Cx(double alpha, double beta, double dele)
 {
 	GET_COEFF3(ALPHA1_BETA1_DH1, CX0120);
@@ -613,8 +624,9 @@ static double _eta_el(double el)
 	free(axis);
 	return r;
 }
+#pragma endregion
 
-void hifi_C(double alpha, double beta, double el, double *retVal)
+int hifi_C(double alpha, double beta, double el, double *retVal)
 {
 	retVal[0] = _Cx(alpha, beta, el);
 	retVal[1] = _Cz(alpha, beta, el);
@@ -622,9 +634,11 @@ void hifi_C(double alpha, double beta, double el, double *retVal)
 	retVal[3] = _Cy(alpha, beta);
 	retVal[4] = _Cn(alpha, beta, el);
 	retVal[5] = _Cl(alpha, beta, el);
+
+	CHECK_NAN(6);
 }
 
-void hifi_damping(double alpha, double *retVal)
+int hifi_damping(double alpha, double *retVal)
 {
 	retVal[0] = _CXq(alpha);
 	retVal[1] = _CYr(alpha);
@@ -635,9 +649,11 @@ void hifi_damping(double alpha, double *retVal)
 	retVal[6] = _CMq(alpha);
 	retVal[7] = _CNr(alpha);
 	retVal[8] = _CNp(alpha);
+
+	CHECK_NAN(9);
 }
 
-void hifi_C_lef(double alpha, double beta, double *retVal)
+int hifi_C_lef(double alpha, double beta, double *retVal)
 {
 	retVal[0] = _Cx_lef(alpha, beta) - _Cx(alpha, beta, 0);
 	retVal[1] = _Cz_lef(alpha, beta) - _Cz(alpha, beta, 0);
@@ -645,9 +661,11 @@ void hifi_C_lef(double alpha, double beta, double *retVal)
 	retVal[3] = _Cy_lef(alpha, beta) - _Cy(alpha, beta);
 	retVal[4] = _Cn_lef(alpha, beta) - _Cn(alpha, beta, 0);
 	retVal[5] = _Cl_lef(alpha, beta) - _Cl(alpha, beta, 0);
+
+	CHECK_NAN(6);
 }
 
-void hifi_damping_lef(double alpha, double *retVal)
+int hifi_damping_lef(double alpha, double *retVal)
 {
 	retVal[0] = _delta_CXq_lef(alpha);
 	retVal[1] = _delta_CYr_lef(alpha);
@@ -658,16 +676,20 @@ void hifi_damping_lef(double alpha, double *retVal)
 	retVal[6] = _delta_CMq_lef(alpha);
 	retVal[7] = _delta_CNr_lef(alpha);
 	retVal[8] = _delta_CNp_lef(alpha);
+
+	CHECK_NAN(9);
 }
 
-void hifi_rudder(double alpha, double beta, double *retVal)
+int hifi_rudder(double alpha, double beta, double *retVal)
 {
 	retVal[0] = _Cy_r30(alpha, beta) - _Cy(alpha, beta);
 	retVal[1] = _Cn_r30(alpha, beta) - _Cn(alpha, beta, 0);
 	retVal[2] = _Cl_r30(alpha, beta) - _Cl(alpha, beta, 0);
+
+	CHECK_NAN(3);
 }
 
-void hifi_ailerons(double alpha, double beta, double *retVal)
+int hifi_ailerons(double alpha, double beta, double *retVal)
 {
 	retVal[0] = _Cy_a20(alpha, beta) - _Cy(alpha, beta);
 	retVal[1] = _Cy_a20_lef(alpha, beta) - _Cy_lef(alpha, beta) - retVal[0];
@@ -675,13 +697,17 @@ void hifi_ailerons(double alpha, double beta, double *retVal)
 	retVal[3] = _Cn_a20_lef(alpha, beta) - _Cn_lef(alpha, beta) - retVal[2];
 	retVal[4] = _Cl_a20(alpha, beta) - _Cl(alpha, beta, 0);
 	retVal[5] = _Cl_a20_lef(alpha, beta) - _Cl_lef(alpha, beta) - retVal[4];
+
+	CHECK_NAN(6);
 }
 
-void hifi_other_coeffs(double alpha, double el, double *retVal)
+int hifi_other_coeffs(double alpha, double el, double *retVal)
 {
 	retVal[0] = _delta_CNbeta(alpha);
 	retVal[1] = _delta_CLbeta(alpha);
 	retVal[2] = _delta_Cm(alpha);
 	retVal[3] = _eta_el(el);
 	retVal[4] = 0; /* ignore deep-stall regime, delta_Cm_ds = 0 */
+
+	CHECK_NAN(5);
 }

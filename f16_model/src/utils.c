@@ -66,8 +66,8 @@ void atmos(double alt, double vt, double *coeff)
     coeff[2] = ps;
 }
 
-void accels(double *state,
-            double *state_dot,
+void accels(const State *state,
+            const State *state_dot,
             double *y)
 {
 #define GRAV 32.174
@@ -77,19 +77,19 @@ void accels(double *state,
     double u_dot, v_dot, w_dot;
     double nx_cg, ny_cg, nz_cg;
 
-    sina = sin(state[7]);
-    cosa = cos(state[7]);
-    sinb = sin(state[8]);
-    cosb = cos(state[8]);
-    vel_u = state[6] * cosb * cosa;
-    vel_v = state[6] * sinb;
-    vel_w = state[6] * cosb * sina;
-    u_dot = cosb * cosa * state_dot[6] - state[6] * sinb * cosa * state_dot[8] - state[6] * cosb * sina * state_dot[7];
-    v_dot = sinb * state_dot[6] + state[6] * cosb * state_dot[8];
-    w_dot = cosb * sina * state_dot[6] - state[6] * sinb * sina * state_dot[8] + state[6] * cosb * cosa * state_dot[7];
-    nx_cg = 1.0 / GRAV * (u_dot + state[10] * vel_w - state[11] * vel_v) + sin(state[4]);
-    ny_cg = 1.0 / GRAV * (v_dot + state[11] * vel_u - state[9] * vel_w) - cos(state[4]) * sin(state[3]);
-    nz_cg = -1.0 / GRAV * (w_dot + state[9] * vel_v - state[10] * vel_u) + cos(state[4]) * cos(state[3]);
+    sina = sin(state->alpha);
+    cosa = cos(state->alpha);
+    sinb = sin(state->beta);
+    cosb = cos(state->beta);
+    vel_u = state->velocity * cosb * cosa;
+    vel_v = state->velocity * sinb;
+    vel_w = state->velocity * cosb * sina;
+    u_dot = cosb * cosa * state_dot->velocity - state->velocity * sinb * cosa * state_dot->beta - state->velocity * cosb * sina * state_dot->alpha;
+    v_dot = sinb * state_dot->velocity + state->velocity * cosb * state_dot->beta;
+    w_dot = cosb * sina * state_dot->velocity - state->velocity * sinb * sina * state_dot->beta + state->velocity * cosb * cosa * state_dot->alpha;
+    nx_cg = 1.0 / GRAV * (u_dot + state->q * vel_w - state->r * vel_v) + sin(state->theta);
+    ny_cg = 1.0 / GRAV * (v_dot + state->r * vel_u - state->p * vel_w) - cos(state->theta) * sin(state->phi);
+    nz_cg = -1.0 / GRAV * (w_dot + state->p * vel_v - state->q * vel_u) + cos(state->theta) * cos(state->phi);
 
     y[0] = nx_cg;
     y[1] = ny_cg;

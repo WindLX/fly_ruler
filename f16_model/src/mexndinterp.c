@@ -98,14 +98,14 @@ static double linear_interpolate(double *T, double *targetData, double **axisDat
 			{
 				mask = (1 << j);
 				indexVector[j] = (mask & i) >> j;
-			} /*End of for j*/
+			}
 			index1 = 0;
 			index2 = 0;
 			for (j = 0; j < m; j++)
 			{
 				index1 = index1 + (1 << (j + 1)) * indexVector[j];
 				index2 = index2 + (1 << j) * indexVector[j];
-			} /*End of for j*/
+			}
 			f1 = oldT[index1];
 			f2 = oldT[index1 + 1];
 			if (axisData[dimNum][0] != axisData[dimNum][1])
@@ -115,7 +115,7 @@ static double linear_interpolate(double *T, double *targetData, double **axisDat
 			}
 			else
 				newT[index2] = f1;
-		} /*End of for i*/
+		}
 		free(oldT);
 		oldT = create_dvector(nVertices);
 		for (i = 0; i < nVertices; i++)

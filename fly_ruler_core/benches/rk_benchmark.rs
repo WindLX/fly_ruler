@@ -3,7 +3,7 @@ extern crate fly_ruler_utils;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use fly_ruler_core::algorithm::runge_kutta::runge_kutta;
-use fly_ruler_utils::model::{Matrix, Vector};
+use fly_ruler_utils::{Matrix, Vector};
 
 fn rk() {
     let func = |x: &Vector, y: &Vector| {

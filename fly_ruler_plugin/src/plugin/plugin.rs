@@ -113,7 +113,7 @@ impl Plugin {
                 unsafe {
                     let res = r(argc as c_int, argv as *const *const c_char);
                     if res < 0 {
-                        return Err(FatalPluginError::new(
+                        return Err(FatalPluginError::inner(
                             &self.info.name,
                             res,
                             format!("when call {name}").as_str(),
@@ -204,13 +204,13 @@ impl std::fmt::Display for PluginError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PluginError::UnknownPlatform => write!(f, "unknown platform"),
-            PluginError::Io(s) => write!(f, "failed to load plugin: {}", s),
-            PluginError::Info(s) => write!(f, "failed to parse plugin info: {}", s),
-            PluginError::Lib(s) => write!(f, "failed to load plugin library: {}", s),
+            PluginError::Io(s) => write!(f, "fail to load plugin: {}", s),
+            PluginError::Info(s) => write!(f, "fail to parse plugin info: {}", s),
+            PluginError::Lib(s) => write!(f, "fail to load plugin library: {}", s),
             PluginError::Symbol(name, symbol, s) => {
                 write!(
                     f,
-                    "failed to load symbol {} in plugin: {} due to {}",
+                    "fail to load symbol {} in plugin: {} due to {}",
                     symbol, name, s
                 )
             }
