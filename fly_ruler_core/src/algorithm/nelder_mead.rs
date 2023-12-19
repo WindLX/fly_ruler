@@ -1,7 +1,9 @@
 use fly_ruler_utils::{error::FatalCoreError, Matrix, Vector};
+use log::trace;
+use serde::{Deserialize, Serialize};
 
 /// 单纯形搜索法设置
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct NelderMeadOptions {
     /// 最大函数计算次数
     pub max_fun_evals: usize,
@@ -11,6 +13,16 @@ pub struct NelderMeadOptions {
     pub tol_fun: f64,
     /// 正标量 x 的终止容差
     pub tol_x: f64,
+}
+
+impl std::fmt::Display for NelderMeadOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "max_fun_evals: {}, max_iter: {}, tol_fun: {}, tol_x: {}",
+            self.max_fun_evals, self.max_iter, self.tol_fun, self.tol_x
+        )
+    }
 }
 
 impl Default for NelderMeadOptions {
@@ -35,8 +47,16 @@ pub struct NelderMeadResult {
     pub iter: usize,
     /// 函数计算次数
     pub fun_evals: usize,
-    /// 计算日志
-    pub output: Vec<String>,
+}
+
+impl std::fmt::Display for NelderMeadResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "x: {:?}, fval: {}, iter: {}, fun_evals: {}",
+            self.x, self.fval, self.iter, self.fun_evals
+        )
+    }
 }
 
 /// nelder_mead 单纯形搜索法求解器
@@ -51,9 +71,6 @@ pub fn nelder_mead(
     options: Option<NelderMeadOptions>,
 ) -> Result<NelderMeadResult, FatalCoreError> {
     let options = options.unwrap_or_default();
-    let mut output = Vec::new();
-    output.push(String::from("Iteration\tFunc-count\tf(x)\t\t\t\tProcedure"));
-
     // 设定反射 rho、扩展 gamma、收缩 psi、回退 sigma 系数
     let rho = 1.0;
     let gamma = 2.0;
@@ -87,13 +104,13 @@ pub fn nelder_mead(
 
     let mut sim = fval_sim.zip_sort(&sim);
 
-    output.push(format!(
-        "{}\t\t{}\t\t{}\t\t{}",
+    trace!(
+        "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
         0,
         fun_evals,
         fval_sim.min(),
         "Init"
-    ));
+    );
 
     while iter < options.max_iter && fun_evals < options.max_fun_evals {
         // 当顶点距离最大值或者目标值最大值小于一定值时，结束迭代
@@ -113,13 +130,13 @@ pub fn nelder_mead(
         let x_r = x_bar.clone() * (1.0 + rho) - sim.last().unwrap() * rho;
         let fval_x_r = func(&x_r)?;
         fun_evals += 1;
-        output.push(format!(
-            "{}\t\t{}\t\t{}\t\t{}",
+        trace!(
+            "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
             iter,
             fun_evals,
             fval_sim.min(),
             "Reflect"
-        ));
+        );
 
         // 控制是否回退
         let mut doshrink = false;
@@ -139,13 +156,13 @@ pub fn nelder_mead(
                 sim[n] = x_r;
                 fval_sim[n] = fval_x_r;
             }
-            output.push(format!(
-                "{}\t\t{}\t\t{}\t\t{}",
+            trace!(
+                "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
                 iter,
                 fun_evals,
                 fval_sim.min(),
                 "Expand"
-            ));
+            );
         } else {
             // 反射点不是最优点
             if fval_x_r < fval_sim[n - 1] {
@@ -169,13 +186,13 @@ pub fn nelder_mead(
                     } else {
                         doshrink = true;
                     }
-                    output.push(format!(
-                        "{}\t\t{}\t\t{}\t\t{}",
+                    trace!(
+                        "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
                         iter,
                         fun_evals,
                         fval_sim.min(),
                         "Contract Outside"
-                    ));
+                    );
                 } else {
                     // 反射点差于最差点
                     // 内收缩点
@@ -189,13 +206,13 @@ pub fn nelder_mead(
                     } else {
                         doshrink = true;
                     }
-                    output.push(format!(
-                        "{}\t\t{}\t\t{}\t\t{}",
+                    trace!(
+                        "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
                         iter,
                         fun_evals,
                         fval_sim.min(),
                         "Contract Inside"
-                    ));
+                    );
                 }
             }
             if doshrink {
@@ -205,13 +222,13 @@ pub fn nelder_mead(
                     fval_sim[j] = func(&sim[j])?
                 }
                 fun_evals += n;
-                output.push(format!(
-                    "{}\t\t{}\t\t{}\t\t{}",
+                trace!(
+                    "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
                     iter,
                     fun_evals,
                     fval_sim.min(),
                     "Backward"
-                ));
+                );
             }
         }
 
@@ -226,7 +243,6 @@ pub fn nelder_mead(
         fval,
         iter,
         fun_evals,
-        output,
     })
 }
 
@@ -247,6 +263,5 @@ mod core_algorithm_tests {
         let result = nelder_mead(Box::new(func), x_0, Some(options)).unwrap();
         println!("{:#?} {:#?}", result.x, result.fval);
         println!("{:#?} {:#?}", result.iter, result.fun_evals);
-        // println!("{}", result.output.join("\n"));
     }
 }

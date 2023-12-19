@@ -1,6 +1,5 @@
 use tokio::time::{sleep, Duration, Instant};
 
-#[derive(Debug)]
 pub struct Clock {
     actual_start_time: Instant,
     pause_time: Instant,
@@ -8,6 +7,7 @@ pub struct Clock {
     is_pause: bool,
     time_scale: f64,
     sample_time: Option<Duration>,
+    call_count: usize,
 }
 
 impl Clock {
@@ -20,6 +20,7 @@ impl Clock {
             is_pause: false,
             time_scale: time_scale.unwrap_or(1.0),
             sample_time,
+            call_count: 0,
         }
     }
 
@@ -46,12 +47,10 @@ impl Clock {
         if self.is_pause {
             return Duration::from_secs(0);
         }
-
+        self.call_count += 1;
         let time_scale = self.time_scale;
         let now = Instant::now();
         let virtual_delta_time = (now - self.actual_start_time).mul_f64(self.time_scale);
-
-        self.last_call = now;
 
         if let Some(sample_time) = self.sample_time {
             let time_since_last_call = now - self.last_call;
@@ -62,10 +61,12 @@ impl Clock {
                 sleep(Duration::from_secs_f64(remaining_time_f64)).await;
                 let now = Instant::now();
                 let delta_time = now - self.actual_start_time;
+                self.last_call = now;
                 return delta_time.mul_f64(time_scale);
             }
         }
 
+        self.last_call = now;
         virtual_delta_time
     }
 

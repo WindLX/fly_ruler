@@ -8,11 +8,12 @@
 #include "fr_model.h"
 #include "fr_plugin.h"
 
-#define CHECK_LOAD(res) \
-   if (res < 0)         \
-   {                    \
-      free(temp);       \
-      return res;       \
+#define CHECK_LOAD(res, name)             \
+   if (res < 0)                           \
+   {                                      \
+      error_("failed to load: %s", name); \
+      free(temp);                         \
+      return res;                         \
    }
 
 static PlantConstants consts = {
@@ -40,63 +41,50 @@ int frplugin_install_hook(int argc, char **argv)
 {
    int r = 0;
 
-   char msg[100];
-
    if (argc < 1)
    {
-      sprintf(msg, "argc is %d, should be at least 1", argc);
-      frplugin_log(msg, WARN);
+      warn("argc is %d, should be at least 1", argc);
    }
 
    char *data_dir = argv[0];
-   sprintf(msg, "data_dir pointer address: %p", data_dir);
-   frplugin_log(msg, DEBUG);
+   debug("data_dir pointer address: %p", data_dir);
 
    if (data_dir == NULL)
    {
-      sprintf(msg, "data_dir is NULL");
-      frplugin_log(msg, WARN);
+      warn("data_dir is NULL and it's set to current");
       data_dir = "";
    }
    else if (strlen(data_dir) == 0)
    {
-      sprintf(msg, "data_dir is set to current");
-      frplugin_log(msg, INFO);
+      info("data_dir is set to current");
       data_dir = "";
    }
    else
    {
-      sprintf(msg, "data_dir is set to %s", data_dir);
-      frplugin_log(msg, INFO);
+      info("data_dir is set to %s", data_dir);
    }
 
    set_data_dir(data_dir);
 
-   char *fi_flag_str = argv[1];
-   sprintf(msg, "fi_flag pointer address: %p", fi_flag_str);
-   frplugin_log(msg, DEBUG);
-
    if (argc == 2)
    {
+      char *fi_flag_str = argv[1];
+      debug("fi_flag pointer address: %p", fi_flag_str);
       if (fi_flag_str == NULL)
       {
-         sprintf(msg, "fi_flag is NULL");
-         frplugin_log(msg, WARN);
+         warn("fi_flag is NULL, it's set to default 1");
       }
       else if (strlen(fi_flag_str) == 0)
       {
-         sprintf(msg, "fi_flag is empty");
-         frplugin_log(msg, WARN);
+         warn("fi_flag is empty, it's set to default 1");
       }
       else if (strcmp(fi_flag_str, "1") == 0)
       {
-         sprintf(msg, "fi_flag is set to hifi");
-         frplugin_log(msg, INFO);
+         info("fi_flag is set to hifi");
       }
       else if (strcmp(fi_flag_str, "0") == 0)
       {
-         sprintf(msg, "fi_flag is set to lofi");
-         frplugin_log(msg, INFO);
+         info("fi_flag is set to lofi");
       }
    }
 
@@ -113,15 +101,11 @@ int frplugin_install_hook(int argc, char **argv)
 
 int frplugin_uninstall_hook(int argc, char **argv)
 {
-   char msg[100];
-
    free_hifi_data();
-   sprintf(msg, "free hifi data successfully");
-   frplugin_log(msg, TRACE);
+   trace("free hifi data successfully");
 
    free_axis_data();
-   sprintf(msg, "free axis data successfully");
-   frplugin_log(msg, TRACE);
+   trace("free axis data successfully");
 
    return 0;
 }
@@ -140,9 +124,7 @@ int frmodel_load_constants(PlantConstants *constants)
    constants->j_xz = consts.j_xz;
    constants->j_x = consts.j_x;
 
-   char msg[100];
-   sprintf(msg, "f16 consts load successfully");
-   frplugin_log(msg, TRACE);
+   trace("f16 consts load successfully");
 
    return 0;
 };
@@ -151,9 +133,7 @@ int frmodel_step(
     const State *state, const Control *control, double d_lef,
     C *c)
 {
-   char msg[256];
-   sprintf(msg, "f16 step start");
-   frplugin_log(msg, TRACE);
+   trace("f16 step start");
 
    double m = consts.m;
    double B = consts.b;
@@ -220,7 +200,7 @@ int frmodel_step(
    {
       /// Hifi Table Look-Up
       res = hifi_C(alpha, beta, el, temp);
-      CHECK_LOAD(res)
+      CHECK_LOAD(res, "hifi_C")
       Cx = temp[0];
       Cz = temp[1];
       Cm = temp[2];
@@ -229,7 +209,7 @@ int frmodel_step(
       Cl = temp[5];
 
       res = hifi_damping(alpha, temp);
-      CHECK_LOAD(res)
+      CHECK_LOAD(res, "hifi_damping")
       Cxq = temp[0];
       Cyr = temp[1];
       Cyp = temp[2];
@@ -241,7 +221,7 @@ int frmodel_step(
       Cnp = temp[8];
 
       res = hifi_C_lef(alpha, beta, temp);
-      CHECK_LOAD(res)
+      CHECK_LOAD(res, "hifi_C_lef")
       delta_Cx_lef = temp[0];
       delta_Cz_lef = temp[1];
       delta_Cm_lef = temp[2];
@@ -250,7 +230,7 @@ int frmodel_step(
       delta_Cl_lef = temp[5];
 
       res = hifi_damping_lef(alpha, temp);
-      CHECK_LOAD(res)
+      CHECK_LOAD(res, "hifi_damping_lef")
       delta_Cxq_lef = temp[0];
       delta_Cyr_lef = temp[1];
       delta_Cyp_lef = temp[2];
@@ -262,13 +242,13 @@ int frmodel_step(
       delta_Cnp_lef = temp[8];
 
       res = hifi_rudder(alpha, beta, temp);
-      CHECK_LOAD(res)
+      CHECK_LOAD(res, "hifi_rudder")
       delta_Cy_r30 = temp[0];
       delta_Cn_r30 = temp[1];
       delta_Cl_r30 = temp[2];
 
       res = hifi_ailerons(alpha, beta, temp);
-      CHECK_LOAD(res)
+      CHECK_LOAD(res, "hifi_ailerons")
       delta_Cy_a20 = temp[0];
       delta_Cy_a20_lef = temp[1];
       delta_Cn_a20 = temp[2];
@@ -277,7 +257,7 @@ int frmodel_step(
       delta_Cl_a20_lef = temp[5];
 
       res = hifi_other_coeffs(alpha, el, temp);
-      CHECK_LOAD(res)
+      CHECK_LOAD(res, "hifi_other_coeffs")
       delta_Cnbeta = temp[0];
       delta_Clbeta = temp[1];
       delta_Cm = temp[2];
@@ -422,8 +402,7 @@ int frmodel_step(
 
 #pragma endregion
 
-   sprintf(msg, "f16 coeff Cl=%f, Cm=%f, Cn=%f, Cx=%f, Cy=%f, Cz=%f", Cl_tot, Cm_tot, Cn_tot, Cx_tot, Cy_tot, Cz_tot);
-   frplugin_log(msg, TRACE);
+   debug("f16 coeff:\nCl=%f, Cm=%f, Cn=%f,\nCx=%f, Cy=%f, Cz=%f", Cl_tot, Cm_tot, Cn_tot, Cx_tot, Cy_tot, Cz_tot);
 
    c->c_l = Cl_tot;
    c->c_m = Cm_tot;
@@ -434,8 +413,7 @@ int frmodel_step(
 
    free(temp);
 
-   sprintf(msg, "f16 step finished");
-   frplugin_log(msg, TRACE);
+   trace("f16 step finished");
 
    return 0;
 };

@@ -15,7 +15,10 @@ typedef struct
     double *data;     /* data */
 } Tensor;
 
+// Creation of a tensor
 Tensor *create_tensor(int n_dimension, int *n_points);
+
+// Free tensor
 void free_tensor(Tensor *tensor);
 
 /**
@@ -48,10 +51,19 @@ int fix(double in);
 // sign function
 int sign(double in);
 
-// Function for mach and qbar
-void atmos(double alt, double vt, double *coeff);
+// log trace
+void trace(const char *format, ...);
 
-// Calculate accelerations from states and state derivatives.
-void accels(const State *state, const State *xdot, double *y);
+// log debug
+void debug(const char *format, ...);
+
+// log info
+void info(const char *format, ...);
+
+// log warn
+void warn(const char *format, ...);
+
+// log error
+void error_(const char *format, ...);
 
 #endif // UTILS_H

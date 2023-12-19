@@ -1,10 +1,10 @@
 use crate::parts::basic::{clamp, Integrator};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Actuator {
     integrator: Integrator,
     feedback: f64,
-    command_saturation: f64,
+    command_saturation_top: f64,
     command_saturation_bottom: f64,
     rate_saturation: f64,
     gain: f64,
@@ -14,16 +14,15 @@ pub struct Actuator {
 impl Actuator {
     pub fn new(
         init: f64,
-        command_saturation: f64,
-        command_saturation_bottom: Option<f64>,
+        command_saturation_top: f64,
+        command_saturation_bottom: f64,
         rate_saturation: f64,
         gain: f64,
     ) -> Self {
-        let command_saturation_bottom = command_saturation_bottom.unwrap_or(-command_saturation);
         Self {
             integrator: Integrator::new(init),
             feedback: 0.0,
-            command_saturation,
+            command_saturation_top,
             command_saturation_bottom,
             rate_saturation,
             gain,
@@ -35,7 +34,7 @@ impl Actuator {
         self.last = value;
         let r_1 = clamp(
             value,
-            self.command_saturation,
+            self.command_saturation_top,
             self.command_saturation_bottom,
         );
         let r_2 = r_1 - self.feedback;
@@ -43,7 +42,11 @@ impl Actuator {
         let r_4 = clamp(r_3, self.rate_saturation, -self.rate_saturation);
         let r_5 = self.integrator.integrate(r_4, t);
         self.feedback = r_5;
-        let r_6 = clamp(r_5, self.command_saturation, self.command_saturation_bottom);
+        let r_6 = clamp(
+            r_5,
+            self.command_saturation_top,
+            self.command_saturation_bottom,
+        );
         r_6
     }
 
@@ -71,7 +74,7 @@ mod core_parts_tests {
     #[test]
     fn test_actuator() {
         test_logger_init();
-        let mut i = Actuator::new(-2.2441, 25.0, None, 60.0, 20.2);
+        let mut i = Actuator::new(-2.2441, 25.0, -25.0, 60.0, 20.2);
         let start_time = SystemTime::now();
         let mut r;
         loop {

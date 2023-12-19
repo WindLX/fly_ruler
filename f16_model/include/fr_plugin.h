@@ -25,13 +25,13 @@ void frplugin_register_logger(Logger lg);
 /// @brief Hook: when plugin is installing
 /// @param argc the length of input args
 /// @param argv the data of args
-/// @return <0 represent occur some error
+/// @return <0 represent occur some err
 int frplugin_install_hook(int argc, char **argv);
 
 /// @brief Hook: when plugin is uninstalled
 /// @param argc the length of input args
 /// @param argv the data of args
-/// @return <0 represent occur some error
+/// @return <0 represent occur some err
 int frplugin_uninstall_hook(int argc, char **argv);
 
 #endif // FR_PLUGIN

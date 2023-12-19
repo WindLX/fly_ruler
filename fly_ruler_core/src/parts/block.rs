@@ -1,5 +1,5 @@
 use crate::parts::{
-    basic::{Integrator, VectorIntegrator},
+    basic::{clamp, Integrator, VectorIntegrator},
     flight::{disturbance, Atmos, Plant},
     group::Actuator,
     trim::TrimOutput,
@@ -7,7 +7,7 @@ use crate::parts::{
 use fly_ruler_plugin::Model;
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{Control, ModelInput, PlantBlockOutput, State, StateExtend},
+    plant_model::{Control, ControlLimit, ModelInput, PlantBlockOutput, State, StateExtend},
     Vector,
 };
 use log::{debug, trace};
@@ -15,19 +15,53 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-#[derive(Debug, Clone)]
 pub(crate) struct ControllerBlock {
     actuators: Vec<Actuator>,
     deflection: Vec<f64>,
 }
 
 impl ControllerBlock {
-    pub fn new(control_init: impl Into<Control>, deflection: &[f64]) -> Self {
+    pub fn new(
+        control_init: impl Into<Control>,
+        deflection: &[f64; 3],
+        control_limit: ControlLimit,
+    ) -> Self {
         let control_init: Control = control_init.into();
-        let thrust_ac = Actuator::new(control_init.thrust, 19000.0, Some(1000.0), 10000.0, 1.0);
-        let elevator_ac = Actuator::new(control_init.elevator, 25.0, None, 60.0, 20.2);
-        let aileron_ac = Actuator::new(control_init.aileron, 21.5, None, 80.0, 20.2);
-        let rudder_ac = Actuator::new(control_init.rudder, 30.0, None, 120.0, 20.2);
+        trace!("ControllerBlock:\ncontrol init: \n{}", control_init);
+        trace!(
+            "deflections: ele: {:.2}, ail: {:.2}, rud: {:.2}",
+            deflection[0],
+            deflection[1],
+            deflection[2]
+        );
+        let thrust_ac = Actuator::new(
+            control_init.thrust,
+            control_limit.thrust_cmd_limit_top,
+            control_limit.thrust_cmd_limit_bottom,
+            control_limit.thrust_rate_limit,
+            1.0,
+        );
+        let elevator_ac = Actuator::new(
+            control_init.elevator,
+            control_limit.ele_cmd_limit_top,
+            control_limit.ele_cmd_limit_bottom,
+            control_limit.ele_rate_limit,
+            20.2,
+        );
+        let aileron_ac = Actuator::new(
+            control_init.aileron,
+            control_limit.ail_cmd_limit_top,
+            control_limit.ail_cmd_limit_bottom,
+            control_limit.ail_rate_limit,
+            20.2,
+        );
+        let rudder_ac = Actuator::new(
+            control_init.rudder,
+            control_limit.rud_cmd_limit_top,
+            control_limit.rud_cmd_limit_bottom,
+            control_limit.rud_rate_limit,
+            20.2,
+        );
         ControllerBlock {
             actuators: vec![thrust_ac, elevator_ac, aileron_ac, rudder_ac],
             deflection: deflection.to_vec(),
@@ -36,6 +70,11 @@ impl ControllerBlock {
 
     pub fn update(&mut self, control_input: impl Into<Control>, t: f64) -> Control {
         let mut control_input: Control = control_input.into();
+        trace!(
+            "[t:{:.2}] ControllerBlock: actual control input: \n{}",
+            t,
+            control_input
+        );
         control_input.thrust = self.actuators[0].update(control_input[0], t);
         for i in 0..4 {
             if i < 3 {
@@ -50,7 +89,11 @@ impl ControllerBlock {
                 control_input[i] = self.actuators[i].update(control_input[i], t)
             }
         }
-        debug!("\n{:?}", control_input);
+        trace!(
+            "[t:{:.2}] ControllerBlock: correctional control input: \n{}",
+            t,
+            control_input
+        );
         control_input
     }
 
@@ -67,10 +110,10 @@ impl ControllerBlock {
         for a in &mut self.actuators {
             a.reset()
         }
+        trace!("ControllerBlock reset finished")
     }
 }
 
-#[derive(Debug, Clone)]
 pub(crate) struct LeadingEdgeFlapBlock {
     lef_actuator: Actuator,
     integrator: Integrator,
@@ -79,7 +122,12 @@ pub(crate) struct LeadingEdgeFlapBlock {
 
 impl LeadingEdgeFlapBlock {
     pub fn new(alpha_init: f64, d_lef: f64) -> Self {
-        let lef_actuator = Actuator::new(d_lef, 25.0, Some(0.0), 25.0, 1.0 / 0.136);
+        trace!(
+            "LEFBlock: alpha_init: {:.2}, d_lef: {:.2}",
+            alpha_init,
+            d_lef
+        );
+        let lef_actuator = Actuator::new(d_lef, 25.0, 0.0, 25.0, 1.0 / 0.136);
         let integrator = Integrator::new(-alpha_init * 180.0 / PI);
         LeadingEdgeFlapBlock {
             lef_actuator,
@@ -89,6 +137,7 @@ impl LeadingEdgeFlapBlock {
     }
 
     pub fn update(&mut self, alpha: f64, alt: f64, vt: f64, t: f64) -> f64 {
+        trace!("[t: {t:.2}] LEFBlock: alpha: {alpha:.2}, altitude: {alt:.2}, velocity: {vt:.2}");
         let atmos = Atmos::atmos(alt, vt);
         let r_1 = atmos.qbar / atmos.ps * 9.05;
         let alpha = alpha * 180.0 / PI;
@@ -97,7 +146,9 @@ impl LeadingEdgeFlapBlock {
         let r_4 = r_3 + 2.0 * alpha;
         self.feedback = r_4;
         let r_5 = r_4 * 1.38;
-        self.lef_actuator.update(1.45 + r_5 - r_1, t)
+        let r = self.lef_actuator.update(1.45 + r_5 - r_1, t);
+        trace!("[t: {t:.2}] LEFBlock: lef: {r:.4}");
+        r
     }
 
     pub fn past(&self) -> f64 {
@@ -108,6 +159,7 @@ impl LeadingEdgeFlapBlock {
         self.lef_actuator.reset();
         self.integrator.reset();
         self.feedback = 0.0;
+        trace!("LEFBlock reset finished")
     }
 }
 
@@ -117,25 +169,34 @@ pub struct PlantBlock {
     integrator: VectorIntegrator,
     plant: Plant,
     extend: Option<StateExtend>,
+    alpha_limit_top: f64,
+    alpha_limit_bottom: f64,
+    beta_limit_top: f64,
+    beta_limit_bottom: f64,
 }
 
 impl PlantBlock {
     pub async fn new(
         model: Arc<Mutex<Model>>,
         init: &TrimOutput,
-        deflection: &[f64],
+        deflection: &[f64; 3],
+        ctrl_limit: ControlLimit,
     ) -> Result<Self, FatalCoreError> {
         let flap = LeadingEdgeFlapBlock::new(init.state.alpha, init.d_lef);
-        let control = ControllerBlock::new(init.control, deflection);
+        let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
         let integrator = VectorIntegrator::new(Into::<Vector>::into(init.state));
         let plant = Plant::new(model).await?;
-
+        trace!("PlantBlock init finished");
         Ok(PlantBlock {
             control,
             flap,
             integrator,
             plant,
             extend: None,
+            alpha_limit_top: ctrl_limit.alpha_limit_top,
+            alpha_limit_bottom: ctrl_limit.alpha_limit_bottom,
+            beta_limit_top: ctrl_limit.beta_limit_top,
+            beta_limit_bottom: ctrl_limit.beta_limit_bottom,
         })
     }
 
@@ -144,20 +205,31 @@ impl PlantBlock {
         control: impl Into<Control>,
         t: f64,
     ) -> Result<PlantBlockOutput, FatalCoreError> {
-        let state = &self.integrator.past();
+        let state = &mut self.integrator.past();
         let control = self.control.update(control, t);
         let lef = self.flap.past();
-        trace!("{}", self.flap.past());
+
+        state.data[7] = clamp(
+            state[7],
+            self.alpha_limit_top.to_radians(),
+            self.alpha_limit_bottom.to_radians(),
+        );
+
+        state.data[8] = clamp(
+            state[8],
+            self.beta_limit_top.to_radians(),
+            self.beta_limit_bottom.to_radians(),
+        );
 
         let model_output = self
             .plant
             .step(&ModelInput::new(state.data.clone(), control, lef))?;
 
-        trace!("{:?}", model_output);
+        trace!("[t: {t:.2}] PlantBlock: model_output:\n{}", model_output);
 
         let state = self
             .integrator
-            .derivative_add(Vector::from(model_output.state_dot), t);
+            .derivative_add(Into::<Vector>::into(model_output.state_dot), t);
 
         let alpha = state[7];
         let alt = state[2];
@@ -170,18 +242,22 @@ impl PlantBlock {
         let extend = model_output.state_extend;
         self.extend = Some(StateExtend::from(extend));
 
-        Ok(PlantBlockOutput::new(
+        let block_output = PlantBlockOutput::new(
             State::from(state),
             Control::from(control),
             d_lef,
             self.extend.unwrap(),
-        ))
+        );
+        debug!("[t: {t:.2}] PlantBlock: block_output:\n{}", block_output);
+
+        Ok(block_output)
     }
 
     pub fn reset(&mut self) {
         self.flap.reset();
         self.control.reset();
         self.integrator.reset();
+        trace!("PlantBlock reset finished")
     }
 
     pub fn state(&self) -> Result<PlantBlockOutput, FatalCoreError> {
@@ -210,12 +286,32 @@ mod core_parts_tests {
     use csv::Writer;
     use fly_ruler_plugin::{IsPlugin, Model};
     use fly_ruler_utils::logger::test_logger_init;
+    use fly_ruler_utils::plant_model::ControlLimit;
     use log::{debug, trace};
     use std::fs::File;
     use std::path::Path;
     use std::sync::Arc;
     use std::time::{Duration, Instant, SystemTime};
     use tokio::sync::Mutex;
+
+    const CL: ControlLimit = ControlLimit {
+        thrust_cmd_limit_top: 19000.0,
+        thrust_cmd_limit_bottom: 1000.0,
+        thrust_rate_limit: 10000.0,
+        ele_cmd_limit_top: 25.0,
+        ele_cmd_limit_bottom: -25.0,
+        ele_rate_limit: 60.0,
+        ail_cmd_limit_top: 21.5,
+        ail_cmd_limit_bottom: -21.5,
+        ail_rate_limit: 80.0,
+        rud_cmd_limit_top: 30.0,
+        rud_cmd_limit_bottom: -30.0,
+        rud_rate_limit: 120.0,
+        alpha_limit_top: 45.0,
+        alpha_limit_bottom: -20.0,
+        beta_limit_top: 30.0,
+        beta_limit_bottom: -30.0,
+    };
 
     fn test_core_init() -> (Arc<Mutex<Model>>, TrimOutput) {
         test_logger_init();
@@ -233,7 +329,6 @@ mod core_parts_tests {
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
-        let fi_flag = true;
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
             max_iter: 10000,
@@ -243,15 +338,7 @@ mod core_parts_tests {
 
         (
             model.clone(),
-            trim(
-                trim_target,
-                trim_init,
-                fi_flag,
-                plant.clone(),
-                None,
-                nm_options,
-            )
-            .unwrap(),
+            trim(plant.clone(), trim_target, trim_init, CL, None, nm_options).unwrap(),
         )
     }
 
@@ -277,7 +364,8 @@ mod core_parts_tests {
             .unwrap();
 
         let control_init = result.control;
-        let mut control = ControllerBlock::new(control_init, &[0.0, 0.0, 0.0]);
+
+        let mut control = ControllerBlock::new(control_init, &[0.0, 0.0, 0.0], CL);
 
         loop {
             let current_time = SystemTime::now();
@@ -366,7 +454,7 @@ mod core_parts_tests {
         // set_time_scale(5.0).unwrap();
 
         let control: [f64; 4] = result.control.into();
-        let f16_block = PlantBlock::new(model.clone(), &result, &[0.0, 0.0, 0.0]);
+        let f16_block = PlantBlock::new(model.clone(), &result, &[0.0, 0.0, 0.0], CL);
         let mut f16_block = tokio_test::block_on(f16_block).unwrap();
 
         let path = Path::new("output.csv");

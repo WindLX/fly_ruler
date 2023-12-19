@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include "mexndinterp.h"
-#include "fr_plugin.h"
 #include "fr_model.h"
 #include "utils.h"
 #include "hifi_F16_AeroData.h"
@@ -32,14 +31,15 @@
 	free(axis);                                                \
 	return r
 
-#define CHECK_NAN(len)            \
-	for (int i = 0; i < len; i++) \
-	{                             \
-		if (isnan(retVal[i]))     \
-		{                         \
-			return -1;            \
-		}                         \
-	}                             \
+#define CHECK_NAN(len)                                    \
+	for (int i = 0; i < len; i++)                         \
+	{                                                     \
+		if (isnan(retVal[i]))                             \
+		{                                                 \
+			trace("check NAN fail at: (%d, %d)", len, i); \
+			return -1;                                    \
+		}                                                 \
+	}                                                     \
 	return 0
 
 static Tensor **hifiData;
@@ -115,12 +115,11 @@ static double *load_axis_data(char *fileName, int len)
 	FILE *fp = fopen(filePath, "r");
 	int r = 0;
 	double buffer;
-	char errorMsg[50];
 
 	if (fp == NULL)
 	{
-		sprintf(errorMsg, "can't find file %s", filePath);
-		frplugin_log(errorMsg, ERROR);
+		error_("can't find file %s", filePath);
+		trace("file_len: %d", len);
 		return NULL;
 	}
 
@@ -133,15 +132,13 @@ static double *load_axis_data(char *fileName, int len)
 		{
 			fclose(fp);
 			free(data);
-			sprintf(errorMsg, "file %s read failed", fileName);
-			frplugin_log(errorMsg, ERROR);
+			error_("file %s read failed", fileName);
 			return NULL;
 		}
 		data[i] = buffer;
 	}
 	fclose(fp);
-	sprintf(errorMsg, "load %s successfully", filePath);
-	frplugin_log(errorMsg, INFO);
+	info("load %s successfully", filePath);
 	return data;
 }
 
@@ -164,7 +161,6 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 	int r = 0;
 	double buffer = 0.0;
 	char filePath[100];
-	char errorMsg[100];
 	int fileSize = 0;
 	int *n_points = (int *)malloc(n_dimension * sizeof(int));
 
@@ -185,8 +181,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 		else
 		{
 			free(n_points);
-			sprintf(errorMsg, "invalid dataNameIndex");
-			frplugin_log(errorMsg, ERROR);
+			error_("invalid dataNameIndex: %d", dataNameIndex);
 			return NULL;
 		}
 		fileSize = n_points[0];
@@ -209,8 +204,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 				else
 				{
 					free(n_points);
-					sprintf(errorMsg, "invalid dataNameIndex");
-					frplugin_log(errorMsg, ERROR);
+					error_("invalid dataNameIndex: %d", dataNameIndex);
 					return NULL;
 				}
 				fileSize *= n_points[2];
@@ -234,8 +228,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 	if (fp == (FILE *)NULL)
 	{
 		free_tensor(tensor);
-		sprintf(errorMsg, "can't find file %s", filePath);
-		frplugin_log(errorMsg, ERROR);
+		error_("can't find file %s", filePath);
 		return NULL;
 	}
 
@@ -246,23 +239,20 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 		{
 			fclose(fp);
 			free_tensor(tensor);
-			sprintf(errorMsg, "file %s read failed", filePath);
-			frplugin_log(errorMsg, ERROR);
+			error_("file %s read failed", filePath);
 			return NULL;
 		}
 		tensor->data[i] = buffer;
 	}
 	fclose(fp);
 
-	sprintf(errorMsg, "load %s successfully", filePath);
-	frplugin_log(errorMsg, INFO);
+	info("load %s successfully", filePath);
 
 	return tensor;
 }
 
 static double **get_axis_data(AxisDataIndex axisIndex)
 {
-	char errorMsg[100];
 	double **axis;
 	switch (axisIndex)
 	{
@@ -309,7 +299,6 @@ static double **get_axis_data(AxisDataIndex axisIndex)
 
 int init_hifi_data()
 {
-	char errorMsg[100];
 	hifiData = (Tensor **)malloc(sizeof(Tensor *) * DATA_LEN);
 	hifiData[0] = load_aerodynamic_data("CL0120_ALPHA1_BETA1_DH2_601.dat", 3, 0b001);
 	hifiData[1] = load_aerodynamic_data("CL0620_ALPHA1_BETA1_604.dat", 2, 0b000);

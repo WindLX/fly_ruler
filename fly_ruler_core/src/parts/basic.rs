@@ -1,6 +1,6 @@
 use fly_ruler_utils::Vector;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Integrator {
     init: f64,
     last_time: f64,
@@ -36,7 +36,7 @@ impl Integrator {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VectorIntegrator {
     init: Vector,
     last_time: f64,
@@ -83,7 +83,7 @@ impl VectorIntegrator {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Differentiator {
     last_value: f64,
     last_time: f64,
@@ -107,9 +107,9 @@ impl Differentiator {
 
 pub fn clamp(x: f64, top: f64, bottom: f64) -> f64 {
     if x > top {
-        x
+        top
     } else if x < bottom {
-        x
+        bottom
     } else {
         x
     }

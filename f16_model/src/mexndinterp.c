@@ -3,7 +3,7 @@
 #include <memory.h>
 #include <math.h>
 #include "mexndinterp.h"
-#include "fr_plugin.h"
+#include "utils.h"
 
 /**
  * 找到目标点被围成的超立方体网格的顶点索引
@@ -37,7 +37,7 @@ static int **get_hyper_cube(double **axisData, double *targetData, TensorInfo in
 		if (x < xmin || x > xmax)
 		{
 			free_imatrix(indexMatrix, info.n_dimension, 2);
-			frplugin_log("Point lies out data grid (in get_hyper_cube)", ERROR);
+			error_("Point lies out data grid where x is: %.2lf and bound is [%.2lf, %.2f]", x, xmin, xmax);
 			return NULL;
 		}
 		else
@@ -148,6 +148,8 @@ double interpn(double **axisData, Tensor *data, double *targetData)
 	indexMatrix = get_hyper_cube(axisData, targetData, *(data->info));
 	if (indexMatrix == NULL)
 	{
+		error_("get_hyper_cube failed, tensor info:\n\tn_dimension: %d, first_n_points: %d",
+			   data->info->n_dimension, data->info->n_points[0]);
 		free(indexVector);
 		free_dmatrix(xPoint, n_dimension, 2);
 		return NAN;

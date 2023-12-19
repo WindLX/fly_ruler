@@ -10,11 +10,55 @@ use crate::{
 use fly_ruler_plugin::Model;
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{Control, FlightCondition, PlantBlockOutput},
+    plant_model::{Control, ControlLimit, FlightCondition, PlantBlockOutput},
     state_channel, StateReceiver, StateSender,
 };
+use log::{debug, info};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct CoreInitData {
+    pub sample_time: Option<u64>,
+    pub time_scale: Option<f64>,
+    pub ctrl_limit: ControlLimit,
+    pub deflection: [f64; 3],
+    pub trim_target: TrimTarget,
+    pub trim_init: Option<TrimInit>,
+    pub flight_condition: Option<FlightCondition>,
+    pub optim_options: Option<NelderMeadOptions>,
+}
+
+impl std::fmt::Display for CoreInitData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "sample_time: {}",
+            self.sample_time
+                .map_or_else(|| "-1".to_string(), |s| format!("{s}"))
+        )?;
+        writeln!(f, "time_scale: {:.1}", self.time_scale.unwrap_or(1.0))?;
+        writeln!(f, "control_limit:\n{}", self.ctrl_limit)?;
+        writeln!(
+            f,
+            "deflections: ele: {:.2}, ail: {:.2}, rud: {:.2}",
+            self.deflection[0], self.deflection[1], self.deflection[2]
+        )?;
+        writeln!(f, "trim_target: \n{}", self.trim_target)?;
+        writeln!(f, "trim_init: \n{}", self.trim_init.unwrap_or_default())?;
+        writeln!(
+            f,
+            "flight_condition: {}",
+            self.flight_condition.unwrap_or_default()
+        )?;
+        writeln!(
+            f,
+            "optim_options: \n{}",
+            self.optim_options.unwrap_or_default()
+        )
+    }
+}
 
 pub struct Core {
     clocks: Vec<Arc<Mutex<Clock>>>,
@@ -37,29 +81,31 @@ impl Core {
     /// add a new plant
     pub async fn push_plant(
         &mut self,
-        sample_time: Option<Duration>,
-        time_scale: Option<f64>,
         model: Arc<Mutex<Model>>,
-        deflection: &[f64],
-        trim_target: TrimTarget,
-        trim_init: Option<TrimInit>,
-        fi_flag: bool,
-        flight_condition: Option<FlightCondition>,
-        optim_options: Option<NelderMeadOptions>,
+        core_init: CoreInitData,
     ) -> Result<Result<StateReceiver, CoreError>, FatalCoreError> {
         let plant = Arc::new(std::sync::Mutex::new(Plant::new(model.clone()).await?));
         let trim_output = trim(
-            trim_target,
-            trim_init,
-            fi_flag,
             plant,
-            flight_condition,
-            optim_options,
+            core_init.trim_target,
+            core_init.trim_init,
+            core_init.ctrl_limit,
+            core_init.flight_condition,
+            core_init.optim_options,
         )?;
         let plant_block = Arc::new(Mutex::new(
-            PlantBlock::new(model, &trim_output, deflection).await?,
+            PlantBlock::new(
+                model,
+                &trim_output,
+                &core_init.deflection,
+                core_init.ctrl_limit,
+            )
+            .await?,
         ));
-        let clock = Arc::new(Mutex::new(Clock::new(sample_time, time_scale)));
+        let clock = Arc::new(Mutex::new(Clock::new(
+            core_init.sample_time.map(Duration::from_millis),
+            core_init.time_scale,
+        )));
         self.clocks.push(clock);
         self.plants.push(plant_block);
         let (tx, rx) = state_channel(10);
@@ -113,6 +159,7 @@ impl Core {
         for c in &self.clocks {
             c.lock().await.start();
         }
+        info!("Core: core clock start");
     }
 
     /// pause the core
@@ -120,6 +167,7 @@ impl Core {
         for c in &self.clocks {
             c.lock().await.pause();
         }
+        debug!("Core: core clock pause");
     }
 
     /// resume
@@ -127,6 +175,7 @@ impl Core {
         for c in &self.clocks {
             c.lock().await.resume();
         }
+        debug!("Core: core clock resume");
     }
 
     /// reset
@@ -134,6 +183,15 @@ impl Core {
         for c in &self.clocks {
             c.lock().await.reset(time_scale, sample_time);
         }
+        let s = match sample_time {
+            Some(s) => format!("{}", s.as_millis()),
+            None => format!("-1"),
+        };
+        info!(
+            "Core: core clock reset, time_scale: {:.1}, sample_time: {}",
+            time_scale.unwrap_or(1.0),
+            s
+        )
     }
 }
 
@@ -158,10 +216,28 @@ impl std::fmt::Display for CoreError {
 
 #[cfg(test)]
 mod core_tests {
+    use super::*;
     use fly_ruler_plugin::IsPlugin;
     use fly_ruler_utils::logger::test_logger_init;
 
-    use super::*;
+    const CL: ControlLimit = ControlLimit {
+        thrust_cmd_limit_top: 19000.0,
+        thrust_cmd_limit_bottom: 1000.0,
+        thrust_rate_limit: 10000.0,
+        ele_cmd_limit_top: 25.0,
+        ele_cmd_limit_bottom: -25.0,
+        ele_rate_limit: 60.0,
+        ail_cmd_limit_top: 21.5,
+        ail_cmd_limit_bottom: -21.5,
+        ail_rate_limit: 80.0,
+        rud_cmd_limit_top: 30.0,
+        rud_cmd_limit_bottom: -30.0,
+        rud_rate_limit: 120.0,
+        alpha_limit_top: 45.0,
+        alpha_limit_bottom: -20.0,
+        beta_limit_top: 30.0,
+        beta_limit_bottom: -30.0,
+    };
 
     #[tokio::test]
     async fn test_core() {
@@ -177,7 +253,6 @@ mod core_tests {
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
-        let fi_flag = true;
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
             max_iter: 10000,
@@ -185,34 +260,20 @@ mod core_tests {
             tol_x: 1e-6,
         });
 
-        let mut core = Core::new();
-        let _ = core
-            .push_plant(
-                Some(Duration::from_millis(100)),
-                None,
-                model.clone(),
-                &[0.0, 0.0, 0.0],
-                trim_target,
-                trim_init,
-                fi_flag,
-                None,
-                nm_options.clone(),
-            )
-            .await;
+        let core_init = CoreInitData {
+            sample_time: Some(100),
+            time_scale: None,
+            ctrl_limit: CL,
+            deflection: [0.0, 0.0, 0.0],
+            trim_init,
+            trim_target,
+            flight_condition: None,
+            optim_options: nm_options,
+        };
 
-        let _ = core
-            .push_plant(
-                Some(Duration::from_millis(100)),
-                None,
-                model.clone(),
-                &[0.0, 0.0, 0.0],
-                trim_target,
-                trim_init,
-                fi_flag,
-                None,
-                nm_options,
-            )
-            .await;
+        let mut core = Core::new();
+        let _ = core.push_plant(model.clone(), core_init).await;
+        let _ = core.push_plant(model.clone(), core_init).await;
 
         let controllers = vec![Control::default(), Control::default()];
         for _i in 0..10 {

@@ -7,17 +7,24 @@ use crate::{
 };
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{Control, FlightCondition, ModelInput, State, StateExtend},
+    plant_model::{Control, ControlLimit, FlightCondition, ModelInput, State, StateExtend},
     Vector,
 };
-use log::trace;
+use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 /// alpha is radians
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct TrimInit {
     pub control: Control,
     pub alpha: f64,
+}
+
+impl std::fmt::Display for TrimInit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "alpha:  {:.2}", self.alpha)?;
+        writeln!(f, "control:\n{}", self.control)
+    }
 }
 
 /// alpha has been convert to radians
@@ -40,10 +47,20 @@ impl Default for TrimInit {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct TrimTarget {
     pub altitude: f64,
     pub velocity: f64,
+}
+
+impl std::fmt::Display for TrimTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "altitude: {:.2}, velocity: {:.2}",
+            self.altitude, self.velocity
+        )
+    }
 }
 
 impl TrimTarget {
@@ -59,6 +76,16 @@ pub struct TrimOutput {
     pub state_extend: StateExtend,
     pub d_lef: f64,
     pub nelder_mead_result: NelderMeadResult,
+}
+
+impl std::fmt::Display for TrimOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "state:  \n{}", self.state)?;
+        writeln!(f, "control:\n{}", self.control)?;
+        writeln!(f, "d_lef:  {}", self.d_lef)?;
+        writeln!(f, "extend: \n{}", self.state_extend)?;
+        writeln!(f, "nelder_mead_result: \n{}", self.nelder_mead_result)
+    }
 }
 
 impl TrimOutput {
@@ -82,10 +109,10 @@ impl TrimOutput {
 /// Trim aircraft to desired altitude and velocity
 /// fi_flag: true means hifi model
 pub fn trim(
+    plant: Arc<std::sync::Mutex<Plant>>,
     trim_target: TrimTarget,
     trim_init: Option<TrimInit>,
-    fi_flag: bool,
-    plant: Arc<std::sync::Mutex<Plant>>,
+    ctrl_limit: ControlLimit,
     flight_condition: Option<FlightCondition>,
     optim_options: Option<NelderMeadOptions>,
 ) -> Result<TrimOutput, FatalCoreError> {
@@ -129,7 +156,7 @@ pub fn trim(
     let output_ = output.clone();
 
     let trim_func = move |x: &Vector| -> Result<f64, FatalCoreError> {
-        trim_func(x, plant.clone(), fi_flag, output_.clone(), &globals)
+        trim_func(x, plant.clone(), ctrl_limit, output_.clone(), &globals)
     };
 
     let res = nelder_mead(Box::new(trim_func), Vector::from(x_0), optim_options)?;
@@ -148,7 +175,7 @@ pub fn trim(
 fn trim_func(
     x: &Vector,
     plant: Arc<std::sync::Mutex<Plant>>,
-    fi_flag: bool,
+    ctrl_limit: ControlLimit,
     output_vec: Rc<RefCell<Vec<f64>>>,
     globals: &Vec<f64>,
 ) -> Result<f64, FatalCoreError> {
@@ -162,34 +189,44 @@ fn trim_func(
 
     // Implementing limits:
     // Thrust limits
-    let thrust = clamp(x[0], 19000.0, 1000.0);
+    let thrust = clamp(
+        x[0],
+        ctrl_limit.thrust_cmd_limit_top,
+        ctrl_limit.thrust_cmd_limit_bottom,
+    );
 
     // Elevator limits
-    let elevator = clamp(x[1], 25.0, -25.0);
+    let elevator = clamp(
+        x[1],
+        ctrl_limit.ele_cmd_limit_top,
+        ctrl_limit.ele_cmd_limit_bottom,
+    );
 
     // Aileron limits
-    let alileron = clamp(x[2], 21.5, -21.5);
+    let alileron = clamp(
+        x[2],
+        ctrl_limit.ail_cmd_limit_top,
+        ctrl_limit.ail_cmd_limit_bottom,
+    );
 
     // Rudder limits
-    let rudder = clamp(x[3], 30.0, -30.0);
+    let rudder = clamp(
+        x[3],
+        ctrl_limit.rud_cmd_limit_top,
+        ctrl_limit.rud_cmd_limit_bottom,
+    );
 
     // Angle of Attack limits
-    let alpha = if fi_flag {
-        // hifi
-        clamp(x[4], 45.0_f64.to_radians(), -20.0_f64.to_radians())
-    } else {
-        // lofi
-        clamp(x[4], 90.0_f64.to_radians(), -10.0_f64.to_radians())
-    };
+    let alpha = clamp(
+        x[4],
+        ctrl_limit.alpha_limit_top.to_radians(),
+        ctrl_limit.ail_cmd_limit_bottom.to_radians(),
+    );
 
-    let mut lef = 0.0;
-
-    if fi_flag {
-        // Calculating qbar, ps and steady state leading edge flap deflection:
-        // (see pg. 43 NASA report)
-        let (_mach, qbar, ps) = Atmos::atmos(altitude, velocity).into();
-        lef = 1.38 * alpha.to_degrees() - 9.05 * qbar / ps + 1.45;
-    }
+    // Calculating qbar, ps and steady state leading edge flap deflection:
+    // (see pg. 43 NASA report)
+    let (_mach, qbar, ps) = Atmos::atmos(altitude, velocity).into();
+    let mut lef = 1.38 * alpha.to_degrees() - 9.05 * qbar / ps + 1.45;
 
     // Verify that the calculated leading edge flap have not been violated.
     lef = clamp(lef, 25.0, 0.0);
@@ -234,11 +271,10 @@ fn trim_func(
         .step(&ModelInput::new(state, control, lef))?;
 
     let state_dot = Vector::from(Into::<Vec<f64>>::into(output.state_dot));
-    trace!("{:?}", &state_dot);
     let cost = weight.dot(&(state_dot.clone() * state_dot));
 
     let mut state_out = state.to_vec();
-    let state_extend = output.state_extend;
+    let state_extend = Into::<Vec<f64>>::into(output.state_extend);
     state_out.extend_from_slice(&state_extend);
     state_out.push(lef);
     *output_vec.borrow_mut() = state_out;
@@ -256,10 +292,29 @@ mod core_trim_tests {
         },
     };
     use fly_ruler_plugin::{IsPlugin, Model};
-    use fly_ruler_utils::logger::test_logger_init;
-    use log::{debug, trace};
+    use fly_ruler_utils::{logger::test_logger_init, plant_model::ControlLimit};
+    use log::debug;
     use std::sync::Arc;
     use tokio::sync::Mutex;
+
+    const CL: ControlLimit = ControlLimit {
+        thrust_cmd_limit_top: 19000.0,
+        thrust_cmd_limit_bottom: 1000.0,
+        thrust_rate_limit: 10000.0,
+        ele_cmd_limit_top: 25.0,
+        ele_cmd_limit_bottom: -25.0,
+        ele_rate_limit: 60.0,
+        ail_cmd_limit_top: 21.5,
+        ail_cmd_limit_bottom: -21.5,
+        ail_rate_limit: 80.0,
+        rud_cmd_limit_top: 30.0,
+        rud_cmd_limit_bottom: -30.0,
+        rud_rate_limit: 120.0,
+        alpha_limit_top: 45.0,
+        alpha_limit_bottom: -20.0,
+        beta_limit_top: 30.0,
+        beta_limit_bottom: -30.0,
+    };
 
     #[test]
     fn test_trim() {
@@ -278,7 +333,6 @@ mod core_trim_tests {
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
-        let fi_flag = true;
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
             max_iter: 10000,
@@ -286,20 +340,11 @@ mod core_trim_tests {
             tol_x: 1e-6,
         });
 
-        let result = trim(
-            trim_target,
-            trim_init,
-            fi_flag,
-            plant.clone(),
-            None,
-            nm_options,
-        )
-        .unwrap();
+        let result = trim(plant.clone(), trim_target, trim_init, CL, None, nm_options).unwrap();
 
         let nm_result = result.nelder_mead_result;
         debug!("{:#?} {:#?}", nm_result.x, nm_result.fval);
         debug!("{:#?} {:#?}", nm_result.iter, nm_result.fun_evals);
-        trace!("{}", nm_result.output.join("\n"));
 
         let model = Arc::into_inner(model).unwrap();
         let res = tokio_test::block_on(model.lock())

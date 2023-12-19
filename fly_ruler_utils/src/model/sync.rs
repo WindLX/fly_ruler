@@ -4,11 +4,13 @@ use tokio::sync::{mpsc, watch, Mutex};
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    Control(Control),
+    Control(Control, isize),
     Extra(String),
     Exit,
 }
 
+/// Create a state channel
+/// this method is a wrapper of mpsc which means multi-producer, single-consumer
 pub fn state_channel(buffer: usize) -> (StateSender, StateReceiver) {
     let (sender, receiver) = mpsc::channel(buffer);
     let sender = StateSender::new(Arc::new(Mutex::new(sender)));
@@ -16,46 +18,65 @@ pub fn state_channel(buffer: usize) -> (StateSender, StateReceiver) {
     (sender, receiver)
 }
 
-#[derive(Debug, Clone)]
+/// The sender end of state channel, which advised to be owned by plant model
+#[derive(Clone)]
 pub struct StateSender(Arc<Mutex<mpsc::Sender<State>>>);
 
 impl StateSender {
-    pub fn new(r: Arc<Mutex<mpsc::Sender<State>>>) -> Self {
+    pub(crate) fn new(r: Arc<Mutex<mpsc::Sender<State>>>) -> Self {
         Self(r)
     }
 
+    /// send plant state data to channel, waiting until there is capacity
     pub async fn send(&mut self, state: State) {
         let guard = self.0.lock().await;
         guard.send(state).await.unwrap();
     }
 }
 
-#[derive(Debug, Clone)]
+/// The receiver end of state channel, which advised to be owned by controller or viewer
+#[derive(Clone)]
 pub struct StateReceiver(Arc<Mutex<mpsc::Receiver<State>>>);
 
 impl StateReceiver {
-    pub fn new(r: Arc<Mutex<mpsc::Receiver<State>>>) -> Self {
+    pub(crate) fn new(r: Arc<Mutex<mpsc::Receiver<State>>>) -> Self {
         Self(r)
     }
 
-    pub async fn receive(&mut self) -> State {
+    /// Receives the next value for this receiver.
+    /// This method returns `None`` if the channel has been closed
+    /// and there are no remaining messages in the channel's buffer.
+    /// This indicates that no further values can ever be received from this Receiver.
+    /// The channel is closed when all senders have been dropped.
+    /// If there are no messages in the channel's buffer, but the channel has not yet been closed,
+    /// this method will sleep until a message is sent or the channel is closed.
+    pub async fn receive(&mut self) -> Option<State> {
         let mut guard = self.0.lock().await;
-        loop {
-            if let Some(res) = guard.recv().await {
-                return res;
-            }
-        }
+        guard.recv().await
+    }
+
+    /// Tries to receive the next value for this receiver.
+    /// This method returns the [Empty] error if the channel is currently empty,
+    /// but there are still outstanding [senders] or [permits].
+    /// This method returns the [Disconnected] error if the channel is currently empty,
+    /// and there are no outstanding [senders] or [permits].
+    pub async fn try_receive(&mut self) -> Option<State> {
+        let mut guard = self.0.lock().await;
+        guard.try_recv().ok()
     }
 }
 
+/// Create a command channel
+/// A single-producer, multi-consumer channel that only retains the last sent value.
 pub fn command_channel(init: Control) -> (CommandSender, CommandReceiver) {
-    let (sender, receiver) = watch::channel::<Command>(Command::Control(init));
+    let (sender, receiver) = watch::channel::<Command>(Command::Control(init, -1));
     let sender = CommandSender::new(Arc::new(Mutex::new(sender)));
     let receiver = CommandReceiver::new(Arc::new(Mutex::new(receiver)));
     (sender, receiver)
 }
 
-#[derive(Debug, Clone)]
+/// The sender end of command
+#[derive(Clone)]
 pub struct CommandSender(Arc<Mutex<watch::Sender<Command>>>);
 
 impl CommandSender {
@@ -63,13 +84,15 @@ impl CommandSender {
         Self(r)
     }
 
-    pub async fn send(&mut self, command: Command) {
+    /// send data to channel and return None when channel is closed
+    pub async fn send(&mut self, command: Command) -> Option<()> {
         let guard = self.0.lock().await;
-        guard.send(command).unwrap();
+        guard.send(command).ok()
     }
 }
 
-#[derive(Debug, Clone)]
+/// The receiver end of command channel
+#[derive(Clone)]
 pub struct CommandReceiver(Arc<Mutex<watch::Receiver<Command>>>);
 
 impl CommandReceiver {
@@ -77,6 +100,8 @@ impl CommandReceiver {
         Self(r)
     }
 
+    /// Receive data, this method will block the thread until changed,
+    /// if channel is closed, will return Exit Command
     pub async fn receive(&mut self) -> Command {
         let mut guard = self.0.lock().await;
         match guard.changed().await {
@@ -85,12 +110,23 @@ impl CommandReceiver {
         }
     }
 
+    /// Try to receive command, if data is not update will get recent command
+    /// Notice that attack command will be reset whether command update
     pub async fn try_receive(&mut self) -> Command {
         let mut guard = self.0.lock().await;
-        if guard.has_changed().unwrap() {
-            guard.borrow_and_update().clone()
-        } else {
-            Command::Control(Control::default())
+        match guard.has_changed() {
+            Ok(b) => {
+                if b {
+                    guard.borrow_and_update().clone()
+                } else {
+                    let mut last = guard.borrow().clone();
+                    if let Command::Control(c, _t) = last {
+                        last = Command::Control(c, -1)
+                    }
+                    last
+                }
+            }
+            Err(_) => Command::Exit,
         }
     }
 }

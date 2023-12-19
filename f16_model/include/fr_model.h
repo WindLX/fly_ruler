@@ -54,7 +54,7 @@ typedef struct
 
 /// @brief load constants of this plant
 /// @param constants
-/// @return <0 represent occur some error
+/// @return <0 represent occur some err
 int frmodel_load_constants(
     PlantConstants *constants);
 
@@ -63,7 +63,7 @@ int frmodel_load_constants(
 /// @param control  the control vector
 /// @param d_lef    the delta of leading edge flap
 /// @param c        the air data under this condition
-/// @return <0 represent occur some error
+/// @return <0 represent occur some err
 int frmodel_step(
     const State *state,
     const Control *control,

@@ -6,6 +6,7 @@ use std::ffi::CStr;
 pub type FrPluginHook = unsafe extern "C" fn(argc: c_int, argv: *const *const c_char) -> c_int;
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub enum LogLevel {
     TRACE,
     DEBUG,
@@ -31,6 +32,7 @@ pub type Logger = unsafe extern "C" fn(msg: *const c_char, level: LogLevel);
 pub type FrPluginLogRegister = unsafe extern "C" fn(lg: Logger);
 
 pub unsafe extern "C" fn logger_callback(msg: *const c_char, level: LogLevel) {
-    let msg = CStr::from_ptr(msg).to_str().unwrap();
-    logger::log_output(Level::from(level), msg)
+    let msg = CStr::from_ptr(msg);
+    let msg = String::from_utf8_lossy(msg.to_bytes()).to_string();
+    logger::log_output(Level::from(level), &msg)
 }
