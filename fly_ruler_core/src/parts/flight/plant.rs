@@ -1,21 +1,23 @@
 use super::basic::{AirAngles, AngleRates, Atmos, Orientation, Vector3, G};
 use fly_ruler_plugin::{
-    IsPlugin, {step_handler_constructor, Model, ModelStepFn, PlantConstants, C},
+    IsPlugin, {step_handler_constructor, AerodynamicModel, AerodynamicModelStepFn},
 };
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{ModelInput, ModelOutput, State, StateExtend},
+    plant_model::{
+        MechanicalModelInput, MechanicalModelOutput, PlantConstants, State, StateExtend, C,
+    },
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub struct Plant {
+pub struct MechanicalModel {
     constants: PlantConstants,
-    model_func: Box<ModelStepFn>,
+    model_func: Box<AerodynamicModelStepFn>,
 }
 
-impl Plant {
-    pub async fn new(model: Arc<Mutex<Model>>) -> Result<Self, FatalCoreError> {
+impl MechanicalModel {
+    pub async fn new(model: Arc<Mutex<AerodynamicModel>>) -> Result<Self, FatalCoreError> {
         let model = model.lock().await;
         let constants = model
             .load_constants()
@@ -30,7 +32,10 @@ impl Plant {
         })
     }
 
-    pub fn step(&self, model_input: &ModelInput) -> Result<ModelOutput, FatalCoreError> {
+    pub fn step(
+        &self,
+        model_input: &MechanicalModelInput,
+    ) -> Result<MechanicalModelOutput, FatalCoreError> {
         let state = &model_input.state;
         let control = &model_input.control;
 
@@ -78,11 +83,11 @@ impl Plant {
         ]);
         let state_extend = StateExtend::from([n.x, n.y, n.z, mach, qbar, ps]);
 
-        Ok(ModelOutput::new(state_dot, state_extend))
+        Ok(MechanicalModelOutput::new(state_dot, state_extend))
     }
 }
 
-unsafe impl Send for Plant {}
+unsafe impl Send for MechanicalModel {}
 
 /// return the dot of position and directional_velocity
 fn navgation(

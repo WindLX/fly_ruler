@@ -52,22 +52,44 @@ typedef struct
     double j_x;
 } PlantConstants;
 
+typedef struct
+{
+    double thrust_cmd_limit_top;
+    double thrust_cmd_limit_bottom;
+    double thrust_rate_limit;
+    double ele_cmd_limit_top;
+    double ele_cmd_limit_bottom;
+    double ele_rate_limit;
+    double ail_cmd_limit_top;
+    double ail_cmd_limit_bottom;
+    double ail_rate_limit;
+    double rud_cmd_limit_top;
+    double rud_cmd_limit_bottom;
+    double rud_rate_limit;
+    double alpha_limit_top;
+    double alpha_limit_bottom;
+    double beta_limit_top;
+    double beta_limit_bottom;
+} ControlLimit;
+
 /// @brief load constants of this plant
 /// @param constants
-/// @return <0 represent occur some error
-int frmodel_load_constants(
-    PlantConstants *constants);
+/// @return <0 represent occur some err
+int frmodel_load_constants(PlantConstants *constants);
+
+/// @brief load ctrl_limits of this plant
+/// @param ctrl_limits
+/// @return <0 represent occur some err
+int frmodel_load_ctrl_limits(ControlLimit *ctrl_limits);
 
 /// @brief get the air data coeff of the plant
 /// @param state    the state vector of current model
 /// @param control  the control vector
 /// @param d_lef    the delta of leading edge flap
 /// @param c        the air data under this condition
-/// @return <0 represent occur some error
+/// @return <0 represent occur some err
 int frmodel_step(
-    const State *state,
-    const Control *control,
-    double d_lef,
+    const State *state, const Control *control, double d_lef,
     C *c);
 
 #endif // FR_MODEL_H

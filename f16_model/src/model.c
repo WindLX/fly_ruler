@@ -129,6 +129,28 @@ int frmodel_load_constants(PlantConstants *constants)
    return 0;
 };
 
+int frmodel_load_ctrl_limits(ControlLimit *ctrl_limits)
+{
+   ControlLimit limits = {
+       .thrust_cmd_limit_top = 19000.0,
+       .thrust_cmd_limit_bottom = 1000.0,
+       .thrust_rate_limit = 10000.0,
+       .ele_cmd_limit_top = 25.0,
+       .ele_cmd_limit_bottom = -25.0,
+       .ele_rate_limit = 60.0,
+       .ail_cmd_limit_top = 21.5,
+       .ail_cmd_limit_bottom = -21.5,
+       .ail_rate_limit = 80.0,
+       .rud_cmd_limit_top = 30.0,
+       .rud_cmd_limit_bottom = -30.0,
+       .rud_rate_limit = 120.0,
+       .alpha_limit_top = 45.0,
+       .alpha_limit_bottom = -20.0,
+       .beta_limit_top = 30.0,
+       .beta_limit_bottom = -30.0};
+   *ctrl_limits = limits;
+}
+
 int frmodel_step(
     const State *state, const Control *control, double d_lef,
     C *c)

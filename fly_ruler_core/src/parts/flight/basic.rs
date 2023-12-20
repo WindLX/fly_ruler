@@ -1,5 +1,7 @@
-use fly_ruler_plugin::{PlantConstants, C};
-use fly_ruler_utils::{plant_model::State, Vector};
+use fly_ruler_utils::{
+    plant_model::{PlantConstants, State, C},
+    Vector,
+};
 
 /// gravity ft/s^2
 pub const G: f64 = 32.17;

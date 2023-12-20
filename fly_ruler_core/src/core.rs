@@ -3,14 +3,14 @@ use crate::{
     clock::Clock,
     parts::{
         block::PlantBlock,
-        flight::Plant,
+        flight::MechanicalModel,
         trim::{trim, TrimInit, TrimTarget},
     },
 };
-use fly_ruler_plugin::Model;
+use fly_ruler_plugin::AerodynamicModel;
 use fly_ruler_utils::{
-    error::FatalCoreError,
-    plant_model::{Control, ControlLimit, FlightCondition, PlantBlockOutput},
+    error::{FatalCoreError, FrError},
+    plant_model::{Control, CoreOutput, FlightCondition},
     state_channel, StateReceiver, StateSender,
 };
 use log::{debug, info};
@@ -19,42 +19,41 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
-pub struct CoreInitData {
+pub struct CoreInitCfg {
     pub sample_time: Option<u64>,
     pub time_scale: Option<f64>,
-    pub ctrl_limit: ControlLimit,
-    pub deflection: [f64; 3],
+    pub deflection: Option<[f64; 3]>,
     pub trim_target: TrimTarget,
     pub trim_init: Option<TrimInit>,
     pub flight_condition: Option<FlightCondition>,
     pub optim_options: Option<NelderMeadOptions>,
 }
 
-impl std::fmt::Display for CoreInitData {
+impl std::fmt::Display for CoreInitCfg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let deflection = self.deflection.unwrap_or([0.0, 0.0, 0.0]);
         writeln!(
             f,
-            "sample_time: {}",
+            "Sample Time: {}",
             self.sample_time
                 .map_or_else(|| "-1".to_string(), |s| format!("{s}"))
         )?;
-        writeln!(f, "time_scale: {:.1}", self.time_scale.unwrap_or(1.0))?;
-        writeln!(f, "control_limit:\n{}", self.ctrl_limit)?;
+        writeln!(f, "Time Scale: {:.1}", self.time_scale.unwrap_or(1.0))?;
         writeln!(
             f,
-            "deflections: ele: {:.2}, ail: {:.2}, rud: {:.2}",
-            self.deflection[0], self.deflection[1], self.deflection[2]
+            "Deflections: ele: {:.2}, ail: {:.2}, rud: {:.2}",
+            deflection[0], deflection[1], deflection[2]
         )?;
-        writeln!(f, "trim_target: \n{}", self.trim_target)?;
-        writeln!(f, "trim_init: \n{}", self.trim_init.unwrap_or_default())?;
+        writeln!(f, "Trim Target: \n{}", self.trim_target)?;
+        writeln!(f, "Trim Init: \n{}", self.trim_init.unwrap_or_default())?;
         writeln!(
             f,
-            "flight_condition: {}",
+            "Flight Condition: {}",
             self.flight_condition.unwrap_or_default()
         )?;
-        writeln!(
+        write!(
             f,
-            "optim_options: \n{}",
+            "Optim Options: \n{}",
             self.optim_options.unwrap_or_default()
         )
     }
@@ -81,26 +80,37 @@ impl Core {
     /// add a new plant
     pub async fn push_plant(
         &mut self,
-        model: Arc<Mutex<Model>>,
-        core_init: CoreInitData,
-    ) -> Result<Result<StateReceiver, CoreError>, FatalCoreError> {
-        let plant = Arc::new(std::sync::Mutex::new(Plant::new(model.clone()).await?));
+        model: Arc<Mutex<AerodynamicModel>>,
+        core_init: CoreInitCfg,
+    ) -> Result<StateReceiver, FrError> {
+        let ctrl_limits = model
+            .lock()
+            .await
+            .load_ctrl_limits()
+            .map_err(|e| FrError::Core(FatalCoreError::from(e)))?;
+        let plant = Arc::new(std::sync::Mutex::new(
+            MechanicalModel::new(model.clone())
+                .await
+                .map_err(|e| FrError::Core(e))?,
+        ));
         let trim_output = trim(
             plant,
             core_init.trim_target,
             core_init.trim_init,
-            core_init.ctrl_limit,
+            ctrl_limits,
             core_init.flight_condition,
             core_init.optim_options,
-        )?;
+        )
+        .map_err(|e| FrError::Core(e))?;
         let plant_block = Arc::new(Mutex::new(
             PlantBlock::new(
                 model,
                 &trim_output,
-                &core_init.deflection,
-                core_init.ctrl_limit,
+                &core_init.deflection.unwrap_or([0.0, 0.0, 0.0]),
+                ctrl_limits,
             )
-            .await?,
+            .await
+            .map_err(|e| FrError::Core(e))?,
         ));
         let clock = Arc::new(Mutex::new(Clock::new(
             core_init.sample_time.map(Duration::from_millis),
@@ -110,20 +120,24 @@ impl Core {
         self.plants.push(plant_block);
         let (tx, rx) = state_channel(10);
         self.senders.push(tx);
-        Ok(Ok(rx))
+        Ok(rx)
     }
 
     /// step
     pub async fn step(
         &mut self,
         controls: &[Control],
-    ) -> Result<Result<HashMap<usize, PlantBlockOutput>, CoreError>, FatalCoreError> {
+    ) -> Result<Result<HashMap<usize, CoreOutput>, CoreError>, FrError> {
         self.pause().await;
-        assert_eq!(self.plants.len(), controls.len());
+        let p = self.plants.len();
+        let c = controls.len();
+        if p != c {
+            return Ok(Err(CoreError::ControlCountNotMatch(p, c)));
+        }
         let mut results: HashMap<usize, _> = HashMap::new();
         let mut handlers = Vec::new();
 
-        for i in 0..self.plants.len() {
+        for i in 0..p {
             let clock = self.clocks[i].clone();
             let plant = self.plants[i].clone();
             let control = controls[i].clone();
@@ -146,12 +160,17 @@ impl Core {
                     self.plants.remove(r.0);
                     self.clocks.remove(r.0);
                     self.senders.remove(r.0);
-                    return Err(e);
+                    return Err(FrError::Core(e));
                 }
             }
         }
 
         Ok(Ok(results))
+    }
+
+    /// get current plant count
+    pub fn plant_count(&self) -> usize {
+        self.plants.len()
     }
 
     /// start the core
@@ -193,11 +212,16 @@ impl Core {
             s
         )
     }
+
+    /// get time
+    pub async fn get_time(&self) -> Duration {
+        self.clocks[0].lock().await.now().await
+    }
 }
 
 #[derive(Debug)]
 pub enum CoreError {
-    SetScale(f64),
+    ControlCountNotMatch(usize, usize),
 }
 
 impl std::error::Error for CoreError {}
@@ -205,11 +229,9 @@ impl std::error::Error for CoreError {}
 impl std::fmt::Display for CoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SetScale(s) => write!(
-                f,
-                "fail to set time_scale to `{}`, it will keep default `1.0`",
-                s
-            ),
+            Self::ControlCountNotMatch(p, c) => {
+                write!(f, "cmd counts({c}) doesn't match plant counts({p})")
+            }
         }
     }
 }
@@ -220,39 +242,19 @@ mod core_tests {
     use fly_ruler_plugin::IsPlugin;
     use fly_ruler_utils::logger::test_logger_init;
 
-    const CL: ControlLimit = ControlLimit {
-        thrust_cmd_limit_top: 19000.0,
-        thrust_cmd_limit_bottom: 1000.0,
-        thrust_rate_limit: 10000.0,
-        ele_cmd_limit_top: 25.0,
-        ele_cmd_limit_bottom: -25.0,
-        ele_rate_limit: 60.0,
-        ail_cmd_limit_top: 21.5,
-        ail_cmd_limit_bottom: -21.5,
-        ail_rate_limit: 80.0,
-        rud_cmd_limit_top: 30.0,
-        rud_cmd_limit_bottom: -30.0,
-        rud_rate_limit: 120.0,
-        alpha_limit_top: 45.0,
-        alpha_limit_bottom: -20.0,
-        beta_limit_top: 30.0,
-        beta_limit_bottom: -30.0,
-    };
-
     #[tokio::test]
     async fn test_core() {
         test_logger_init();
-        let model = Model::new("./install");
+        let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
-        let res = model.plugin().install(vec![Box::new("./data")]);
+        let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let model = Arc::new(Mutex::new(model));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
-        let trim_init = None;
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
             max_iter: 10000,
@@ -260,12 +262,11 @@ mod core_tests {
             tol_x: 1e-6,
         });
 
-        let core_init = CoreInitData {
+        let core_init = CoreInitCfg {
             sample_time: Some(100),
             time_scale: None,
-            ctrl_limit: CL,
-            deflection: [0.0, 0.0, 0.0],
-            trim_init,
+            deflection: None,
+            trim_init: None,
             trim_target,
             flight_condition: None,
             optim_options: nm_options,
@@ -278,11 +279,11 @@ mod core_tests {
         let controllers = vec![Control::default(), Control::default()];
         for _i in 0..10 {
             let res = core.step(&controllers).await;
-            dbg!(&res);
+            debug!("{:?}", &res);
         }
 
         let model = Arc::into_inner(model).unwrap();
-        let res = model.lock().await.plugin().uninstall(Vec::new());
+        let res = model.lock().await.plugin().uninstall(&Vec::<String>::new());
         assert!(matches!(res, Ok(Ok(_))));
     }
 }

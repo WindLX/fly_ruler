@@ -1,13 +1,13 @@
 use crate::parts::{
     basic::{clamp, Integrator, VectorIntegrator},
-    flight::{disturbance, Atmos, Plant},
+    flight::{disturbance, Atmos, MechanicalModel},
     group::Actuator,
     trim::TrimOutput,
 };
-use fly_ruler_plugin::Model;
+use fly_ruler_plugin::AerodynamicModel;
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{Control, ControlLimit, ModelInput, PlantBlockOutput, State, StateExtend},
+    plant_model::{Control, ControlLimit, CoreOutput, MechanicalModelInput, State, StateExtend},
     Vector,
 };
 use log::{debug, trace};
@@ -167,7 +167,7 @@ pub struct PlantBlock {
     control: ControllerBlock,
     flap: LeadingEdgeFlapBlock,
     integrator: VectorIntegrator,
-    plant: Plant,
+    plant: MechanicalModel,
     extend: Option<StateExtend>,
     alpha_limit_top: f64,
     alpha_limit_bottom: f64,
@@ -177,7 +177,7 @@ pub struct PlantBlock {
 
 impl PlantBlock {
     pub async fn new(
-        model: Arc<Mutex<Model>>,
+        model: Arc<Mutex<AerodynamicModel>>,
         init: &TrimOutput,
         deflection: &[f64; 3],
         ctrl_limit: ControlLimit,
@@ -185,7 +185,7 @@ impl PlantBlock {
         let flap = LeadingEdgeFlapBlock::new(init.state.alpha, init.d_lef);
         let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
         let integrator = VectorIntegrator::new(Into::<Vector>::into(init.state));
-        let plant = Plant::new(model).await?;
+        let plant = MechanicalModel::new(model).await?;
         trace!("PlantBlock init finished");
         Ok(PlantBlock {
             control,
@@ -204,7 +204,7 @@ impl PlantBlock {
         &mut self,
         control: impl Into<Control>,
         t: f64,
-    ) -> Result<PlantBlockOutput, FatalCoreError> {
+    ) -> Result<CoreOutput, FatalCoreError> {
         let state = &mut self.integrator.past();
         let control = self.control.update(control, t);
         let lef = self.flap.past();
@@ -221,9 +221,9 @@ impl PlantBlock {
             self.beta_limit_bottom.to_radians(),
         );
 
-        let model_output = self
-            .plant
-            .step(&ModelInput::new(state.data.clone(), control, lef))?;
+        let model_output =
+            self.plant
+                .step(&MechanicalModelInput::new(state.data.clone(), control, lef))?;
 
         trace!("[t: {t:.2}] PlantBlock: model_output:\n{}", model_output);
 
@@ -242,7 +242,7 @@ impl PlantBlock {
         let extend = model_output.state_extend;
         self.extend = Some(StateExtend::from(extend));
 
-        let block_output = PlantBlockOutput::new(
+        let block_output = CoreOutput::new(
             State::from(state),
             Control::from(control),
             d_lef,
@@ -260,12 +260,12 @@ impl PlantBlock {
         trace!("PlantBlock reset finished")
     }
 
-    pub fn state(&self) -> Result<PlantBlockOutput, FatalCoreError> {
+    pub fn state(&self) -> Result<CoreOutput, FatalCoreError> {
         let state = &self.integrator.past();
         let control = self.control.past();
         let d_lef = self.flap.past();
 
-        Ok(PlantBlockOutput::new(
+        Ok(CoreOutput::new(
             State::from(state.clone()),
             Control::from(control),
             d_lef,
@@ -280,11 +280,11 @@ mod core_parts_tests {
     use crate::parts::{
         basic::step,
         block::{ControllerBlock, LeadingEdgeFlapBlock, PlantBlock},
-        flight::{multi_to_deg, Plant},
+        flight::{multi_to_deg, MechanicalModel},
         trim::{trim, TrimOutput, TrimTarget},
     };
     use csv::Writer;
-    use fly_ruler_plugin::{IsPlugin, Model};
+    use fly_ruler_plugin::{AerodynamicModel, IsPlugin};
     use fly_ruler_utils::logger::test_logger_init;
     use fly_ruler_utils::plant_model::ControlLimit;
     use log::{debug, trace};
@@ -313,18 +313,18 @@ mod core_parts_tests {
         beta_limit_bottom: -30.0,
     };
 
-    fn test_core_init() -> (Arc<Mutex<Model>>, TrimOutput) {
+    fn test_core_init() -> (Arc<Mutex<AerodynamicModel>>, TrimOutput) {
         test_logger_init();
-        let model = Model::new("./install");
+        let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
-        let res = model.plugin().install(vec![Box::new("./data")]);
+        let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let model = Arc::new(Mutex::new(model));
         let plant = Arc::new(std::sync::Mutex::new(
-            tokio_test::block_on(Plant::new(model.clone())).unwrap(),
+            tokio_test::block_on(MechanicalModel::new(model.clone())).unwrap(),
         ));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
@@ -342,11 +342,9 @@ mod core_parts_tests {
         )
     }
 
-    fn test_core_fin(model: Arc<Mutex<Model>>) {
+    fn test_core_fin(model: Arc<Mutex<AerodynamicModel>>) {
         let model = Arc::into_inner(model).unwrap();
-        let res = tokio_test::block_on(model.lock())
-            .plugin()
-            .uninstall(Vec::new());
+        let res = tokio_test::block_on(model.lock()).plugin().uninstall(&[""]);
         assert!(matches!(res, Ok(Ok(_))));
     }
 

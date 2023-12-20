@@ -1,20 +1,21 @@
-use super::ffi::{FrModelLoadConstants, FrModelStep, PlantConstants, C};
+use super::ffi::{FrModelLoadConstants, FrModelLoadCtrlLimits, FrModelStep};
 use crate::plugin::{IsPlugin, Plugin, PluginError};
 use fly_ruler_utils::error::FatalPluginError;
-use fly_ruler_utils::plant_model::ModelInput;
+use fly_ruler_utils::plant_model::{ControlLimit, MechanicalModelInput, PlantConstants, C};
+use log::debug;
 use std::path::Path;
 
-pub type ModelStepFn = dyn Fn(&ModelInput) -> Result<C, FatalPluginError>;
+pub type AerodynamicModelStepFn = dyn Fn(&MechanicalModelInput) -> Result<C, FatalPluginError>;
 
 #[derive(Debug)]
-pub struct Model {
+pub struct AerodynamicModel {
     plugin: Plugin,
 }
 
-impl Model {
+impl AerodynamicModel {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, PluginError> {
         let plugin = Plugin::new(path)?;
-        Ok(Model { plugin })
+        Ok(AerodynamicModel { plugin })
     }
 
     pub fn load_constants(&self) -> Result<PlantConstants, FatalPluginError> {
@@ -33,7 +34,30 @@ impl Model {
                 ));
             } else {
                 let constants = *constants_ptr;
+                debug!("Plant Constants:\n{}", constants);
                 Ok(constants)
+            }
+        }
+    }
+
+    pub fn load_ctrl_limits(&self) -> Result<ControlLimit, FatalPluginError> {
+        let load_ctrl_limits = self
+            .load_function::<FrModelLoadCtrlLimits>("frmodel_load_ctrl_limits")
+            .map_err(|e| FatalPluginError::symbol(e.to_string()))?;
+        let mut ctrl_limits = Box::new(ControlLimit::default());
+        let ctrl_limits_ptr = &mut *ctrl_limits;
+        unsafe {
+            let res = load_ctrl_limits(ctrl_limits_ptr);
+            if res < 0 {
+                return Err(FatalPluginError::inner(
+                    &self.info().name,
+                    res,
+                    "when call frmodel_load_ctrl_limits",
+                ));
+            } else {
+                let ctrl_limits = *ctrl_limits_ptr;
+                debug!("Ctrl Limits:\n{}", ctrl_limits);
+                Ok(ctrl_limits)
             }
         }
     }
@@ -49,9 +73,9 @@ impl Model {
 pub fn step_handler_constructor(
     handler: FrModelStep,
     name: String,
-) -> Box<dyn Fn(&ModelInput) -> Result<C, FatalPluginError>> {
+) -> Box<dyn Fn(&MechanicalModelInput) -> Result<C, FatalPluginError>> {
     let name = name.clone();
-    let h = move |input: &ModelInput| {
+    let h = move |input: &MechanicalModelInput| {
         let state = Box::new(input.state);
         let control = Box::new(input.control);
         let mut c = Box::new(C::default());
@@ -73,7 +97,7 @@ pub fn step_handler_constructor(
     Box::new(h)
 }
 
-impl IsPlugin for Model {
+impl IsPlugin for AerodynamicModel {
     fn plugin(&self) -> &Plugin {
         &self.plugin
     }
@@ -85,12 +109,11 @@ impl IsPlugin for Model {
 
 #[cfg(test)]
 mod plugin_model_tests {
-    use super::Model;
-    use crate::model::ffi::PlantConstants;
+    use super::AerodynamicModel;
     use crate::model::step_handler_constructor;
     use crate::plugin::plugin::IsPlugin;
     use fly_ruler_utils::logger::test_logger_init;
-    use fly_ruler_utils::plant_model::ModelInput;
+    use fly_ruler_utils::plant_model::{MechanicalModelInput, PlantConstants};
     use log::debug;
 
     #[test]
@@ -102,7 +125,7 @@ mod plugin_model_tests {
          *  version = "0.1.0"
          */
         test_logger_init();
-        let model = Model::new("./install");
+        let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
         let model = model.unwrap();
         let info = model.info();
@@ -115,22 +138,22 @@ mod plugin_model_tests {
     #[test]
     fn test_model_load() {
         test_logger_init();
-        let model = Model::new("./install");
+        let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
         let model = model.unwrap();
-        let res = model.plugin().install(vec![Box::new("./data")]);
+        let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
-        let res = model.plugin().uninstall(Vec::new());
+        let res = model.plugin().uninstall(&Vec::<String>::new());
         assert!(matches!(res, Ok(Ok(_))));
     }
 
     #[test]
     fn test_model_load_constants() {
         test_logger_init();
-        let model = Model::new("./install");
+        let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
         let model = model.unwrap();
-        let res = model.plugin().install(vec![Box::new("./data")]);
+        let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let constants = model.load_constants();
@@ -142,7 +165,7 @@ mod plugin_model_tests {
             )
         );
 
-        let res = model.plugin().uninstall(Vec::new());
+        let res = model.plugin().uninstall(&Vec::<String>::new());
         assert!(matches!(res, Ok(Ok(_))));
     }
 
@@ -150,11 +173,11 @@ mod plugin_model_tests {
     fn test_model_step() {
         test_logger_init();
 
-        let model = Model::new("./install");
+        let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
-        let res = model.plugin().install(vec![Box::new("./data")]);
+        let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let res = model.get_step_handler();
@@ -181,10 +204,10 @@ mod plugin_model_tests {
         let d_lef = 6.28161378774449;
         let h = res.unwrap();
         let f = step_handler_constructor(h, model.info().name.clone());
-        let r = f(&ModelInput::new(state, control, d_lef));
+        let r = f(&MechanicalModelInput::new(state, control, d_lef));
         debug!("{:?}", &r);
 
-        let res = model.plugin().uninstall(Vec::new());
+        let res = model.plugin().uninstall(&Vec::<String>::new());
         assert!(matches!(res, Ok(Ok(_))));
     }
 }

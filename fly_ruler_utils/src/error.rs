@@ -9,8 +9,10 @@ pub enum FrError {
     ReportableBug(String),
     /// A read or write error has happened when interacting with file system
     Io(std::io::Error),
+    /// Invalid cfg format
+    Cfg(String),
     /// Error cause by fly_ruler_core
-    // Core(FatalCoreError),
+    Core(FatalCoreError),
     /// Error caused by fly_ruler_plugin
     Plugin(FatalPluginError),
     /// a failpoint has been triggered for testing purposes
@@ -36,7 +38,8 @@ impl std::fmt::Display for FrError {
             Self::Unsupported(s) => write!(f, "Unsupported: {}", s),
             Self::ReportableBug(s) => write!(f, "ReportableBug: {}", s),
             Self::Io(e) => write!(f, "Io: {}", e),
-            // Self::Core(e) => write!(f, "Core: {}", e),
+            Self::Cfg(e) => write!(f, "Cfg: {}", e),
+            Self::Core(e) => write!(f, "Core: {}", e),
             Self::Plugin(e) => write!(f, "Plugin: {}", e),
             #[cfg(feature = "failpoints")]
             Self::FailPoint => write!(f, "FailPoint"),
@@ -91,7 +94,7 @@ impl std::error::Error for FatalCoreError {
 
 impl std::fmt::Display for FatalCoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.source().unwrap())
+        write!(f, "{}", self.source().unwrap())
     }
 }
 
@@ -133,8 +136,8 @@ impl std::error::Error for FatalPluginError {
 impl std::fmt::Display for FatalPluginError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Symbol(msg) => write!(f, "{}", msg),
-            Self::Inner(_) => write!(f, "{:?}", self.source().unwrap()),
+            Self::Symbol(msg) => write!(f, "(Symbol) {}", msg),
+            Self::Inner(_) => write!(f, "(Inner) {}", self.source().unwrap()),
         }
     }
 }

@@ -4,5 +4,6 @@ pub(crate) mod model;
 pub(crate) mod plugin;
 pub(crate) mod system;
 
-pub use model::{step_handler_constructor, Model, ModelStepFn, PlantConstants, C};
-pub use plugin::IsPlugin;
+pub use manager::{PluginManager, PluginType};
+pub use model::{step_handler_constructor, AerodynamicModel, AerodynamicModelStepFn};
+pub use plugin::{IsPlugin, PluginInfo};

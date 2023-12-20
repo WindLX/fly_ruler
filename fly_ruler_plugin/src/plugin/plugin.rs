@@ -2,7 +2,7 @@ use super::ffi::{logger_callback, FrPluginHook, FrPluginLogRegister};
 use fly_ruler_utils::error::FatalPluginError;
 use libc::{c_char, c_int};
 use libloading::Library;
-use log::trace;
+use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use std::{ffi::CString, fs::read_to_string, path::Path};
 
@@ -82,12 +82,8 @@ impl Plugin {
     fn call_hook_function(
         &self,
         name: &str,
-        args: Vec<Box<dyn ToString>>,
+        args: &[impl ToString],
     ) -> Result<Result<(), PluginError>, FatalPluginError> {
-        if let Err(e) = self.register_logger() {
-            return Ok(Err(e));
-        };
-
         let r = self.load_function::<FrPluginHook>(name);
         match r {
             Ok(r) => {
@@ -129,10 +125,10 @@ impl Plugin {
 
     pub fn install(
         &self,
-        args: Vec<Box<dyn ToString>>,
+        args: &[impl ToString],
     ) -> Result<Result<(), PluginError>, FatalPluginError> {
         if let Err(e) = self.register_logger() {
-            return Ok(Err(e));
+            warn!("{}", e)
         };
         trace!("{} logger is registered", self.info.name);
         self.call_hook_function("frplugin_install_hook", args)
@@ -140,12 +136,11 @@ impl Plugin {
 
     pub fn uninstall(
         &self,
-        args: Vec<Box<dyn ToString>>,
+        args: &[impl ToString],
     ) -> Result<Result<(), PluginError>, FatalPluginError> {
         self.call_hook_function("frplugin_uninstall_hook", args)
     }
 }
-
 pub trait IsPlugin {
     fn plugin(&self) -> &Plugin;
 

@@ -2,12 +2,14 @@ use crate::{
     algorithm::nelder_mead::*,
     parts::{
         basic::clamp,
-        flight::{Atmos, Plant},
+        flight::{Atmos, MechanicalModel},
     },
 };
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{Control, ControlLimit, FlightCondition, ModelInput, State, StateExtend},
+    plant_model::{
+        Control, ControlLimit, FlightCondition, MechanicalModelInput, State, StateExtend,
+    },
     Vector,
 };
 use serde::{Deserialize, Serialize};
@@ -23,7 +25,7 @@ pub struct TrimInit {
 impl std::fmt::Display for TrimInit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "alpha:  {:.2}", self.alpha)?;
-        writeln!(f, "control:\n{}", self.control)
+        write!(f, "control:\n{}", self.control)
     }
 }
 
@@ -109,7 +111,7 @@ impl TrimOutput {
 /// Trim aircraft to desired altitude and velocity
 /// fi_flag: true means hifi model
 pub fn trim(
-    plant: Arc<std::sync::Mutex<Plant>>,
+    plant: Arc<std::sync::Mutex<MechanicalModel>>,
     trim_target: TrimTarget,
     trim_init: Option<TrimInit>,
     ctrl_limit: ControlLimit,
@@ -174,7 +176,7 @@ pub fn trim(
 
 fn trim_func(
     x: &Vector,
-    plant: Arc<std::sync::Mutex<Plant>>,
+    plant: Arc<std::sync::Mutex<MechanicalModel>>,
     ctrl_limit: ControlLimit,
     output_vec: Rc<RefCell<Vec<f64>>>,
     globals: &Vec<f64>,
@@ -220,7 +222,7 @@ fn trim_func(
     let alpha = clamp(
         x[4],
         ctrl_limit.alpha_limit_top.to_radians(),
-        ctrl_limit.ail_cmd_limit_bottom.to_radians(),
+        ctrl_limit.alpha_limit_bottom.to_radians(),
     );
 
     // Calculating qbar, ps and steady state leading edge flap deflection:
@@ -268,7 +270,7 @@ fn trim_func(
     let output = plant
         .lock()
         .unwrap()
-        .step(&ModelInput::new(state, control, lef))?;
+        .step(&MechanicalModelInput::new(state, control, lef))?;
 
     let state_dot = Vector::from(Into::<Vec<f64>>::into(output.state_dot));
     let cost = weight.dot(&(state_dot.clone() * state_dot));
@@ -287,11 +289,11 @@ mod core_trim_tests {
     use crate::{
         algorithm::nelder_mead::NelderMeadOptions,
         parts::{
-            flight::Plant,
+            flight::MechanicalModel,
             trim::{trim, TrimTarget},
         },
     };
-    use fly_ruler_plugin::{IsPlugin, Model};
+    use fly_ruler_plugin::{AerodynamicModel, IsPlugin};
     use fly_ruler_utils::{logger::test_logger_init, plant_model::ControlLimit};
     use log::debug;
     use std::sync::Arc;
@@ -319,16 +321,16 @@ mod core_trim_tests {
     #[test]
     fn test_trim() {
         test_logger_init();
-        let model = Model::new("./install");
+        let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
-        let res = model.plugin().install(vec![Box::new("./data")]);
+        let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let model = Arc::new(Mutex::new(model));
         let plant = Arc::new(std::sync::Mutex::new(
-            tokio_test::block_on(Plant::new(model.clone())).unwrap(),
+            tokio_test::block_on(MechanicalModel::new(model.clone())).unwrap(),
         ));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
@@ -349,7 +351,7 @@ mod core_trim_tests {
         let model = Arc::into_inner(model).unwrap();
         let res = tokio_test::block_on(model.lock())
             .plugin()
-            .uninstall(Vec::new());
+            .uninstall(&Vec::<String>::new());
         assert!(matches!(res, Ok(Ok(_))));
     }
 }
