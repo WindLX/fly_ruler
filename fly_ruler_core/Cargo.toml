@@ -6,8 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tokio = { version = "1.35.0", features = [
+    "sync",
+    "rt",
+    "time",
+    "rt-multi-thread",
+] }
 log = "0.4.20"
-tokio = { version = "1.35.0", features = ["sync", "rt", "time"] }
 rayon = "1.8.0"
 fly_ruler_utils = { path = "../fly_ruler_utils" }
 fly_ruler_plugin = { path = "../fly_ruler_plugin" }
