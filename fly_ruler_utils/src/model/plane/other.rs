@@ -25,7 +25,7 @@ impl C {
     }
 }
 
-/// Constants of a plant
+/// Constants of a plane
 /// m: mass slugs
 /// b: span ft
 /// s: planform area ft^2
@@ -36,7 +36,7 @@ impl C {
 /// j_y, j_xz, j_z, j_x: slug-ft^2
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct PlantConstants {
+pub struct PlaneConstants {
     pub m: f64,
     pub b: f64,
     pub s: f64,
@@ -50,7 +50,7 @@ pub struct PlantConstants {
     pub j_x: f64,
 }
 
-impl PlantConstants {
+impl PlaneConstants {
     pub fn new(
         m: f64,
         b: f64,
@@ -80,7 +80,7 @@ impl PlantConstants {
     }
 }
 
-impl std::fmt::Display for PlantConstants {
+impl std::fmt::Display for PlaneConstants {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

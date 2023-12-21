@@ -3,7 +3,7 @@ use fly_ruler_core::core::Core;
 use fly_ruler_plugin::{PluginInfo, PluginManager, PluginType};
 use fly_ruler_utils::{
     error::FrError,
-    plant_model::{Control, CoreOutput},
+    plane_model::{Control, CoreOutput},
     StateReceiver,
 };
 use log::{error, info, warn};
@@ -86,7 +86,7 @@ impl System {
 
                 let model = p.get_model(&i.0).await;
                 if let Some(m) = model {
-                    let state_receiver = self.core.push_plant(m, core_init_cfg).await;
+                    let state_receiver = self.core.push_plane(i.0, m, core_init_cfg).await;
                     match state_receiver {
                         Ok(state_receiver) => {
                             self.state_receivers.insert(i.0, state_receiver);
@@ -106,8 +106,10 @@ impl System {
 
     pub async fn set_controller<'h, 's: 'h>(
         &'s mut self,
-        get_target_handler: impl FnOnce(&HashMap<usize, PluginInfo>) -> &'h [(usize, &'h [&str])],
-        control_handler: impl Fn(Duration, CoreOutput) -> Control,
+        handler: impl FnOnce(
+            &Vec<(usize, PluginInfo)>,
+            &HashMap<usize, PluginInfo>,
+        ) -> (usize, &'h [usize]),
     ) {
     }
 

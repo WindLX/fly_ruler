@@ -21,6 +21,15 @@ impl PluginInfo {
     }
 }
 
+impl std::fmt::Display for PluginInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Name: {}", self.name)?;
+        writeln!(f, "Author: {}", self.author)?;
+        writeln!(f, "Version: {}", self.version)?;
+        writeln!(f, "Description: {}", self.description)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PluginState {
     Installed,

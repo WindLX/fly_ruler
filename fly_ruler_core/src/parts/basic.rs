@@ -105,16 +105,6 @@ impl Differentiator {
     }
 }
 
-pub fn clamp(x: f64, top: f64, bottom: f64) -> f64 {
-    if x > top {
-        top
-    } else if x < bottom {
-        bottom
-    } else {
-        x
-    }
-}
-
 pub fn step(init: f64, end: f64, step_time: f64, t: f64) -> f64 {
     if t < step_time {
         init

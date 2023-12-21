@@ -1,4 +1,4 @@
-use crate::parts::basic::{clamp, Integrator};
+use crate::parts::basic::Integrator;
 
 #[derive(Clone)]
 pub struct Actuator {
@@ -32,22 +32,15 @@ impl Actuator {
 
     pub fn update(&mut self, value: f64, t: f64) -> f64 {
         self.last = value;
-        let r_1 = clamp(
-            value,
-            self.command_saturation_top,
-            self.command_saturation_bottom,
-        );
+        let r_1 = value.clamp(self.command_saturation_bottom, self.command_saturation_top);
         let r_2 = r_1 - self.feedback;
         let r_3 = self.gain * r_2;
-        let r_4 = clamp(r_3, self.rate_saturation, -self.rate_saturation);
+        let r_4 = r_3.clamp(-self.rate_saturation, self.rate_saturation);
         let r_5 = self.integrator.integrate(r_4, t);
         self.feedback = r_5;
-        // let r_6 = clamp(
-        //     r_5,
-        //     self.command_saturation_top,
-        //     self.command_saturation_bottom,
-        // );
-        r_5
+        let r_6 = r_5;
+        // let r_6 = r_5.clamp(self.command_saturation_bottom, self.command_saturation_top);
+        r_6
     }
 
     pub fn past(&self) -> f64 {

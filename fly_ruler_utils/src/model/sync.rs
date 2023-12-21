@@ -1,4 +1,4 @@
-use crate::plant_model::{Control, State};
+use crate::plane_model::{Control, State};
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch, Mutex};
 
@@ -18,7 +18,7 @@ pub fn state_channel(buffer: usize) -> (StateSender, StateReceiver) {
     (sender, receiver)
 }
 
-/// The sender end of state channel, which advised to be owned by plant model
+/// The sender end of state channel, which advised to be owned by plane model
 #[derive(Clone)]
 pub struct StateSender(Arc<Mutex<mpsc::Sender<State>>>);
 
@@ -27,10 +27,19 @@ impl StateSender {
         Self(r)
     }
 
-    /// send plant state data to channel, waiting until there is capacity
+    /// send plane state data to channel, waiting until there is capacity
     pub async fn send(&mut self, state: State) {
         let guard = self.0.lock().await;
-        guard.send(state).await.unwrap();
+        let _ = guard.send(state).await;
+    }
+
+    /// Attempts to immediately send a message on this Sender
+    /// This method differs from [send] by returning immediately if the channel's buffer is full
+    /// or no receiver is waiting to acquire some data.
+    /// Compared with [send], this function has two failure cases instead of one (one for disconnection, one for a full buffer).
+    pub async fn try_send(&mut self, state: State) {
+        let guard = self.0.lock().await;
+        let _ = guard.try_send(state);
     }
 }
 
@@ -113,21 +122,12 @@ impl CommandReceiver {
     /// Try to receive command, if data is not update will get recent command
     /// Notice that attack command will be reset whether command update
     pub async fn try_receive(&mut self) -> Command {
-        let mut guard = self.0.lock().await;
-        match guard.has_changed() {
-            Ok(b) => {
-                if b {
-                    guard.borrow_and_update().clone()
-                } else {
-                    let mut last = guard.borrow().clone();
-                    if let Command::Control(c, _t) = last {
-                        last = Command::Control(c, -1)
-                    }
-                    last
-                }
-            }
-            Err(_) => Command::Exit,
+        let guard = self.0.lock().await;
+        let mut last = guard.borrow().clone();
+        if let Command::Control(c, _t) = last {
+            last = Command::Control(c, -1)
         }
+        last
     }
 }
 

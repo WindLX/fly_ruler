@@ -4,21 +4,18 @@ use fly_ruler_plugin::{
 };
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{
-        MechanicalModelInput, MechanicalModelOutput, PlantConstants, State, StateExtend, C,
+    plane_model::{
+        MechanicalModelInput, MechanicalModelOutput, PlaneConstants, State, StateExtend, C,
     },
 };
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub struct MechanicalModel {
-    constants: PlantConstants,
+    constants: PlaneConstants,
     model_func: Box<AerodynamicModelStepFn>,
 }
 
 impl MechanicalModel {
-    pub async fn new(model: Arc<Mutex<AerodynamicModel>>) -> Result<Self, FatalCoreError> {
-        let model = model.lock().await;
+    pub fn new(model: &AerodynamicModel) -> Result<Self, FatalCoreError> {
         let constants = model
             .load_constants()
             .map_err(|e| FatalCoreError::from(e))?;
@@ -142,7 +139,7 @@ fn kinematics(orientation: &Orientation, angle_rates: &AngleRates) -> Vector3 {
 /// return dot of velocity and it's sub value
 fn velocity_derivation(
     c: &C,
-    constants: &PlantConstants,
+    constants: &PlaneConstants,
     velocity: f64,
     sub_velocity: &Vector3,
     orientation: &Orientation,

@@ -1,5 +1,5 @@
 use crate::parts::{
-    basic::{clamp, Integrator, VectorIntegrator},
+    basic::{Integrator, VectorIntegrator},
     flight::{disturbance, Atmos, MechanicalModel},
     group::Actuator,
     trim::TrimOutput,
@@ -7,13 +7,11 @@ use crate::parts::{
 use fly_ruler_plugin::AerodynamicModel;
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{Control, ControlLimit, CoreOutput, MechanicalModelInput, State, StateExtend},
+    plane_model::{Control, ControlLimit, CoreOutput, MechanicalModelInput, State, StateExtend},
     Vector,
 };
 use log::{debug, trace};
 use std::f64::consts::PI;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub(crate) struct ControllerBlock {
     actuators: Vec<Actuator>,
@@ -163,11 +161,11 @@ impl LeadingEdgeFlapBlock {
     }
 }
 
-pub struct PlantBlock {
+pub struct PlaneBlock {
     control: ControllerBlock,
     flap: LeadingEdgeFlapBlock,
     integrator: VectorIntegrator,
-    plant: MechanicalModel,
+    plane: MechanicalModel,
     extend: Option<StateExtend>,
     alpha_limit_top: f64,
     alpha_limit_bottom: f64,
@@ -175,9 +173,9 @@ pub struct PlantBlock {
     beta_limit_bottom: f64,
 }
 
-impl PlantBlock {
-    pub async fn new(
-        model: Arc<Mutex<AerodynamicModel>>,
+impl PlaneBlock {
+    pub fn new(
+        model: &AerodynamicModel,
         init: &TrimOutput,
         deflection: &[f64; 3],
         ctrl_limit: ControlLimit,
@@ -185,13 +183,13 @@ impl PlantBlock {
         let flap = LeadingEdgeFlapBlock::new(init.state.alpha, init.d_lef);
         let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
         let integrator = VectorIntegrator::new(Into::<Vector>::into(init.state));
-        let plant = MechanicalModel::new(model).await?;
-        trace!("PlantBlock init finished");
-        Ok(PlantBlock {
+        let plane = MechanicalModel::new(model)?;
+        trace!("PlaneBlock init finished");
+        Ok(PlaneBlock {
             control,
             flap,
             integrator,
-            plant,
+            plane,
             extend: None,
             alpha_limit_top: ctrl_limit.alpha_limit_top,
             alpha_limit_bottom: ctrl_limit.alpha_limit_bottom,
@@ -209,20 +207,18 @@ impl PlantBlock {
         let control = self.control.update(control, t);
         let lef = self.flap.past();
 
-        state.data[7] = clamp(
-            state[7],
-            self.alpha_limit_top.to_radians(),
+        state.data[7] = state[7].clamp(
             self.alpha_limit_bottom.to_radians(),
+            self.alpha_limit_top.to_radians(),
         );
 
-        state.data[8] = clamp(
-            state[8],
-            self.beta_limit_top.to_radians(),
+        state.data[8] = state[8].clamp(
             self.beta_limit_bottom.to_radians(),
+            self.beta_limit_top.to_radians(),
         );
 
         let model_output =
-            self.plant
+            self.plane
                 .step(&MechanicalModelInput::new(state.data.clone(), control, lef))?;
 
         trace!("[t: {t:.2}] PlantBlock: model_output:\n{}", model_output);
@@ -279,20 +275,19 @@ mod core_parts_tests {
     use crate::algorithm::nelder_mead::NelderMeadOptions;
     use crate::parts::{
         basic::step,
-        block::{ControllerBlock, LeadingEdgeFlapBlock, PlantBlock},
+        block::{ControllerBlock, LeadingEdgeFlapBlock, PlaneBlock},
         flight::{multi_to_deg, MechanicalModel},
         trim::{trim, TrimOutput, TrimTarget},
     };
     use csv::Writer;
     use fly_ruler_plugin::{AerodynamicModel, IsPlugin};
     use fly_ruler_utils::logger::test_logger_init;
-    use fly_ruler_utils::plant_model::ControlLimit;
+    use fly_ruler_utils::plane_model::ControlLimit;
     use log::{debug, trace};
     use std::fs::File;
     use std::path::Path;
     use std::sync::Arc;
     use std::time::{Duration, Instant, SystemTime};
-    use tokio::sync::Mutex;
 
     const CL: ControlLimit = ControlLimit {
         thrust_cmd_limit_top: 19000.0,
@@ -313,7 +308,7 @@ mod core_parts_tests {
         beta_limit_bottom: -30.0,
     };
 
-    fn test_core_init() -> (Arc<Mutex<AerodynamicModel>>, TrimOutput) {
+    fn test_core_init() -> (AerodynamicModel, TrimOutput) {
         test_logger_init();
         let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
@@ -322,10 +317,7 @@ mod core_parts_tests {
         let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
-        let model = Arc::new(Mutex::new(model));
-        let plant = Arc::new(std::sync::Mutex::new(
-            tokio_test::block_on(MechanicalModel::new(model.clone())).unwrap(),
-        ));
+        let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
@@ -337,14 +329,13 @@ mod core_parts_tests {
         });
 
         (
-            model.clone(),
+            model,
             trim(plant.clone(), trim_target, trim_init, CL, None, nm_options).unwrap(),
         )
     }
 
-    fn test_core_fin(model: Arc<Mutex<AerodynamicModel>>) {
-        let model = Arc::into_inner(model).unwrap();
-        let res = tokio_test::block_on(model.lock()).plugin().uninstall(&[""]);
+    fn test_core_fin(model: AerodynamicModel) {
+        let res = model.plugin().uninstall(&[""]);
         assert!(matches!(res, Ok(Ok(_))));
     }
 
@@ -452,8 +443,8 @@ mod core_parts_tests {
         // set_time_scale(5.0).unwrap();
 
         let control: [f64; 4] = result.control.into();
-        let f16_block = PlantBlock::new(model.clone(), &result, &[0.0, 0.0, 0.0], CL);
-        let mut f16_block = tokio_test::block_on(f16_block).unwrap();
+        let f16_block = PlaneBlock::new(&model, &result, &[0.0, 0.0, 0.0], CL);
+        let mut f16_block = f16_block.unwrap();
 
         let path = Path::new("output.csv");
         let file = File::create(&path).unwrap();

@@ -12,6 +12,7 @@ rayon = "1.8.0"
 fly_ruler_utils = { path = "../fly_ruler_utils" }
 fly_ruler_plugin = { path = "../fly_ruler_plugin" }
 serde = { version = "1.0.193", features = ["derive"] }
+tokio-util = "0.7.10"
 
 [dev-dependencies]
 criterion = "0.5.1"

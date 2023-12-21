@@ -1,5 +1,5 @@
 use fly_ruler_utils::{
-    plant_model::{PlantConstants, State, C},
+    plane_model::{PlaneConstants, State, C},
     Vector,
 };
 
@@ -181,7 +181,7 @@ impl AngleRates {
         Self { p, q, r }
     }
 
-    pub fn derivation(&self, c: &C, constants: &PlantConstants, qbar: f64) -> Self {
+    pub fn derivation(&self, c: &C, constants: &PlaneConstants, qbar: f64) -> Self {
         let b = constants.b;
         let s = constants.s;
         let c_bar = constants.c_bar;

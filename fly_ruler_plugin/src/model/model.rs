@@ -1,7 +1,7 @@
 use super::ffi::{FrModelLoadConstants, FrModelLoadCtrlLimits, FrModelStep};
 use crate::plugin::{IsPlugin, Plugin, PluginError};
 use fly_ruler_utils::error::FatalPluginError;
-use fly_ruler_utils::plant_model::{ControlLimit, MechanicalModelInput, PlantConstants, C};
+use fly_ruler_utils::plane_model::{ControlLimit, MechanicalModelInput, PlaneConstants, C};
 use log::debug;
 use std::path::Path;
 
@@ -18,11 +18,11 @@ impl AerodynamicModel {
         Ok(AerodynamicModel { plugin })
     }
 
-    pub fn load_constants(&self) -> Result<PlantConstants, FatalPluginError> {
+    pub fn load_constants(&self) -> Result<PlaneConstants, FatalPluginError> {
         let load_constants = self
             .load_function::<FrModelLoadConstants>("frmodel_load_constants")
             .map_err(|e| FatalPluginError::symbol(e.to_string()))?;
-        let mut constants = Box::new(PlantConstants::default());
+        let mut constants = Box::new(PlaneConstants::default());
         let constants_ptr = &mut *constants;
         unsafe {
             let res = load_constants(constants_ptr);
@@ -34,7 +34,7 @@ impl AerodynamicModel {
                 ));
             } else {
                 let constants = *constants_ptr;
-                debug!("Plant Constants:\n{}", constants);
+                debug!("Plane Constants:\n{}", constants);
                 Ok(constants)
             }
         }
@@ -113,7 +113,7 @@ mod plugin_model_tests {
     use crate::model::step_handler_constructor;
     use crate::plugin::plugin::IsPlugin;
     use fly_ruler_utils::logger::test_logger_init;
-    use fly_ruler_utils::plant_model::{MechanicalModelInput, PlantConstants};
+    use fly_ruler_utils::plane_model::{MechanicalModelInput, PlaneConstants};
     use log::debug;
 
     #[test]
@@ -160,7 +160,7 @@ mod plugin_model_tests {
         assert!(matches!(constants, Ok(_)));
         assert_eq!(
             constants.unwrap(),
-            PlantConstants::new(
+            PlaneConstants::new(
                 636.94, 30.0, 300.0, 11.32, 0.35, 0.30, 0.0, 55814.0, 982.0, 63100.0, 9496.0
             )
         );

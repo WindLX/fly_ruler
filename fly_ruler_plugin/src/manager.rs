@@ -4,8 +4,6 @@ use fly_ruler_utils::error::FrError;
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Copy)]
@@ -16,15 +14,15 @@ pub enum PluginType {
 }
 
 pub struct PluginManager {
-    models: HashMap<usize, Arc<Mutex<AerodynamicModel>>>,
-    systems: HashMap<usize, Arc<Mutex<Plugin>>>,
-    controllers: HashMap<usize, Arc<Mutex<Plugin>>>,
+    models: HashMap<usize, AerodynamicModel>,
+    systems: HashMap<usize, Plugin>,
+    controllers: HashMap<usize, Plugin>,
 }
 
 fn load_plugins<Pl: IsPlugin>(
     dir: PathBuf,
     loader: Box<dyn Fn(&Path) -> Result<Pl, PluginError>>,
-) -> HashMap<usize, Arc<Mutex<Pl>>> {
+) -> HashMap<usize, Pl> {
     let mut plugins = HashMap::new();
     for (idx, entry) in WalkDir::new(dir)
         .into_iter()
@@ -37,7 +35,7 @@ fn load_plugins<Pl: IsPlugin>(
             let plugin = loader(sub_dir);
             match plugin {
                 Ok(p) => {
-                    plugins.insert(idx, Arc::new(Mutex::new(p)));
+                    plugins.insert(idx, p);
                 }
                 Err(e) => {
                     warn!("{}", e);
@@ -65,27 +63,27 @@ impl PluginManager {
         }
     }
 
-    pub async fn get_infos(&self) -> Vec<HashMap<usize, PluginInfo>> {
+    pub fn get_infos(&self) -> Vec<HashMap<usize, PluginInfo>> {
         let mut models = HashMap::new();
         let mut systems = HashMap::new();
         let mut controllers = HashMap::new();
 
         for (idx, model) in &self.models {
-            let model_info = model.lock().await.info().clone();
+            let model_info = model.info().clone();
             models.insert(*idx, model_info);
         }
         for (idx, system) in &self.systems {
-            let system_info = system.lock().await.info().clone();
+            let system_info = system.info().clone();
             systems.insert(*idx, system_info);
         }
         for (idx, controller) in &self.controllers {
-            let controller_info = controller.lock().await.info().clone();
+            let controller_info = controller.info().clone();
             controllers.insert(*idx, controller_info);
         }
         vec![models, systems, controllers]
     }
 
-    pub async fn install(
+    pub fn install(
         &mut self,
         plugin_type: PluginType,
         index: &usize,
@@ -94,7 +92,6 @@ impl PluginManager {
         match plugin_type {
             PluginType::Model => match self.models.get_mut(&index) {
                 Some(model) => {
-                    let mut model = model.lock().await;
                     if model.state() == &PluginState::Uninstalled {
                         match model.plugin().install(args) {
                             Ok(Ok(())) => {
@@ -126,7 +123,7 @@ impl PluginManager {
         }
     }
 
-    pub async fn uninstall(
+    pub fn uninstall(
         &mut self,
         plugin_type: PluginType,
         index: &usize,
@@ -135,7 +132,6 @@ impl PluginManager {
         match plugin_type {
             PluginType::Model => match self.models.get_mut(&index) {
                 Some(model) => {
-                    let mut model = model.lock().await;
                     if model.state() == &PluginState::Installed {
                         match model.plugin().uninstall(args) {
                             Ok(Ok(())) => {
@@ -167,14 +163,14 @@ impl PluginManager {
         }
     }
 
-    pub async fn uninstall_all(&mut self) -> Result<(), FrError> {
+    pub fn uninstall_all(&mut self) -> Result<(), FrError> {
         let keys = self.models.keys().map(|k| k.clone()).collect::<Vec<_>>();
         for idx in keys {
-            self.uninstall(PluginType::Model, &idx, &[""]).await?;
+            self.uninstall(PluginType::Model, &idx, &[""])?;
         }
         let keys = self.systems.keys().map(|k| k.clone()).collect::<Vec<_>>();
         for idx in keys {
-            self.uninstall(PluginType::System, &idx, &[""]).await?;
+            self.uninstall(PluginType::System, &idx, &[""])?;
         }
         let keys = self
             .controllers
@@ -182,19 +178,18 @@ impl PluginManager {
             .map(|k| k.clone())
             .collect::<Vec<_>>();
         for idx in keys {
-            self.uninstall(PluginType::Controller, &idx, &[""]).await?;
+            self.uninstall(PluginType::Controller, &idx, &[""])?;
         }
         Ok(())
     }
 
-    pub async fn get_model(&mut self, index: &usize) -> Option<Arc<Mutex<AerodynamicModel>>> {
+    pub fn get_model(&mut self, index: &usize) -> Option<&AerodynamicModel> {
         match self.models.get_mut(&index) {
             Some(model) => {
-                let model_guard = model.lock().await;
-                if model_guard.state() == &PluginState::Installed {
-                    Some(model.clone())
+                if model.state() == &PluginState::Installed {
+                    Some(model)
                 } else {
-                    warn!("Model {} must be installed", model_guard.info().name);
+                    warn!("Model {} must be installed", model.info().name);
                     None
                 }
             }

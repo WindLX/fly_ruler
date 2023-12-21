@@ -1,5 +1,5 @@
 pub(crate) mod matrix;
-pub mod plant;
+pub mod plane;
 pub(crate) mod sync;
 pub(crate) mod vector;
 

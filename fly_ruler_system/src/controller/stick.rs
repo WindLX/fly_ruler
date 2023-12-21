@@ -1,5 +1,5 @@
 use fly_ruler_utils::{
-    command_channel, plant_model::Control, Command, CommandReceiver, CommandSender, IsController,
+    command_channel, plane_model::Control, Command, CommandReceiver, CommandSender, IsController,
 };
 use log::{error, info, trace};
 use std::sync::Arc;

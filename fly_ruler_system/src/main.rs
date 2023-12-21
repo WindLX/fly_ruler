@@ -41,7 +41,7 @@ async fn main() {
     };
 
     let mut core = Core::new();
-    let r = core.push_plant(model.clone(), core_init_cfg).await;
+    let r = core.push_plane(model.clone(), core_init_cfg).await;
     match r {
         Ok(_) => {}
         Err(e) => {

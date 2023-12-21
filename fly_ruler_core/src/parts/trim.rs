@@ -1,19 +1,20 @@
 use crate::{
     algorithm::nelder_mead::*,
-    parts::{
-        basic::clamp,
-        flight::{Atmos, MechanicalModel},
-    },
+    parts::flight::{Atmos, MechanicalModel},
 };
 use fly_ruler_utils::{
     error::FatalCoreError,
-    plant_model::{
+    plane_model::{
         Control, ControlLimit, FlightCondition, MechanicalModelInput, State, StateExtend,
     },
     Vector,
 };
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 /// alpha is radians
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -111,7 +112,7 @@ impl TrimOutput {
 /// Trim aircraft to desired altitude and velocity
 /// fi_flag: true means hifi model
 pub fn trim(
-    plant: Arc<std::sync::Mutex<MechanicalModel>>,
+    plant: Arc<Mutex<MechanicalModel>>,
     trim_target: TrimTarget,
     trim_init: Option<TrimInit>,
     ctrl_limit: ControlLimit,
@@ -176,7 +177,7 @@ pub fn trim(
 
 fn trim_func(
     x: &Vector,
-    plant: Arc<std::sync::Mutex<MechanicalModel>>,
+    plane: Arc<Mutex<MechanicalModel>>,
     ctrl_limit: ControlLimit,
     output_vec: Rc<RefCell<Vec<f64>>>,
     globals: &Vec<f64>,
@@ -191,38 +192,33 @@ fn trim_func(
 
     // Implementing limits:
     // Thrust limits
-    let thrust = clamp(
-        x[0],
-        ctrl_limit.thrust_cmd_limit_top,
+    let thrust = x[0].clamp(
         ctrl_limit.thrust_cmd_limit_bottom,
+        ctrl_limit.thrust_cmd_limit_top,
     );
 
     // Elevator limits
-    let elevator = clamp(
-        x[1],
-        ctrl_limit.ele_cmd_limit_top,
+    let elevator = x[1].clamp(
         ctrl_limit.ele_cmd_limit_bottom,
+        ctrl_limit.ele_cmd_limit_top,
     );
 
     // Aileron limits
-    let alileron = clamp(
-        x[2],
-        ctrl_limit.ail_cmd_limit_top,
+    let alileron = x[2].clamp(
         ctrl_limit.ail_cmd_limit_bottom,
+        ctrl_limit.ail_cmd_limit_top,
     );
 
     // Rudder limits
-    let rudder = clamp(
-        x[3],
-        ctrl_limit.rud_cmd_limit_top,
+    let rudder = x[3].clamp(
         ctrl_limit.rud_cmd_limit_bottom,
+        ctrl_limit.rud_cmd_limit_top,
     );
 
     // Angle of Attack limits
-    let alpha = clamp(
-        x[4],
-        ctrl_limit.alpha_limit_top.to_radians(),
+    let alpha = x[4].clamp(
         ctrl_limit.alpha_limit_bottom.to_radians(),
+        ctrl_limit.alpha_limit_top.to_radians(),
     );
 
     // Calculating qbar, ps and steady state leading edge flap deflection:
@@ -231,7 +227,7 @@ fn trim_func(
     let mut lef = 1.38 * alpha.to_degrees() - 9.05 * qbar / ps + 1.45;
 
     // Verify that the calculated leading edge flap have not been violated.
-    lef = clamp(lef, 25.0, 0.0);
+    lef = lef.clamp(0.0, 25.0);
 
     let state = [
         0.0,              // npos (ft)
@@ -267,7 +263,7 @@ fn trim_func(
         10.0,
     ]);
 
-    let output = plant
+    let output = plane
         .lock()
         .unwrap()
         .step(&MechanicalModelInput::new(state, control, lef))?;
@@ -294,10 +290,9 @@ mod core_trim_tests {
         },
     };
     use fly_ruler_plugin::{AerodynamicModel, IsPlugin};
-    use fly_ruler_utils::{logger::test_logger_init, plant_model::ControlLimit};
+    use fly_ruler_utils::{logger::test_logger_init, plane_model::ControlLimit};
     use log::debug;
     use std::sync::Arc;
-    use tokio::sync::Mutex;
 
     const CL: ControlLimit = ControlLimit {
         thrust_cmd_limit_top: 19000.0,
@@ -328,10 +323,7 @@ mod core_trim_tests {
         let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
-        let model = Arc::new(Mutex::new(model));
-        let plant = Arc::new(std::sync::Mutex::new(
-            tokio_test::block_on(MechanicalModel::new(model.clone())).unwrap(),
-        ));
+        let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
@@ -348,10 +340,7 @@ mod core_trim_tests {
         debug!("{:#?} {:#?}", nm_result.x, nm_result.fval);
         debug!("{:#?} {:#?}", nm_result.iter, nm_result.fun_evals);
 
-        let model = Arc::into_inner(model).unwrap();
-        let res = tokio_test::block_on(model.lock())
-            .plugin()
-            .uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall(&Vec::<String>::new());
         assert!(matches!(res, Ok(Ok(_))));
     }
 }
