@@ -3,10 +3,6 @@ use std::error::Error;
 /// fatal error which may cause critical problem and must be transmit to the fly_ruler system level
 #[derive(Debug)]
 pub enum FrError {
-    /// The system has been used in an unsupported way
-    Unsupported(String),
-    /// An unexpected bug has happened, please contact the author
-    ReportableBug(String),
     /// A read or write error has happened when interacting with file system
     Io(std::io::Error),
     /// Invalid cfg format
@@ -35,8 +31,6 @@ impl std::error::Error for FrError {
 impl std::fmt::Display for FrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unsupported(s) => write!(f, "Unsupported: {}", s),
-            Self::ReportableBug(s) => write!(f, "ReportableBug: {}", s),
             Self::Io(e) => write!(f, "Io: {}", e),
             Self::Cfg(e) => write!(f, "Cfg: {}", e),
             Self::Core(e) => write!(f, "Core: {}", e),
@@ -80,27 +74,34 @@ impl std::fmt::Display for PluginInner {
 /// fatal error which occured in fly_ruler_core
 /// Model: error occured in extern model
 #[derive(Debug)]
-pub struct FatalCoreError {
-    source: FatalPluginError,
+pub enum FatalCoreError {
+    Controller(usize),
+    Plugin(FatalPluginError),
 }
 
 impl FatalCoreError {}
 
 impl std::error::Error for FatalCoreError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.source)
+        match self {
+            Self::Controller(_) => None,
+            Self::Plugin(e) => Some(e),
+        }
     }
 }
 
 impl std::fmt::Display for FatalCoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.source().unwrap())
+        match self {
+            Self::Controller(e) => write!(f, "controller for plane {} not found", e),
+            Self::Plugin(_) => write!(f, "{}", self.source().unwrap()),
+        }
     }
 }
 
 impl From<FatalPluginError> for FatalCoreError {
     fn from(value: FatalPluginError) -> Self {
-        Self { source: value }
+        Self::Plugin(value)
     }
 }
 

@@ -80,12 +80,12 @@ impl ControllerBlock {
                     control_input[i + 1] += disturbance(self.deflection[i], t);
                 }
             }
-            if control_input[i] < 1e-10 {
-                let last = self.actuators[i].last();
-                control_input[i] = self.actuators[i].update(last, t)
-            } else {
-                control_input[i] = self.actuators[i].update(control_input[i], t)
-            }
+            // if control_input[i] < 1e-10 {
+            //     let last = self.actuators[i].last();
+            //     control_input[i] = self.actuators[i].update(last, t)
+            // } else {
+            control_input[i] = self.actuators[i].update(control_input[i], t)
+            // }
         }
         trace!(
             "[t:{:.2}] ControllerBlock: correctional control input: \n{}",
