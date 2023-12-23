@@ -1,10 +1,10 @@
+use std::thread::JoinHandle;
+
 use fly_ruler_utils::{
     command_channel, plane_model::Control, Command, CommandReceiver, CommandSender, IsController,
 };
-use log::{error, info, trace};
-use std::sync::Arc;
+use log::{info, trace};
 use stick::{Event, Listener};
-use tokio::sync::Mutex;
 
 pub struct StickController {
     id: usize,
@@ -18,7 +18,6 @@ impl StickController {
         let lis = Listener::default();
         let controller = lis.await;
         info!("stick {id} connected");
-        // let stick = Arc::new(Mutex::new(Some(controller)));
         let stick = Some(controller);
         let (tx, rx) = command_channel(init);
         Self {
@@ -29,15 +28,14 @@ impl StickController {
         }
     }
 
-    pub async fn send(&mut self) -> Command {
-        // let mut c = self.stick.lock().await;
+    async fn send(&mut self) -> Command {
         let mut events = vec![0.0, 0.0, 0.0, 0.0];
-        for i in 0..4 {
+        for _ in 0..4 {
             if let Some(c) = &mut self.stick {
                 let e = c.await;
                 trace!("event: {e}");
                 match e {
-                    Event::Exit(_) | Event::Disconnect => {
+                    Event::Exit(true) | Event::Disconnect | Event::ActionB(true) => {
                         info!("{} exit", self.id);
                         self.sender.send(Command::Exit).await;
                         return Command::Exit;
@@ -61,6 +59,23 @@ impl StickController {
         let command = Command::Control(Control::from(events), -1);
         self.sender.send(command.clone()).await;
         command
+    }
+
+    pub fn thread_build(mut controller: Self) -> JoinHandle<()> {
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let _control_task = rt.block_on(async move {
+                loop {
+                    let c = controller.send().await;
+                    if let Command::Exit = c {
+                        break;
+                    }
+                }
+            });
+        })
     }
 }
 

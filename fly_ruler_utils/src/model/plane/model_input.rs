@@ -1,9 +1,8 @@
 use super::{control::Control, state::State};
-use serde::{Deserialize, Serialize};
 
 /// The Input of the Model
 /// d_lef (deg) delta of leading edge flap
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MechanicalModelInput {
     pub state: State,
     pub control: Control,

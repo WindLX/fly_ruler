@@ -1,5 +1,7 @@
 use super::ToCsv;
+use crate::generated::state::State as StateGen;
 use crate::Vector;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 /// What the `state` represent
@@ -27,7 +29,7 @@ pub struct State {
 }
 
 impl ToCsv for State {
-    fn titles(&self) -> String {
+    fn titles() -> String {
         [
             "npos(ft)",
             "epos(ft)",
@@ -42,7 +44,7 @@ impl ToCsv for State {
             "q(rad/s)",
             "r(rad/s)",
         ]
-        .join(", ")
+        .join(",")
     }
 }
 
@@ -149,5 +151,31 @@ impl From<Vector> for State {
 impl Into<Vector> for State {
     fn into(self) -> Vector {
         Vector::from(<State as Into<Vec<f64>>>::into(self))
+    }
+}
+
+impl Into<StateGen> for State {
+    fn into(self) -> StateGen {
+        StateGen {
+            npos: self.npos,
+            epos: self.epos,
+            altitude: self.altitude,
+            phi: self.phi,
+            theta: self.theta,
+            psi: self.psi,
+            velocity: self.velocity,
+            alpha: self.alpha,
+            beta: self.beta,
+            p: self.p,
+            q: self.q,
+            r: self.r,
+        }
+    }
+}
+
+impl State {
+    pub fn encode(&self) -> Vec<u8> {
+        let c: StateGen = Into::<StateGen>::into(*self);
+        c.encode_to_vec()
     }
 }

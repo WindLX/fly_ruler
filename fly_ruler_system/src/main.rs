@@ -1,108 +1,51 @@
-use fly_ruler_core::{
-    algorithm::nelder_mead::NelderMeadOptions,
-    core::{Core, CoreInitCfg},
-    parts::trim::TrimTarget,
-};
-use fly_ruler_plugin::{AerodynamicModel, IsPlugin, PluginManager, PluginType};
-use fly_ruler_system::{config::ConfigManager, controller::StickController};
+use fly_ruler_plugin::PluginInfo;
+use fly_ruler_system::{controller::StickController, system::System, viewer::CSVViewer};
 use fly_ruler_utils::{
-    plant_model::{Control, ControlLimit},
-    Command, IsController,
+    error::FrError, plane_model::Control, IsController, IsViewer, OutputReceiver,
+    ViewerCancellationToken,
 };
-use log::{error, info};
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use std::collections::HashMap;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     env_logger::builder().format_timestamp(None).init();
-    // env_logger::init();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
-    let config_manager = ConfigManager::new("../config");
-    let core_init_cfg = config_manager.load_core_init().unwrap();
-    info!("Core Init Config:\n{}", core_init_cfg);
+    let stick = rt.block_on(async { StickController::new(0, Control::default()).await });
+    let receiver = stick.get_receiver();
+    let control_thread = StickController::thread_build(stick);
 
-    let mut plugin_manager = PluginManager::new("../plugins");
-    let r = plugin_manager
-        .install(
-            PluginType::Model,
-            0,
-            vec![Box::new("../plugins/model/f16_model/data")],
-        )
-        .await;
+    let cancellation_token = ViewerCancellationToken::new();
+    let mut csv = CSVViewer::new("..\\Plane0.csv");
 
-    let model = plugin_manager.get_model(0).await;
-    let model = match model {
-        Some(m) => m,
-        None => {
-            info!("System exit");
-            return;
-        }
-    };
-
-    let mut core = Core::new();
-    let r = core.push_plane(model.clone(), core_init_cfg).await;
-    match r {
-        Ok(_) => {}
-        Err(e) => {
-            error!("{}", e);
-            let model = Arc::into_inner(model).unwrap();
-            model
-                .lock()
-                .await
-                .plugin()
-                .uninstall(Vec::new())
-                .unwrap()
-                .unwrap();
-            return;
-        }
-    }
-
-    let mut controller = StickController::new(0, Control::default()).await;
-    let rx = controller.get_receiver();
-
-    // let h1 = tokio::spawn(async move {
-    //     loop {
-    //         let c = controller.clone().send().await;
-    //         dbg!(&c);
-    //         if let Command::Exit = c {
-    //             break;
-    //         }
-    //     }
-    // });
-    core.start().await;
-
-    let h2 = tokio::spawn(async move {
-        loop {
-            let command = rx.clone().try_receive().await;
-            match command {
-                Command::Control(control, _) => {
-                    info!("\n{}", &control);
-                    let r = core.step(&[control]).await;
-                    info!("\n{}", &r.unwrap().unwrap().get(&0).unwrap());
-                }
-                Command::Extra(s) => {
-                    let r = core.step(&[Control::default()]).await;
-                    // dbg!(&r.unwrap().unwrap().get(&0));
-                }
-                Command::Exit => break,
-            }
-        }
+    let mut system = rt.block_on(async {
+        let mut system = System::builder(Box::new(|_err: FrError| {}));
+        system
+            .set_dir("..\\config", "..\\plugins")
+            .init(Some(|_m: &HashMap<usize, PluginInfo>| {
+                vec![(0, vec!["..\\plugins\\model\\f16_model\\data".to_string()])]
+            }))
+            .await
+            .set_controller(move |_m| {
+                let mut h = HashMap::new();
+                h.insert(0_usize, receiver);
+                h
+            })
+            .await
+            .set_viewer(0, |m: OutputReceiver| csv.set_receiver(m))
+            .await;
+        system
     });
 
-    // let r = tokio::join!(h1);
-    loop {
-        let r = controller.send().await;
-        if let Command::Exit = r {
-            break;
-        }
-    }
-    let model = Arc::into_inner(model).unwrap();
-    model
-        .lock()
-        .await
-        .plugin()
-        .uninstall(Vec::new())
-        .unwrap()
-        .unwrap();
+    let viewer_thread = CSVViewer::thread_build(csv, cancellation_token.clone());
+
+    rt.block_on(async move {
+        system.run(false).await.stop();
+        cancellation_token.cancel();
+    });
+
+    control_thread.join().unwrap();
+    viewer_thread.join().unwrap();
 }

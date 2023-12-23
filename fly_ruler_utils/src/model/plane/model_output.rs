@@ -1,9 +1,8 @@
 use super::{state::State, state_extend::StateExtend};
-use serde::{Deserialize, Serialize};
 
 /// The Ouput of the Model
 /// the value's index in `state_dot` is as same of the `state` in `ModelInput`
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct MechanicalModelOutput {
     pub state_dot: State,
     pub state_extend: StateExtend,

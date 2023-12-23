@@ -1,6 +1,11 @@
-use crate::plane_model::{Control, State};
+use crate::{
+    generated::core_output::{CoreOutput as CoreOutputGen, ViewMessage},
+    plane_model::{Control, CoreOutput},
+};
+use prost::Message;
 use std::sync::Arc;
-use tokio::sync::{mpsc, watch, Mutex};
+use tokio::sync::{broadcast, watch, Mutex};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone)]
 pub enum Command {
@@ -11,44 +16,35 @@ pub enum Command {
 
 /// Create a state channel
 /// this method is a wrapper of mpsc which means multi-producer, single-consumer
-pub fn state_channel(buffer: usize) -> (StateSender, StateReceiver) {
-    let (sender, receiver) = mpsc::channel(buffer);
-    let sender = StateSender::new(Arc::new(Mutex::new(sender)));
-    let receiver = StateReceiver::new(Arc::new(Mutex::new(receiver)));
+pub fn state_channel(buffer: usize) -> (OutputSender, OutputReceiver) {
+    let (sender, receiver) = broadcast::channel(buffer);
+    let sender = OutputSender::new(Arc::new(Mutex::new(sender)));
+    let receiver = OutputReceiver::new(Arc::new(Mutex::new(receiver)));
     (sender, receiver)
 }
 
 /// The sender end of state channel, which advised to be owned by plane model
 #[derive(Clone)]
-pub struct StateSender(Arc<Mutex<mpsc::Sender<State>>>);
+pub struct OutputSender(Arc<Mutex<broadcast::Sender<(f64, CoreOutput)>>>);
 
-impl StateSender {
-    pub(crate) fn new(r: Arc<Mutex<mpsc::Sender<State>>>) -> Self {
+impl OutputSender {
+    pub(crate) fn new(r: Arc<Mutex<broadcast::Sender<(f64, CoreOutput)>>>) -> Self {
         Self(r)
     }
 
     /// send plane state data to channel, waiting until there is capacity
-    pub async fn send(&mut self, state: State) {
+    pub async fn send(&mut self, output: (f64, CoreOutput)) {
         let guard = self.0.lock().await;
-        let _ = guard.send(state).await;
-    }
-
-    /// Attempts to immediately send a message on this Sender
-    /// This method differs from [send] by returning immediately if the channel's buffer is full
-    /// or no receiver is waiting to acquire some data.
-    /// Compared with [send], this function has two failure cases instead of one (one for disconnection, one for a full buffer).
-    pub async fn try_send(&mut self, state: State) {
-        let guard = self.0.lock().await;
-        let _ = guard.try_send(state);
+        let _ = guard.send(output);
     }
 }
 
 /// The receiver end of state channel, which advised to be owned by controller or viewer
 #[derive(Clone)]
-pub struct StateReceiver(Arc<Mutex<mpsc::Receiver<State>>>);
+pub struct OutputReceiver(Arc<Mutex<broadcast::Receiver<(f64, CoreOutput)>>>);
 
-impl StateReceiver {
-    pub(crate) fn new(r: Arc<Mutex<mpsc::Receiver<State>>>) -> Self {
+impl OutputReceiver {
+    pub(crate) fn new(r: Arc<Mutex<broadcast::Receiver<(f64, CoreOutput)>>>) -> Self {
         Self(r)
     }
 
@@ -59,9 +55,9 @@ impl StateReceiver {
     /// The channel is closed when all senders have been dropped.
     /// If there are no messages in the channel's buffer, but the channel has not yet been closed,
     /// this method will sleep until a message is sent or the channel is closed.
-    pub async fn receive(&mut self) -> Option<State> {
+    pub async fn receive(&mut self) -> Option<(f64, CoreOutput)> {
         let mut guard = self.0.lock().await;
-        guard.recv().await
+        guard.recv().await.ok()
     }
 
     /// Tries to receive the next value for this receiver.
@@ -69,7 +65,7 @@ impl StateReceiver {
     /// but there are still outstanding [senders] or [permits].
     /// This method returns the [Disconnected] error if the channel is currently empty,
     /// and there are no outstanding [senders] or [permits].
-    pub async fn try_receive(&mut self) -> Option<State> {
+    pub async fn try_receive(&mut self) -> Option<(f64, CoreOutput)> {
         let mut guard = self.0.lock().await;
         guard.try_recv().ok()
     }
@@ -133,4 +129,38 @@ impl CommandReceiver {
 
 pub trait IsController {
     fn get_receiver(&self) -> CommandReceiver;
+}
+
+pub struct ViewerCancellationToken(Arc<CancellationToken>);
+
+impl ViewerCancellationToken {
+    pub fn new() -> Self {
+        Self(Arc::new(CancellationToken::new()))
+    }
+
+    pub fn cancel(&self) {
+        self.0.cancel();
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.is_cancelled()
+    }
+}
+
+impl Clone for ViewerCancellationToken {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+pub trait IsViewer {
+    fn set_receiver(&mut self, receiver: OutputReceiver);
+}
+
+pub fn encode_view_message(time: f64, output: &CoreOutput) -> Vec<u8> {
+    let msg = ViewMessage {
+        time,
+        output: Some(Into::<CoreOutputGen>::into(*output)),
+    };
+    msg.encode_to_vec()
 }

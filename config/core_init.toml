@@ -1,3 +1,7 @@
+time_scale = 1.0             # optional
+sample_time = 100            # ms optional
+deflection = [0.0, 0.0, 0.0] # ele(deg) ail(deg) rud(deg) | optional
+
 [trim_target]
 altitude = 15000 # ft
 velocity = 500   # ft/s
@@ -6,16 +10,10 @@ velocity = 500   # ft/s
 alpha = 8.49                           # deg
 control = [5000.0, -0.09, 0.01, -0.01] # thrust(lbs) ele(deg) ail(deg) rud(deg)
 
+flight_condition = "WingLevel" # "WingLevel" | "Turning" | "PullUp" | "Roll" | optional
+
 [optim_options] # optional
 max_fun_evals = 50000
 max_iter = 10000
 tol_fun = 1e-10
 tol_x = 1e-10
-
-flight_condition = "WingLevel" # "WingLevel" | "Turning" | "PullUp" | "Roll" | optional
-
-deflection = [0.0, 0.0, 0.0] # ele(deg) ail(deg) rud(deg) | optional
-
-time_scale = 5.0 # optional
-
-sample_time = 100 # ms optional

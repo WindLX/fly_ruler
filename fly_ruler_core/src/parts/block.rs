@@ -438,7 +438,7 @@ mod core_parts_tests {
     }
 
     #[test]
-    fn test_plant() {
+    fn test_plane() {
         let (model, result) = test_core_init();
         // set_time_scale(5.0).unwrap();
 

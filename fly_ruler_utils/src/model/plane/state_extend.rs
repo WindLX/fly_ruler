@@ -1,5 +1,7 @@
 use super::ToCsv;
+use crate::generated::state_extend::StateExtend as StateExtendGen;
 use crate::Vector;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 /// What the `state_extend` represent
@@ -18,7 +20,7 @@ pub struct StateExtend {
 }
 
 impl ToCsv for StateExtend {
-    fn titles(&self) -> String {
+    fn titles() -> String {
         [
             "nx(g)",
             "ny(g)",
@@ -27,7 +29,7 @@ impl ToCsv for StateExtend {
             "qbar(lb/ft ft)",
             "ps(lb/ft ft)",
         ]
-        .join(", ")
+        .join(",")
     }
 }
 
@@ -100,5 +102,25 @@ impl From<Vector> for StateExtend {
 impl Into<Vector> for StateExtend {
     fn into(self) -> Vector {
         Vector::from(<StateExtend as Into<Vec<f64>>>::into(self))
+    }
+}
+
+impl Into<StateExtendGen> for StateExtend {
+    fn into(self) -> StateExtendGen {
+        StateExtendGen {
+            nx: self.nx,
+            ny: self.ny,
+            nz: self.nz,
+            mach: self.mach,
+            qbar: self.qbar,
+            ps: self.ps,
+        }
+    }
+}
+
+impl StateExtend {
+    pub fn encode(&self) -> Vec<u8> {
+        let c: StateExtendGen = Into::<StateExtendGen>::into(*self);
+        c.encode_to_vec()
     }
 }

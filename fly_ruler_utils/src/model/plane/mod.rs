@@ -15,12 +15,12 @@ pub use state::*;
 pub use state_extend::*;
 
 pub trait ToCsv: Into<Vec<f64>> + Copy {
-    fn titles(&self) -> String;
+    fn titles() -> String;
     fn data_string(&self) -> String {
         let v: Vec<String> = Into::<Vec<f64>>::into(*self)
             .iter()
             .map(|d| d.to_string())
             .collect();
-        v.join(", ")
+        v.join(",")
     }
 }

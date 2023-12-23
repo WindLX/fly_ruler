@@ -38,8 +38,8 @@ impl Actuator {
         let r_4 = r_3.clamp(-self.rate_saturation, self.rate_saturation);
         let r_5 = self.integrator.integrate(r_4, t);
         self.feedback = r_5;
-        let r_6 = r_5;
-        // let r_6 = r_5.clamp(self.command_saturation_bottom, self.command_saturation_top);
+        // let r_6 = r_5;
+        let r_6 = r_5.clamp(self.command_saturation_bottom, self.command_saturation_top);
         r_6
     }
 
@@ -52,9 +52,9 @@ impl Actuator {
         self.integrator.reset();
     }
 
-    pub fn last(&self) -> f64 {
-        self.last
-    }
+    // pub fn last(&self) -> f64 {
+    //     self.last
+    // }
 }
 
 #[cfg(test)]

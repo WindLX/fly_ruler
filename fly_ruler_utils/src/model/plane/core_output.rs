@@ -1,4 +1,9 @@
 use super::{control::Control, state::State, state_extend::StateExtend, ToCsv};
+use crate::generated::control::Control as ControlGen;
+use crate::generated::core_output::CoreOutput as CoreOutputGen;
+use crate::generated::state::State as StateGen;
+use crate::generated::state_extend::StateExtend as StateExtendGen;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -21,14 +26,14 @@ impl CoreOutput {
 }
 
 impl ToCsv for CoreOutput {
-    fn titles(&self) -> String {
+    fn titles() -> String {
         [
-            self.state.titles(),
-            self.control.titles(),
+            State::titles(),
+            Control::titles(),
             "d_lef(deg)".to_string(),
-            self.state_extend.titles(),
+            StateExtend::titles(),
         ]
-        .join(", ")
+        .join(",")
     }
 }
 
@@ -48,5 +53,23 @@ impl std::fmt::Display for CoreOutput {
         writeln!(f, "Control:\n{}", self.control)?;
         writeln!(f, "LEF:  {:.2}", self.d_lef)?;
         writeln!(f, "Extend: \n{}", self.state_extend)
+    }
+}
+
+impl Into<CoreOutputGen> for CoreOutput {
+    fn into(self) -> CoreOutputGen {
+        CoreOutputGen {
+            state: Some(Into::<StateGen>::into(self.state)),
+            state_extend: Some(Into::<StateExtendGen>::into(self.state_extend)),
+            control: Some(Into::<ControlGen>::into(self.control)),
+            d_lef: self.d_lef,
+        }
+    }
+}
+
+impl CoreOutput {
+    pub fn encode(&self) -> Vec<u8> {
+        let c: CoreOutputGen = Into::<CoreOutputGen>::into(*self);
+        c.encode_to_vec()
     }
 }

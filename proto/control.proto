@@ -1,0 +1,9 @@
+syntax = "proto3";
+package control;
+
+message Control {
+  double thrust = 1;
+  double elevator = 2;
+  double aileron = 3;
+  double rudder = 4;
+}

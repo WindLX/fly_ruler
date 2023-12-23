@@ -1,5 +1,7 @@
 use super::ToCsv;
+use crate::generated::control::Control as ControlGen;
 use crate::Vector;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::ops::{Index, IndexMut};
 
@@ -15,14 +17,14 @@ pub struct Control {
 }
 
 impl ToCsv for Control {
-    fn titles(&self) -> String {
+    fn titles() -> String {
         [
             "thrust(lbs)",
             "elevator(deg)",
             "aileron(deg)",
             "rudder(deg)",
         ]
-        .join(", ")
+        .join(",")
     }
 }
 
@@ -116,5 +118,23 @@ impl From<Vector> for Control {
 impl Into<Vector> for Control {
     fn into(self) -> Vector {
         Vector::from(<Control as Into<Vec<f64>>>::into(self))
+    }
+}
+
+impl Into<ControlGen> for Control {
+    fn into(self) -> ControlGen {
+        ControlGen {
+            thrust: self.thrust,
+            elevator: self.elevator,
+            aileron: self.aileron,
+            rudder: self.rudder,
+        }
+    }
+}
+
+impl Control {
+    pub fn encode(&self) -> Vec<u8> {
+        let c: ControlGen = Into::<ControlGen>::into(*self);
+        c.encode_to_vec()
     }
 }

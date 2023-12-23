@@ -1,23 +1,23 @@
 use crate::config::ConfigManager;
 use fly_ruler_core::core::Core;
 use fly_ruler_plugin::{PluginInfo, PluginManager, PluginType};
-use fly_ruler_utils::{
-    error::FrError,
-    plane_model::{Control, CoreOutput},
-    StateReceiver,
+use fly_ruler_utils::{error::FrError, CommandReceiver, OutputReceiver};
+use log::{error, info};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    process,
 };
-use log::{error, info, warn};
-use std::{collections::HashMap, path::PathBuf, process, time::Duration};
 
 pub struct System {
     config_root: PathBuf,
     plugin_root: PathBuf,
     config_manager: Option<ConfigManager>,
     plugin_manager: Option<PluginManager>,
-    state_receivers: HashMap<usize, StateReceiver>,
-    control_tasks: Vec<tokio::task::JoinHandle<Result<(), FrError>>>,
+    state_receivers: HashMap<usize, OutputReceiver>,
+    control_receivers: HashMap<usize, CommandReceiver>,
     error_handler: Box<dyn Fn(FrError)>,
-    core: Core,
+    core: Option<Core>,
 }
 
 impl System {
@@ -28,30 +28,28 @@ impl System {
             config_manager: None,
             plugin_manager: None,
             state_receivers: HashMap::new(),
-            control_tasks: Vec::new(),
-            core: Core::new(),
+            control_receivers: HashMap::new(),
+            core: None,
             error_handler,
         }
     }
 
-    pub fn set_dir(&mut self, config_root_path: PathBuf, plugin_root_path: PathBuf) -> &mut Self {
-        self.config_root = config_root_path;
-        self.plugin_root = plugin_root_path;
+    pub fn set_dir<P: AsRef<Path>>(
+        &mut self,
+        config_root_path: P,
+        plugin_root_path: P,
+    ) -> &mut Self {
+        self.config_root = PathBuf::from(config_root_path.as_ref());
+        self.plugin_root = PathBuf::from(plugin_root_path.as_ref());
         self
     }
 
-    pub async fn init<'h, 's: 'h>(
-        &'s mut self,
+    pub async fn init<'s>(
+        &mut self,
         model_handler: Option<
-            impl FnOnce(&HashMap<usize, PluginInfo>) -> &'h [(usize, &'h [&str])],
+            impl FnOnce(&HashMap<usize, PluginInfo>) -> Vec<(usize, Vec<String>)>,
         >,
-        control_handler: Option<
-            impl FnOnce(&HashMap<usize, PluginInfo>) -> &'h [(usize, &'h [&str])],
-        >,
-        system_handler: Option<
-            impl FnOnce(&HashMap<usize, PluginInfo>) -> &'h [(usize, &'h [&str])],
-        >,
-    ) -> &'s mut Self {
+    ) -> &mut Self {
         self.config_manager = Some(ConfigManager::new(&self.config_root));
         self.plugin_manager = Some(PluginManager::new(&self.plugin_root));
 
@@ -59,34 +57,27 @@ impl System {
         if let Err(e) = core_init_cfg {
             error!("{}", e);
             (self.error_handler)(e);
-            self.err_stop().await;
+            self.err_stop();
         }
         let core_init_cfg = core_init_cfg.unwrap();
+        let mut core = Core::new(core_init_cfg);
 
-        let infos = self.plugin_manager.as_ref().unwrap().get_infos().await;
-
-        if let Some(h) = control_handler {
-            let control_plugins = h(&infos[0]);
-        }
-
-        if let Some(h) = system_handler {
-            let system_plugins = h(&infos[0]);
-        }
+        let infos = self.plugin_manager.as_ref().unwrap().get_infos();
 
         if let Some(h) = model_handler {
             let model_plugins = h(&infos[0]);
             for i in model_plugins {
                 let p = self.plugin_manager.as_mut().unwrap();
-                let r = p.install(PluginType::Model, &i.0, i.1).await;
+                let r = p.install(PluginType::Model, &i.0, &i.1);
                 if let Err(e) = r {
                     error!("{}", e);
                     (self.error_handler)(e);
-                    self.err_stop().await;
+                    self.err_stop();
                 }
 
-                let model = p.get_model(&i.0).await;
+                let model = p.get_model(&i.0);
                 if let Some(m) = model {
-                    let state_receiver = self.core.push_plane(i.0, m, core_init_cfg).await;
+                    let state_receiver = core.push_plane(i.0, m).await;
                     match state_receiver {
                         Ok(state_receiver) => {
                             self.state_receivers.insert(i.0, state_receiver);
@@ -94,63 +85,100 @@ impl System {
                         Err(e) => {
                             error!("{}", e);
                             (self.error_handler)(e);
-                            self.err_stop().await;
+                            self.err_stop();
                         }
                     }
                 }
             }
         }
+        self.core = Some(core);
 
         self
     }
 
-    pub async fn set_controller<'h, 's: 'h>(
-        &'s mut self,
-        handler: impl FnOnce(
-            &Vec<(usize, PluginInfo)>,
-            &HashMap<usize, PluginInfo>,
-        ) -> (usize, &'h [usize]),
-    ) {
-    }
-
-    pub async fn run(
+    pub async fn set_controller(
         &mut self,
-        step_handler: impl Fn(Duration, &HashMap<usize, CoreOutput>) -> bool,
+        handler: impl FnOnce(&Vec<(usize, PluginInfo)>) -> HashMap<usize, CommandReceiver>,
     ) -> &mut Self {
-        self.core.start().await;
-        loop {
-            let output = self.core.step(&[]).await;
-            match output {
-                Err(e) => {
-                    error!("{}", e);
-                    (self.error_handler)(e);
-                    self.err_stop().await;
-                }
-                Ok(output) => match output {
-                    Err(e) => {
-                        warn!("Core: {e}");
-                    }
-                    Ok(output) => {
-                        if step_handler(self.core.get_time().await, &output) {
-                            break;
+        match &mut self.core {
+            Some(core) => {
+                let ids = core
+                    .get_ids()
+                    .iter()
+                    .map(|(p, k)| match &self.plugin_manager {
+                        Some(m) => {
+                            let h = (*p, m.get_infos()[0].get(k).unwrap().clone());
+                            info!("set controller for plane {}", p);
+                            h
                         }
-                    }
-                },
+                        None => {
+                            error!("Sys: plugin manager is not initialized");
+                            self.err_stop()
+                        }
+                    })
+                    .collect::<Vec<(usize, PluginInfo)>>();
+                self.control_receivers = handler(&ids);
+                self
+            }
+            None => {
+                error!("Sys: core is not initialized");
+                self.err_stop()
             }
         }
-        self
     }
 
-    async fn err_stop(&mut self) -> ! {
+    pub async fn set_viewer(
+        &mut self,
+        id: usize,
+        handler: impl FnOnce(OutputReceiver),
+    ) -> &mut Self {
+        match self.state_receivers.get(&id) {
+            Some(m) => {
+                handler(m.clone());
+                info!("set viewer for plane {id}");
+                self
+            }
+            None => {
+                error!("Sys: plane not found");
+                self.err_stop()
+            }
+        }
+    }
+
+    pub async fn run(&mut self, is_block: bool) -> &mut Self {
+        match &mut self.core {
+            Some(core) => {
+                core.start().await;
+                let output = core.run(is_block, &self.control_receivers).await;
+                match output {
+                    Err(e) => {
+                        error!("{}", e);
+                        (self.error_handler)(e);
+                        self.err_stop();
+                    }
+                    Ok(_) => {
+                        info!("system running task fininshed");
+                        self
+                    }
+                }
+            }
+            None => {
+                error!("Sys: core is not initialized");
+                self.err_stop()
+            }
+        }
+    }
+
+    fn err_stop(&mut self) -> ! {
         let p = self.plugin_manager.as_mut().unwrap();
-        let _ = p.uninstall_all().await;
+        let _ = p.uninstall_all();
+        error!("Sys: system didn't exit successfully");
         process::exit(1)
     }
 
-    pub async fn stop(&mut self) -> ! {
+    pub fn stop(&mut self) {
         let p = self.plugin_manager.as_mut().unwrap();
-        let _ = p.uninstall_all().await;
-        info!("system exit successfully");
-        process::exit(0)
+        let _ = p.uninstall_all();
+        info!("system exited successfully");
     }
 }
