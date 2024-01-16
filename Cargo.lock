@@ -339,6 +339,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fly_ruler_extern"
+version = "0.1.0"
+
+[[package]]
+name = "fly_ruler_interface"
+version = "0.1.0"
+dependencies = [
+ "fly_ruler_utils",
+]
+
+[[package]]
 name = "fly_ruler_plugin"
 version = "0.1.0"
 dependencies = [
@@ -357,6 +368,7 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "fly_ruler_core",
+ "fly_ruler_interface",
  "fly_ruler_plugin",
  "fly_ruler_utils",
  "log",

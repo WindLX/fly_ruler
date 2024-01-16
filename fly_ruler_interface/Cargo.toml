@@ -1,0 +1,9 @@
+[package]
+name = "fly_ruler_interface"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fly_ruler_utils = { path = "../fly_ruler_utils" }

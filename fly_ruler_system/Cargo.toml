@@ -13,6 +13,7 @@ tokio = { version = "1.35.1", features = ["sync", "macros", "net"] }
 serde = { version = "1.0.193", features = ["derive"] }
 fly_ruler_utils = { path = "../fly_ruler_utils" }
 fly_ruler_plugin = { path = "../fly_ruler_plugin" }
+fly_ruler_interface = { path = "../fly_ruler_interface" }
 fly_ruler_core = { path = "../fly_ruler_core" }
 serde_json = "1.0.108"
 toml = "0.8.8"

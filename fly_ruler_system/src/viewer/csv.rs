@@ -45,7 +45,7 @@ impl CSVViewer {
                 .enable_all()
                 .build()
                 .unwrap();
-            let _viewer_task = rt.block_on(async move {
+            rt.block_on(async move {
                 let mut file = viewer.open();
                 loop {
                     if cancellation_token.is_cancelled() {
