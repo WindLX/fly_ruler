@@ -73,18 +73,18 @@ impl OutputReceiver {
 
 /// Create a command channel
 /// A single-producer, multi-consumer channel that only retains the last sent value.
-pub fn command_channel(init: Control) -> (CommandSender, CommandReceiver) {
+pub fn input_channel(init: Control) -> (InputSender, InputReceiver) {
     let (sender, receiver) = watch::channel::<Command>(Command::Control(init, -1));
-    let sender = CommandSender::new(Arc::new(Mutex::new(sender)));
-    let receiver = CommandReceiver::new(Arc::new(Mutex::new(receiver)));
+    let sender = InputSender::new(Arc::new(Mutex::new(sender)));
+    let receiver = InputReceiver::new(Arc::new(Mutex::new(receiver)));
     (sender, receiver)
 }
 
 /// The sender end of command
 #[derive(Clone)]
-pub struct CommandSender(Arc<Mutex<watch::Sender<Command>>>);
+pub struct InputSender(Arc<Mutex<watch::Sender<Command>>>);
 
-impl CommandSender {
+impl InputSender {
     pub fn new(r: Arc<Mutex<watch::Sender<Command>>>) -> Self {
         Self(r)
     }
@@ -98,9 +98,9 @@ impl CommandSender {
 
 /// The receiver end of command channel
 #[derive(Clone)]
-pub struct CommandReceiver(Arc<Mutex<watch::Receiver<Command>>>);
+pub struct InputReceiver(Arc<Mutex<watch::Receiver<Command>>>);
 
-impl CommandReceiver {
+impl InputReceiver {
     pub fn new(r: Arc<Mutex<watch::Receiver<Command>>>) -> Self {
         Self(r)
     }
@@ -127,8 +127,8 @@ impl CommandReceiver {
     }
 }
 
-pub trait IsController {
-    fn get_receiver(&self) -> CommandReceiver;
+pub trait IsInputer {
+    fn get_receiver(&self) -> InputReceiver;
 }
 
 pub struct ViewerCancellationToken(Arc<CancellationToken>);
@@ -153,7 +153,7 @@ impl Clone for ViewerCancellationToken {
     }
 }
 
-pub trait IsViewer {
+pub trait IsOutputer {
     fn set_receiver(&mut self, receiver: OutputReceiver);
 }
 

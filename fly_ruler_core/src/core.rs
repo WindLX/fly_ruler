@@ -11,7 +11,7 @@ use fly_ruler_plugin::AerodynamicModel;
 use fly_ruler_utils::{
     error::{FatalCoreError, FrError},
     plane_model::FlightCondition,
-    state_channel, Command, CommandReceiver, OutputReceiver, OutputSender,
+    state_channel, Command, InputReceiver, OutputReceiver, OutputSender,
 };
 use log::{debug, error, info, trace};
 use serde::{Deserialize, Serialize};
@@ -136,7 +136,7 @@ impl Core {
     pub async fn run(
         &mut self,
         is_block: bool,
-        controllers: &HashMap<usize, CommandReceiver>,
+        controllers: &HashMap<usize, InputReceiver>,
     ) -> Result<(), FrError> {
         self.pause().await;
         let mut handlers = Vec::new();
@@ -312,7 +312,7 @@ impl Core {
 mod core_tests {
     use super::*;
     use fly_ruler_plugin::IsPlugin;
-    use fly_ruler_utils::{command_channel, logger::test_logger_init, plane_model::Control};
+    use fly_ruler_utils::{input_channel, logger::test_logger_init, plane_model::Control};
     use tokio_util::sync::CancellationToken;
 
     fn test_core_init() -> (AerodynamicModel, Core) {
@@ -353,7 +353,7 @@ mod core_tests {
         assert!(matches!(rx_1, Ok(_)));
 
         let mut controllers = HashMap::new();
-        let (tx, rx) = command_channel(Control::from([0.0, 0.0, 0.0, 0.0]));
+        let (tx, rx) = input_channel(Control::from([0.0, 0.0, 0.0, 0.0]));
         controllers.insert(0, rx.clone());
 
         let h = std::thread::spawn(move || {
@@ -399,7 +399,7 @@ mod core_tests {
         assert!(matches!(rx_1, Ok(_)));
 
         let mut controllers = HashMap::new();
-        let (tx, rx) = command_channel(Control::from([0.0, 0.0, 0.0, 0.0]));
+        let (tx, rx) = input_channel(Control::from([0.0, 0.0, 0.0, 0.0]));
         controllers.insert(0, rx.clone());
 
         let h = std::thread::spawn(move || {
@@ -467,8 +467,8 @@ mod core_tests {
         assert!(matches!(rx_2, Ok(_)));
 
         let mut controllers = HashMap::new();
-        let (tx, rx) = command_channel(Control::from([3000.0, 0.0, 0.0, 0.0]));
-        let (ctx, crx) = command_channel(Control::from([6000.0, 0.0, 0.0, 0.0]));
+        let (tx, rx) = input_channel(Control::from([3000.0, 0.0, 0.0, 0.0]));
+        let (ctx, crx) = input_channel(Control::from([6000.0, 0.0, 0.0, 0.0]));
 
         controllers.insert(0, rx.clone());
         controllers.insert(1, crx.clone());

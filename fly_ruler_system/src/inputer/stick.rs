@@ -1,16 +1,15 @@
-use std::thread::JoinHandle;
-
 use fly_ruler_utils::{
-    command_channel, plane_model::Control, Command, CommandReceiver, CommandSender, IsController,
+    input_channel, plane_model::Control, Command, InputReceiver, InputSender, IsInputer,
 };
 use log::{info, trace};
+use std::thread::JoinHandle;
 use stick::{Event, Listener};
 
 pub struct StickController {
     id: usize,
     stick: Option<stick::Controller>,
-    sender: CommandSender,
-    receiver: CommandReceiver,
+    sender: InputSender,
+    receiver: InputReceiver,
 }
 
 impl StickController {
@@ -19,7 +18,7 @@ impl StickController {
         let controller = lis.await;
         info!("stick {id} connected");
         let stick = Some(controller);
-        let (tx, rx) = command_channel(init);
+        let (tx, rx) = input_channel(init);
         Self {
             id,
             stick,
@@ -79,8 +78,8 @@ impl StickController {
     }
 }
 
-impl IsController for StickController {
-    fn get_receiver(&self) -> CommandReceiver {
+impl IsInputer for StickController {
+    fn get_receiver(&self) -> InputReceiver {
         self.receiver.clone()
     }
 }

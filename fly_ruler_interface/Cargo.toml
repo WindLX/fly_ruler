@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 fly_ruler_utils = { path = "../fly_ruler_utils" }
+libc = "0.2.151"
+log = "0.4.20"

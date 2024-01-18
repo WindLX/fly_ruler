@@ -1,4 +1,4 @@
-pub mod config;
-pub mod controller;
+pub mod inputer;
+pub mod manager;
+pub mod outputer;
 pub mod system;
-pub mod viewer;

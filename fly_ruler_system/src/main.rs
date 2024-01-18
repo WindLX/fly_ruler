@@ -1,7 +1,7 @@
 use fly_ruler_plugin::PluginInfo;
-use fly_ruler_system::{controller::StickController, system::System, viewer::CSVViewer};
+use fly_ruler_system::{inputer::StickController, outputer::CSVViewer, system::System};
 use fly_ruler_utils::{
-    error::FrError, plane_model::Control, IsController, IsViewer, OutputReceiver,
+    error::FrError, plane_model::Control, IsInputer, IsOutputer, OutputReceiver,
     ViewerCancellationToken,
 };
 use std::collections::HashMap;

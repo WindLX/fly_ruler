@@ -1,23 +1,33 @@
 use fly_ruler_utils::{
-    encode_view_message, plane_model::CoreOutput, IsViewer, OutputReceiver, ViewerCancellationToken,
+    plane_model::{CoreOutput, ToCsv},
+    IsOutputer, OutputReceiver, ViewerCancellationToken,
+};
+use std::{
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
 };
 
-pub struct TcpViewer {
-    host: String,
-    port: u16,
+pub struct CSVViewer {
+    path: PathBuf,
     receiver: Option<OutputReceiver>,
 }
 
-impl TcpViewer {
-    pub fn new(host: &str, port: u16) -> Self {
+impl CSVViewer {
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
-            host: host.to_string(),
-            port,
+            path: PathBuf::from(path.as_ref()),
             receiver: None,
         }
     }
 
-    fn open(&self) {}
+    fn open(&self) -> File {
+        let mut file = File::create(&self.path).unwrap();
+        file.write("time(s),".as_bytes()).unwrap();
+        file.write(CoreOutput::titles().as_bytes()).unwrap();
+        file.write("\n".as_bytes()).unwrap();
+        file
+    }
 
     async fn recv(&mut self) -> Option<(f64, CoreOutput)> {
         match &mut self.receiver {
@@ -36,6 +46,7 @@ impl TcpViewer {
                 .build()
                 .unwrap();
             rt.block_on(async move {
+                let mut file = viewer.open();
                 loop {
                     if cancellation_token.is_cancelled() {
                         break;
@@ -43,7 +54,9 @@ impl TcpViewer {
                     let o = viewer.recv().await;
                     match o {
                         Some(o) => {
-                            let proto_msg = encode_view_message(o.0, &o.1);
+                            file.write(format!("{:.2},", o.0).as_bytes()).unwrap();
+                            file.write(o.1.data_string().as_bytes()).unwrap();
+                            file.write(&[b'\n']).unwrap();
                         }
                         None => {
                             break;
@@ -55,7 +68,7 @@ impl TcpViewer {
     }
 }
 
-impl IsViewer for TcpViewer {
+impl IsOutputer for CSVViewer {
     fn set_receiver(&mut self, receiver: OutputReceiver) {
         self.receiver = Some(receiver);
     }

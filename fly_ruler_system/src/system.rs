@@ -1,7 +1,7 @@
-use crate::config::ConfigManager;
+use crate::manager::ConfigManager;
 use fly_ruler_core::core::Core;
 use fly_ruler_plugin::{PluginInfo, PluginManager, PluginType};
-use fly_ruler_utils::{error::FrError, CommandReceiver, OutputReceiver};
+use fly_ruler_utils::{error::FrError, InputReceiver, OutputReceiver};
 use log::{error, info};
 use std::{
     collections::HashMap,
@@ -15,7 +15,7 @@ pub struct System {
     config_manager: Option<ConfigManager>,
     plugin_manager: Option<PluginManager>,
     state_receivers: HashMap<usize, OutputReceiver>,
-    control_receivers: HashMap<usize, CommandReceiver>,
+    control_receivers: HashMap<usize, InputReceiver>,
     error_handler: Box<dyn Fn(FrError)>,
     core: Option<Core>,
 }
@@ -53,7 +53,7 @@ impl System {
         self.config_manager = Some(ConfigManager::new(&self.config_root));
         self.plugin_manager = Some(PluginManager::new(&self.plugin_root));
 
-        let core_init_cfg = self.config_manager.as_ref().unwrap().load_core_init();
+        let core_init_cfg = self.config_manager.as_ref().unwrap().load_core_cfg();
         if let Err(e) = core_init_cfg {
             error!("{}", e);
             (self.error_handler)(e);
@@ -98,7 +98,7 @@ impl System {
 
     pub async fn set_controller(
         &mut self,
-        handler: impl FnOnce(&Vec<(usize, PluginInfo)>) -> HashMap<usize, CommandReceiver>,
+        handler: impl FnOnce(&Vec<(usize, PluginInfo)>) -> HashMap<usize, InputReceiver>,
     ) -> &mut Self {
         match &mut self.core {
             Some(core) => {

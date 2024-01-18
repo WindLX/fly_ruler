@@ -347,6 +347,8 @@ name = "fly_ruler_interface"
 version = "0.1.0"
 dependencies = [
  "fly_ruler_utils",
+ "libc",
+ "log",
 ]
 
 [[package]]
