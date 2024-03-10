@@ -289,7 +289,7 @@ mod core_trim_tests {
             trim::{trim, TrimTarget},
         },
     };
-    use fly_ruler_plugin::{AerodynamicModel, IsPlugin};
+    use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
     use fly_ruler_utils::{logger::test_logger_init, plane_model::ControlLimit};
     use log::debug;
     use std::sync::Arc;
@@ -340,7 +340,7 @@ mod core_trim_tests {
         debug!("{:#?} {:#?}", nm_result.x, nm_result.fval);
         debug!("{:#?} {:#?}", nm_result.iter, nm_result.fun_evals);
 
-        let res = model.plugin().uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 }

@@ -2,20 +2,39 @@ use crate::{
     generated::core_output::{CoreOutput as CoreOutputGen, ViewMessage},
     plane_model::{Control, CoreOutput},
 };
+use async_trait::async_trait;
+use mlua::LuaSerdeExt;
 use prost::Message;
 use std::sync::Arc;
 use tokio::sync::{broadcast, watch, Mutex};
-use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    Control(Control, isize),
+    Control(Control),
     Extra(String),
     Exit,
 }
 
+impl mlua::UserData for Command {
+    fn add_fields<'lua, F: mlua::prelude::LuaUserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("type", |_lua, this| {
+            let typ = match this {
+                Command::Control(_) => "Control",
+                Command::Extra(_) => "Extra",
+                Command::Exit => "Exit",
+            };
+            Ok(typ)
+        });
+        fields.add_field_method_get("value", |lua, this| match this {
+            Command::Control(control) => lua.to_value(control),
+            Command::Extra(extra) => Ok(mlua::Value::String(lua.create_string(extra).unwrap())),
+            Command::Exit => Ok(mlua::Value::String(lua.create_string("Exit").unwrap())),
+        })
+    }
+}
+
 /// Create a state channel
-/// this method is a wrapper of mpsc which means multi-producer, single-consumer
+/// this method is a wrapper of mpmc which means multi-producer, multi-consumer
 pub fn state_channel(buffer: usize) -> (OutputSender, OutputReceiver) {
     let (sender, receiver) = broadcast::channel(buffer);
     let sender = OutputSender::new(Arc::new(Mutex::new(sender)));
@@ -49,7 +68,7 @@ impl OutputReceiver {
     }
 
     /// Receives the next value for this receiver.
-    /// This method returns `None`` if the channel has been closed
+    /// This method returns `None` if the channel has been closed
     /// and there are no remaining messages in the channel's buffer.
     /// This indicates that no further values can ever be received from this Receiver.
     /// The channel is closed when all senders have been dropped.
@@ -71,10 +90,42 @@ impl OutputReceiver {
     }
 }
 
+impl mlua::UserData for OutputReceiver {
+    fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_async_method_mut("receive", |lua, this, ()| async move {
+            let result = this.receive().await;
+            match result {
+                None => Ok(mlua::Nil),
+                Some(value) => {
+                    let (time, value) = value;
+                    let table = lua.create_table()?;
+                    table.set("time", time)?;
+                    table.set("value", lua.create_any_userdata(value).unwrap())?;
+                    Ok(mlua::Value::Table(table))
+                }
+            }
+        });
+
+        methods.add_async_method_mut("try_receive", |lua, this, ()| async move {
+            let result = this.try_receive().await;
+            match result {
+                None => Ok(mlua::Nil),
+                Some(value) => {
+                    let (time, value) = value;
+                    let table = lua.create_table()?;
+                    table.set("time", time)?;
+                    table.set("value", lua.create_any_userdata(value).unwrap())?;
+                    Ok(mlua::Value::Table(table))
+                }
+            }
+        });
+    }
+}
+
 /// Create a command channel
 /// A single-producer, multi-consumer channel that only retains the last sent value.
 pub fn input_channel(init: Control) -> (InputSender, InputReceiver) {
-    let (sender, receiver) = watch::channel::<Command>(Command::Control(init, -1));
+    let (sender, receiver) = watch::channel::<Command>(Command::Control(init));
     let sender = InputSender::new(Arc::new(Mutex::new(sender)));
     let receiver = InputReceiver::new(Arc::new(Mutex::new(receiver)));
     (sender, receiver)
@@ -93,6 +144,28 @@ impl InputSender {
     pub async fn send(&mut self, command: Command) -> Option<()> {
         let guard = self.0.lock().await;
         guard.send(command).ok()
+    }
+}
+
+impl mlua::UserData for InputSender {
+    fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_async_method_mut("send", |_lua, this, command: mlua::Value| async move {
+            let command = match command {
+                mlua::Value::Nil => Command::Control(Control::default()),
+                mlua::Value::UserData(ud) => {
+                    if ud.is::<Command>() {
+                        ud.take::<Command>().unwrap()
+                    } else {
+                        return Err(mlua::Error::RuntimeError("Invalid command".to_string()));
+                    }
+                }
+                _ => {
+                    return Err(mlua::Error::RuntimeError("Invalid command".to_string()));
+                }
+            };
+            let _result = this.send(command).await;
+            Ok(())
+        });
     }
 }
 
@@ -120,41 +193,29 @@ impl InputReceiver {
     pub async fn try_receive(&mut self) -> Command {
         let guard = self.0.lock().await;
         let mut last = guard.borrow().clone();
-        if let Command::Control(c, _t) = last {
-            last = Command::Control(c, -1)
+        if let Command::Control(c) = last {
+            last = Command::Control(c)
         }
         last
     }
 }
 
-pub trait IsInputer {
+pub trait AsInputer {
     fn get_receiver(&self) -> InputReceiver;
 }
 
-pub struct ViewerCancellationToken(Arc<CancellationToken>);
-
-impl ViewerCancellationToken {
-    pub fn new() -> Self {
-        Self(Arc::new(CancellationToken::new()))
-    }
-
-    pub fn cancel(&self) {
-        self.0.cancel();
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.0.is_cancelled()
-    }
-}
-
-impl Clone for ViewerCancellationToken {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-pub trait IsOutputer {
+#[async_trait]
+pub trait AsOutputer {
     fn set_receiver(&mut self, receiver: OutputReceiver);
+    fn get_receiver(&self) -> Option<OutputReceiver>;
+
+    async fn recv(&mut self) -> Option<(f64, CoreOutput)> {
+        let receiver = self.get_receiver();
+        match receiver {
+            Some(mut receiver) => receiver.receive().await,
+            None => None,
+        }
+    }
 }
 
 pub fn encode_view_message(time: f64, output: &CoreOutput) -> Vec<u8> {

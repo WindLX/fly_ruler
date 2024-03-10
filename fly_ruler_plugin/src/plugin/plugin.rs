@@ -30,16 +30,16 @@ impl std::fmt::Display for PluginInfo {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginState {
-    Installed,
-    Uninstalled,
+    Enable,
+    Disable,
     Failed,
 }
 
 impl Default for PluginState {
     fn default() -> Self {
-        Self::Uninstalled
+        Self::Disable
     }
 }
 
@@ -143,24 +143,22 @@ impl Plugin {
         self.call_hook_function("frplugin_install_hook", args)
     }
 
-    pub fn uninstall(
-        &self,
-        args: &[impl ToString],
-    ) -> Result<Result<(), PluginError>, FatalPluginError> {
-        self.call_hook_function("frplugin_uninstall_hook", args)
+    pub fn uninstall(&self) -> Result<Result<(), PluginError>, FatalPluginError> {
+        self.call_hook_function("frplugin_uninstall_hook", &Vec::<String>::new())
     }
 }
-pub trait IsPlugin {
+
+pub trait AsPlugin {
     fn plugin(&self) -> &Plugin;
 
     fn plugin_mut(&mut self) -> &mut Plugin;
 
-    fn info(&self) -> &PluginInfo {
-        &self.plugin().info
+    fn info(&self) -> PluginInfo {
+        self.plugin().info.clone()
     }
 
-    fn state(&self) -> &PluginState {
-        &self.plugin().state
+    fn state(&self) -> PluginState {
+        self.plugin().state
     }
 
     fn set_state(&mut self, state: PluginState) {
@@ -172,7 +170,7 @@ pub trait IsPlugin {
     }
 }
 
-impl IsPlugin for Plugin {
+impl AsPlugin for Plugin {
     fn plugin(&self) -> &Plugin {
         self
     }
@@ -182,7 +180,7 @@ impl IsPlugin for Plugin {
     }
 }
 
-impl IsPlugin for Box<Plugin> {
+impl AsPlugin for Box<Plugin> {
     fn plugin(&self) -> &Plugin {
         self
     }

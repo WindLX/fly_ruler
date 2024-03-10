@@ -1,6 +1,6 @@
 use super::basic::{AirAngles, AngleRates, Atmos, Orientation, Vector3, G};
 use fly_ruler_plugin::{
-    IsPlugin, {step_handler_constructor, AerodynamicModel, AerodynamicModelStepFn},
+    AsPlugin, {step_handler_constructor, AerodynamicModel, AerodynamicModelStepFn},
 };
 use fly_ruler_utils::{
     error::FatalCoreError,

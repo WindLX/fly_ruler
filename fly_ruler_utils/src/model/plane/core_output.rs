@@ -3,6 +3,7 @@ use crate::generated::control::Control as ControlGen;
 use crate::generated::core_output::CoreOutput as CoreOutputGen;
 use crate::generated::state::State as StateGen;
 use crate::generated::state_extend::StateExtend as StateExtendGen;
+use mlua::LuaSerdeExt;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -71,5 +72,16 @@ impl CoreOutput {
     pub fn encode(&self) -> Vec<u8> {
         let c: CoreOutputGen = Into::<CoreOutputGen>::into(*self);
         c.encode_to_vec()
+    }
+}
+
+impl mlua::UserData for CoreOutput {
+    fn add_fields<'lua, F: mlua::prelude::LuaUserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |lua, this| lua.to_value(this));
+    }
+    fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("to_protobuf", |lua, this, ()| {
+            lua.create_string(&this.encode())
+        });
     }
 }

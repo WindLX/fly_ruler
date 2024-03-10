@@ -7,7 +7,7 @@ use fly_ruler_core::parts::{
     flight::MechanicalModel,
     trim::{trim, TrimTarget},
 };
-use fly_ruler_plugin::{AerodynamicModel, IsPlugin};
+use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
 use fly_ruler_utils::plane_model::ControlLimit;
 use std::{sync::Arc, time::Instant};
 
@@ -54,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("plane", |b| {
         b.iter(|| step(black_box(plane_block.clone()), black_box(Instant::now())))
     });
-    let _res = model.plugin().uninstall(&Vec::<String>::new());
+    let _res = model.plugin().uninstall();
     group.finish();
 }
 

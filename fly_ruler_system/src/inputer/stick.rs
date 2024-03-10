@@ -1,5 +1,5 @@
 use fly_ruler_utils::{
-    input_channel, plane_model::Control, Command, InputReceiver, InputSender, IsInputer,
+    input_channel, plane_model::Control, AsInputer, Command, InputReceiver, InputSender,
 };
 use log::{info, trace};
 use std::thread::JoinHandle;
@@ -55,7 +55,7 @@ impl StickController {
             };
         }
 
-        let command = Command::Control(Control::from(events), -1);
+        let command = Command::Control(Control::from(events));
         self.sender.send(command.clone()).await;
         command
     }
@@ -78,7 +78,7 @@ impl StickController {
     }
 }
 
-impl IsInputer for StickController {
+impl AsInputer for StickController {
     fn get_receiver(&self) -> InputReceiver {
         self.receiver.clone()
     }

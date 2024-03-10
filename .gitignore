@@ -6,3 +6,5 @@ plugins/model/*
 plugins/controller/*
 
 .VSCodeCounter
+__pycache__
+.mypy_cache

@@ -3,8 +3,6 @@ members = [
     "fly_ruler_core",
     "fly_ruler_utils",
     "fly_ruler_system",
-    "fly_ruler_interface",
-    "fly_ruler_extern",
     "fly_ruler_plugin",
 ]
 resolver = "2"

@@ -1,5 +1,5 @@
 use super::ffi::{FrModelLoadConstants, FrModelLoadCtrlLimits, FrModelStep};
-use crate::plugin::{IsPlugin, Plugin, PluginError};
+use crate::plugin::{AsPlugin, Plugin, PluginError};
 use fly_ruler_utils::error::FatalPluginError;
 use fly_ruler_utils::plane_model::{ControlLimit, MechanicalModelInput, PlaneConstants, C};
 use log::debug;
@@ -97,7 +97,7 @@ pub fn step_handler_constructor(
     Box::new(h)
 }
 
-impl IsPlugin for AerodynamicModel {
+impl AsPlugin for AerodynamicModel {
     fn plugin(&self) -> &Plugin {
         &self.plugin
     }
@@ -111,7 +111,7 @@ impl IsPlugin for AerodynamicModel {
 mod plugin_model_tests {
     use super::AerodynamicModel;
     use crate::model::step_handler_constructor;
-    use crate::plugin::plugin::IsPlugin;
+    use crate::plugin::plugin::AsPlugin;
     use fly_ruler_utils::logger::test_logger_init;
     use fly_ruler_utils::plane_model::{MechanicalModelInput, PlaneConstants};
     use log::debug;
@@ -143,7 +143,7 @@ mod plugin_model_tests {
         let model = model.unwrap();
         let res = model.plugin().install(&["../plugins/model/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
-        let res = model.plugin().uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 
@@ -165,7 +165,7 @@ mod plugin_model_tests {
             )
         );
 
-        let res = model.plugin().uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 
@@ -207,7 +207,7 @@ mod plugin_model_tests {
         let r = f(&MechanicalModelInput::new(state, control, d_lef));
         debug!("{:?}", &r);
 
-        let res = model.plugin().uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 }

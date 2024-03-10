@@ -280,7 +280,7 @@ mod core_parts_tests {
         trim::{trim, TrimOutput, TrimTarget},
     };
     use csv::Writer;
-    use fly_ruler_plugin::{AerodynamicModel, IsPlugin};
+    use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
     use fly_ruler_utils::logger::test_logger_init;
     use fly_ruler_utils::plane_model::ControlLimit;
     use log::{debug, trace};
@@ -335,7 +335,7 @@ mod core_parts_tests {
     }
 
     fn test_core_fin(model: AerodynamicModel) {
-        let res = model.plugin().uninstall(&[""]);
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 

@@ -13,7 +13,7 @@ use fly_ruler_utils::{
     plane_model::FlightCondition,
     state_channel, Command, InputReceiver, OutputReceiver, OutputSender,
 };
-use log::{debug, error, info, trace};
+use log::{debug, info, trace};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, task};
@@ -23,6 +23,22 @@ use tokio_util::sync::CancellationToken;
 pub struct CoreInitCfg {
     pub sample_time: Option<u64>,
     pub time_scale: Option<f64>,
+}
+
+impl std::fmt::Display for CoreInitCfg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "Sample Time: {}",
+            self.sample_time
+                .map_or_else(|| "-1".to_string(), |s| format!("{s}"))
+        )?;
+        writeln!(f, "Time Scale: {:.1}", self.time_scale.unwrap_or(1.0))
+    }
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct PlaneInitCfg {
     pub deflection: Option<[f64; 3]>,
     pub trim_target: TrimTarget,
     pub trim_init: Option<TrimInit>,
@@ -30,16 +46,9 @@ pub struct CoreInitCfg {
     pub optim_options: Option<NelderMeadOptions>,
 }
 
-impl std::fmt::Display for CoreInitCfg {
+impl std::fmt::Display for PlaneInitCfg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let deflection = self.deflection.unwrap_or([0.0, 0.0, 0.0]);
-        writeln!(
-            f,
-            "Sample Time: {}",
-            self.sample_time
-                .map_or_else(|| "-1".to_string(), |s| format!("{s}"))
-        )?;
-        writeln!(f, "Time Scale: {:.1}", self.time_scale.unwrap_or(1.0))?;
         writeln!(
             f,
             "Deflections: ele: {:.2}, ail: {:.2}, rud: {:.2}",
@@ -61,37 +70,34 @@ impl std::fmt::Display for CoreInitCfg {
 }
 
 pub struct Core {
+    // core clock for simulation
     clock: Arc<Mutex<Clock>>,
-    plugin_ids: HashMap<usize, usize>,
-    planes: HashMap<usize, Arc<std::sync::Mutex<PlaneBlock>>>,
-    senders: HashMap<usize, OutputSender>,
-    core_init: CoreInitCfg,
+    // planes collection
+    planes: HashMap<usize, (Arc<std::sync::Mutex<PlaneBlock>>, OutputSender)>,
+    // data senders for each planes
+    // senders: HashMap<usize, OutputSender>,
 }
 
 impl Core {
-    pub fn new(core_init: CoreInitCfg) -> Self {
-        error!("Core Init: {}", core_init);
+    pub fn new(init_cfg: CoreInitCfg) -> Self {
         let clock = Arc::new(Mutex::new(Clock::new(
-            core_init.sample_time.map(Duration::from_millis),
-            core_init.time_scale,
+            init_cfg.sample_time.map(Duration::from_millis),
+            init_cfg.time_scale,
         )));
-        let plugin_ids = HashMap::new();
         let planes = HashMap::new();
-        let senders = HashMap::new();
+        // let senders = HashMap::new();
         Core {
             clock,
-            plugin_ids,
             planes,
-            senders,
-            core_init,
+            // senders,
         }
     }
 
     /// add a new plant
     pub async fn push_plane(
         &mut self,
-        plugin_id: usize,
         model: &AerodynamicModel,
+        init_cfg: PlaneInitCfg,
     ) -> Result<OutputReceiver, FrError> {
         let ctrl_limits = model
             .load_ctrl_limits()
@@ -102,11 +108,11 @@ impl Core {
 
         let trim_output = trim(
             plane,
-            self.core_init.trim_target,
-            self.core_init.trim_init,
+            init_cfg.trim_target,
+            init_cfg.trim_init,
             ctrl_limits,
-            self.core_init.flight_condition,
-            self.core_init.optim_options,
+            init_cfg.flight_condition,
+            init_cfg.optim_options,
         )
         .map_err(|e| FrError::Core(e))?;
         info!("model trim successfully");
@@ -115,7 +121,7 @@ impl Core {
             PlaneBlock::new(
                 model,
                 &trim_output,
-                &self.core_init.deflection.unwrap_or([0.0, 0.0, 0.0]),
+                &init_cfg.deflection.unwrap_or([0.0, 0.0, 0.0]),
                 ctrl_limits,
             )
             .map_err(|e| FrError::Core(e))?,
@@ -124,10 +130,8 @@ impl Core {
 
         let len = self.plane_count();
         self.clock.lock().await.add_listener();
-        self.plugin_ids.insert(len, plugin_id);
-        self.planes.insert(len, plane_block);
         let (tx, rx) = state_channel(10);
-        self.senders.insert(len, tx);
+        self.planes.insert(len, (plane_block, tx));
         info!("plane {len} append successfully");
         Ok(rx)
     }
@@ -140,14 +144,14 @@ impl Core {
     ) -> Result<(), FrError> {
         self.pause().await;
         let mut handlers = Vec::new();
-        self.resume().await;
         let cancellation_token = Arc::new(CancellationToken::new());
+        self.resume().await;
 
-        for (idx, plane) in self.planes.clone() {
+        for (idx, (plane, state_sender)) in self.planes.clone() {
             self.pause().await;
             let clock = self.clock.clone();
             let plane = plane.clone();
-            let state_sender = self.senders.get(&idx).unwrap().clone();
+            let state_sender = state_sender.clone();
             let cancellation_token = cancellation_token.clone();
 
             let controller = controllers.get(&idx);
@@ -184,15 +188,12 @@ impl Core {
                         }
 
                         if cancellation_token.is_cancelled() {
-                            info!(
-                                "[t:{:.4}] Plane {idx} exited due to cancelled",
-                                t.as_secs_f32()
-                            );
+                            info!("[t:{:.4}] Plane {idx} exited forwardly", t.as_secs_f32());
                             break (idx, Ok(()));
                         }
 
                         match command {
-                            Command::Control(control, _attack) => {
+                            Command::Control(control) => {
                                 debug!(
                                     "[t:{:.4}] Plane {idx} received Control: {}",
                                     t.as_secs_f32(),
@@ -224,7 +225,13 @@ impl Core {
                                 }
                                 clock.lock().await.resume();
                             }
-                            Command::Extra(_) => {}
+                            Command::Extra(e) => {
+                                debug!(
+                                    "[t:{:.4}] Plane {idx} received Extra: {}",
+                                    t.as_secs_f32(),
+                                    e
+                                );
+                            }
                             Command::Exit => {
                                 break (idx, Ok(()));
                             }
@@ -245,9 +252,7 @@ impl Core {
         for h in handlers {
             let result = h.join();
             if let Ok((idx, res)) = result {
-                self.plugin_ids.remove(&idx);
                 self.planes.remove(&idx);
-                self.senders.remove(&idx);
                 self.clock.lock().await.remove_listener();
 
                 if let Err(e) = res {
@@ -265,9 +270,8 @@ impl Core {
         self.planes.len()
     }
 
-    /// key: plant id, value: plugin id
-    pub fn get_ids(&self) -> HashMap<usize, usize> {
-        self.plugin_ids.clone()
+    pub fn contains_plane(&self, idx: usize) -> bool {
+        self.planes.contains_key(&idx)
     }
 
     /// start the core
@@ -311,11 +315,11 @@ impl Core {
 #[cfg(test)]
 mod core_tests {
     use super::*;
-    use fly_ruler_plugin::IsPlugin;
+    use fly_ruler_plugin::AsPlugin;
     use fly_ruler_utils::{input_channel, logger::test_logger_init, plane_model::Control};
     use tokio_util::sync::CancellationToken;
 
-    fn test_core_init() -> (AerodynamicModel, Core) {
+    fn test_core_init() -> (AerodynamicModel, Core, PlaneInitCfg) {
         test_logger_init();
         let model = AerodynamicModel::new("../plugins/model/f16_model");
         assert!(matches!(model, Ok(_)));
@@ -335,6 +339,9 @@ mod core_tests {
         let core_init = CoreInitCfg {
             sample_time: None,
             time_scale: None,
+        };
+
+        let plane_init = PlaneInitCfg {
             deflection: None,
             trim_init: None,
             trim_target,
@@ -342,14 +349,14 @@ mod core_tests {
             optim_options: nm_options,
         };
 
-        (model, Core::new(core_init))
+        (model, Core::new(core_init), plane_init)
     }
 
     #[tokio::test]
     async fn test_core_block() {
-        let (model, mut core) = test_core_init();
+        let (model, mut core, plane_init) = test_core_init();
 
-        let rx_1 = core.push_plane(0, &model).await;
+        let rx_1 = core.push_plane(&model, plane_init).await;
         assert!(matches!(rx_1, Ok(_)));
 
         let mut controllers = HashMap::new();
@@ -367,7 +374,7 @@ mod core_tests {
                 let mut i = 0;
                 loop {
                     let _ = tx
-                        .send(Command::Control(Control::from([0.0, 0.0, 0.0, 0.0]), 0))
+                        .send(Command::Control(Control::from([0.0, 0.0, 0.0, 0.0])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(1000)).await;
                     let o = rx_1.receive().await;
@@ -387,15 +394,15 @@ mod core_tests {
         let _ = core.run(true, &controllers).await;
         let _ = h.join();
 
-        let res = model.plugin().uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 
     #[tokio::test]
     async fn test_core_noblock() {
-        let (model, mut core) = test_core_init();
+        let (model, mut core, plane_init) = test_core_init();
 
-        let rx_1 = core.push_plane(0, &model).await;
+        let rx_1 = core.push_plane(&model, plane_init).await;
         assert!(matches!(rx_1, Ok(_)));
 
         let mut controllers = HashMap::new();
@@ -436,7 +443,7 @@ mod core_tests {
                 let mut i = 0;
                 loop {
                     let _ = tx
-                        .send(Command::Control(Control::from([0.0, 0.0, 0.0, 0.0]), 0))
+                        .send(Command::Control(Control::from([0.0, 0.0, 0.0, 0.0])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(1000)).await;
 
@@ -453,16 +460,16 @@ mod core_tests {
         let _ = hh.join();
         let _ = h.join();
 
-        let res = model.plugin().uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 
     #[tokio::test]
     async fn test_core_multi() {
-        let (model, mut core) = test_core_init();
+        let (model, mut core, plane_init) = test_core_init();
 
-        let rx_1 = core.push_plane(0, &model).await;
-        let rx_2 = core.push_plane(1, &model).await;
+        let rx_1 = core.push_plane(&model, plane_init).await;
+        let rx_2 = core.push_plane(&model, plane_init).await;
         assert!(matches!(rx_1, Ok(_)));
         assert!(matches!(rx_2, Ok(_)));
 
@@ -531,7 +538,7 @@ mod core_tests {
 
                 loop {
                     let _ = tx
-                        .send(Command::Control(Control::from([3000.0, 0.0, 0.0, 0.0]), 0))
+                        .send(Command::Control(Control::from([3000.0, 0.0, 0.0, 0.0])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -551,7 +558,7 @@ mod core_tests {
 
                 loop {
                     let _ = ctx
-                        .send(Command::Control(Control::from([6000.0, 0.0, 0.0, 0.0]), 0))
+                        .send(Command::Control(Control::from([6000.0, 0.0, 0.0, 0.0])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -579,7 +586,7 @@ mod core_tests {
         h1.join().unwrap();
         h2.join().unwrap();
 
-        let res = model.plugin().uninstall(&Vec::<String>::new());
+        let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));
     }
 }
