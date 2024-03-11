@@ -110,8 +110,15 @@ typedef enum
 /// @return 数据
 static double *load_axis_data(char *fileName, int len)
 {
-	char filePath[100];
-	sprintf(filePath, "%s/%s", dataDir, fileName);
+	char filePath[256];
+	if (!strcmp(dataDir, ""))
+	{
+		sprintf(filePath, "%s", fileName);
+	}
+	else
+	{
+		sprintf(filePath, "%s/%s", dataDir, fileName);
+	}
 	FILE *fp = fopen(filePath, "r");
 	int r = 0;
 	double buffer;
@@ -160,7 +167,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 	 */
 	int r = 0;
 	double buffer = 0.0;
-	char filePath[100];
+	char filePath[256];
 	int fileSize = 0;
 	int *n_points = (int *)malloc(n_dimension * sizeof(int));
 
@@ -215,7 +222,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 	Tensor *tensor = create_tensor(n_dimension, n_points);
 	free(n_points);
 
-	if (!strcmp(filePath, ""))
+	if (!strcmp(dataDir, ""))
 	{
 		sprintf(filePath, "%s", fileName);
 	}
@@ -223,6 +230,7 @@ static Tensor *load_aerodynamic_data(char *fileName, int n_dimension, char dataN
 	{
 		sprintf(filePath, "%s/%s", dataDir, fileName);
 	}
+	debug("filePath: %s", filePath);
 
 	FILE *fp = fopen(filePath, "r");
 	if (fp == (FILE *)NULL)

@@ -74,8 +74,6 @@ pub struct Core {
     clock: Arc<Mutex<Clock>>,
     // planes collection
     planes: HashMap<usize, (Arc<std::sync::Mutex<PlaneBlock>>, OutputSender)>,
-    // data senders for each planes
-    // senders: HashMap<usize, OutputSender>,
 }
 
 impl Core {
@@ -85,12 +83,7 @@ impl Core {
             init_cfg.time_scale,
         )));
         let planes = HashMap::new();
-        // let senders = HashMap::new();
-        Core {
-            clock,
-            planes,
-            // senders,
-        }
+        Core { clock, planes }
     }
 
     /// add a new plant
@@ -265,6 +258,86 @@ impl Core {
         run_res
     }
 
+    /// main loop step
+    pub async fn step(
+        &mut self,
+        is_block: bool,
+        controllers: &HashMap<usize, InputReceiver>,
+    ) -> Result<(), FrError> {
+        for (idx, (plane, state_sender)) in self.planes.clone() {
+            self.pause().await;
+            let clock = self.clock.clone();
+            let plane = plane.clone();
+            let state_sender = state_sender.clone();
+
+            let controller = controllers.get(&idx);
+            if let None = controller {
+                return Err(FrError::Core(FatalCoreError::Controller(idx)));
+            };
+            let mut controller = controller.unwrap().clone();
+            self.resume().await;
+
+            let t;
+            let command;
+            if is_block {
+                let mut clock_guard = clock.lock().await;
+                t = clock_guard.now().await;
+                clock_guard.pause();
+                command = controller.receive().await;
+                clock_guard.resume();
+            } else {
+                let mut clock_guard = clock.lock().await;
+                t = clock_guard.now().await;
+                command = controller.try_receive().await;
+            }
+
+            match command {
+                Command::Control(control) => {
+                    debug!(
+                        "[t:{:.4}] Plane {idx} received Control: {}",
+                        t.as_secs_f32(),
+                        control
+                    );
+
+                    let plane = plane.clone();
+                    let plane_task = task::spawn_blocking(move || {
+                        let result = plane.lock().unwrap().update(control, t.as_secs_f64());
+                        result
+                    });
+                    let result = plane_task.await.unwrap();
+                    clock.lock().await.pause();
+
+                    match result {
+                        Ok(output) => {
+                            info!("[t:{:.4}] Plane {idx} output:\n{output}", t.as_secs_f32());
+
+                            let mut state_sender = state_sender.clone();
+                            state_sender.send((t.as_secs_f64(), output)).await;
+                        }
+                        Err(e) => {
+                            self.planes.remove(&idx);
+                            self.clock.lock().await.remove_listener();
+                            return Err(FrError::Core(e));
+                        }
+                    }
+                    clock.lock().await.resume();
+                }
+                Command::Extra(e) => {
+                    debug!(
+                        "[t:{:.4}] Plane {idx} received Extra: {}",
+                        t.as_secs_f32(),
+                        e
+                    );
+                }
+                Command::Exit => {
+                    self.planes.remove(&idx);
+                    self.clock.lock().await.remove_listener();
+                }
+            }
+        }
+        return Ok(());
+    }
+
     /// get current plane count
     pub fn plane_count(&self) -> usize {
         self.planes.len()
@@ -272,6 +345,10 @@ impl Core {
 
     pub fn contains_plane(&self, idx: usize) -> bool {
         self.planes.contains_key(&idx)
+    }
+
+    pub fn planes(&self) -> Vec<usize> {
+        self.planes.keys().cloned().collect()
     }
 
     /// start the core

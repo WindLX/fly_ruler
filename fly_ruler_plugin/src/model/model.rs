@@ -49,11 +49,11 @@ impl AerodynamicModel {
         unsafe {
             let res = load_ctrl_limits(ctrl_limits_ptr);
             if res < 0 {
-                return Err(FatalPluginError::inner(
+                Err(FatalPluginError::inner(
                     &self.info().name,
                     res,
                     "when call frmodel_load_ctrl_limits",
-                ));
+                ))
             } else {
                 let ctrl_limits = *ctrl_limits_ptr;
                 debug!("Ctrl Limits:\n{}", ctrl_limits);

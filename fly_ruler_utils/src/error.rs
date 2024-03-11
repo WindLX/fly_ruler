@@ -11,17 +11,12 @@ pub enum FrError {
     Core(FatalCoreError),
     /// Error caused by fly_ruler_plugin
     Plugin(FatalPluginError),
-    /// a failpoint has been triggered for testing purposes
-    #[doc(hidden)]
-    #[cfg(feature = "failpoints")]
-    FailPoint,
 }
 
 impl std::error::Error for FrError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
-            // Self::Core(e) => Some(e),
             Self::Plugin(e) => Some(e),
             _ => None,
         }
@@ -35,8 +30,6 @@ impl std::fmt::Display for FrError {
             Self::Cfg(e) => write!(f, "Cfg: {}", e),
             Self::Core(e) => write!(f, "Core: {}", e),
             Self::Plugin(e) => write!(f, "Plugin: {}", e),
-            #[cfg(feature = "failpoints")]
-            Self::FailPoint => write!(f, "FailPoint"),
         }
     }
 }

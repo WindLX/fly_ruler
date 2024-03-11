@@ -47,7 +47,6 @@ int frplugin_install_hook(int argc, char **argv)
    }
 
    char *data_dir = argv[0];
-   debug("data_dir pointer address: %p", data_dir);
 
    if (data_dir == NULL)
    {
@@ -149,6 +148,8 @@ int frmodel_load_ctrl_limits(ControlLimit *ctrl_limits)
        .beta_limit_top = 30.0,
        .beta_limit_bottom = -30.0};
    *ctrl_limits = limits;
+   
+   return 0;
 }
 
 int frmodel_step(

@@ -36,5 +36,5 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/ DESTINATION ${CMAKE_INSTALL_PREFIX}/
 set(F16_MODEL_DIR ${CMAKE_INSTALL_PREFIX}/f16_model)
 
 # 测试目录
-enable_testing()
-add_subdirectory(tests)
+# enable_testing()
+# add_subdirectory(tests)

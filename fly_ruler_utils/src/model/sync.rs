@@ -100,7 +100,7 @@ impl mlua::UserData for OutputReceiver {
                     let (time, value) = value;
                     let table = lua.create_table()?;
                     table.set("time", time)?;
-                    table.set("value", lua.create_any_userdata(value).unwrap())?;
+                    table.set("data", value)?;
                     Ok(mlua::Value::Table(table))
                 }
             }
@@ -114,7 +114,7 @@ impl mlua::UserData for OutputReceiver {
                     let (time, value) = value;
                     let table = lua.create_table()?;
                     table.set("time", time)?;
-                    table.set("value", lua.create_any_userdata(value).unwrap())?;
+                    table.set("data", value)?;
                     Ok(mlua::Value::Table(table))
                 }
             }

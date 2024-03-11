@@ -1,56 +1,26 @@
-use fly_ruler_plugin::PluginInfo;
+use env_logger::{fmt, Target, TimestampPrecision};
 use fly_ruler_system::system::System;
-// use fly_ruler_system::{inputer::StickController, outputer::CSVOutputer, system::System};
-use fly_ruler_utils::{
-    error::FrError, plane_model::Control, AsInputer, AsOutputer, Command, OutputReceiver,
-};
+use fly_ruler_utils::Command;
+use log::{debug, error, info, trace, warn};
 use mlua::{Function, Lua, LuaSerdeExt};
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 fn main() {
-    env_logger::builder().format_timestamp(None).init();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    // let stick = rt.block_on(async { StickController::new(0, Control::default()).await });
-    // let receiver = stick.get_receiver();
-    // let control_thread = StickController::thread_build(stick);
-
-    // let cancellation_token = ViewerCancellationToken::new();
-    // let mut csv = CSVOutputer::new("../Plane0.csv");
-
-    // let mut system = rt.block_on(async {
-    // let mut system = System::builder(Box::new(|_err: FrError| {}));
-    // system
-    // .set_dir("../config", "../plugins/model")
-    // .init(Some(|_m: &HashMap<usize, PluginInfo>| {
-    // vec![(0, vec!["../plugins/model/f16_model/data".to_string()])]
-    // }))
-    // .await
-    // .set_controller(move |_m| {
-    // let mut h = HashMap::new();
-    // h.insert(0_usize, receiver);
-    // h
-    // })
-    // .await
-    // .set_viewer(0, |m: OutputReceiver| csv.set_receiver(m))
-    // .await;
-    // system
-    // });
-
-    // let viewer_thread = CSVOutputer::build_thread(&mut csv, cancellation_token.clone());
-
     rt.block_on(async move {
         let lua = Lua::new();
-        lua.globals()
+        let module = lua.create_table().unwrap();
+        module
             .set(
                 "create_system",
-                Function::wrap(|_: &Lua, ()| Ok(System::new(Box::new(|_err: FrError| {})))),
+                Function::wrap(|_: &Lua, ()| Ok(System::new())),
             )
             .unwrap();
-        lua.globals()
+        module
             .set(
                 "create_command",
                 Function::wrap(|lua: &Lua, value: mlua::Value| match value {
@@ -66,12 +36,98 @@ fn main() {
                 }),
             )
             .unwrap();
+        module
+            .set(
+                "init_logger",
+                Function::wrap(|_lua: &Lua, value: Option<mlua::Table>| {
+                    let target: Target;
+                    let timestamp: Option<fmt::TimestampPrecision>;
+                    target = match value {
+                        Some(ref value) => {
+                            let target: Option<String> = value.get("target")?;
+                            match target {
+                                Some(target) => match target.as_str() {
+                                    "Stdout" => Target::Stdout,
+                                    _ => Target::Stderr,
+                                },
+                                _ => Target::Stderr,
+                            }
+                        }
+                        None => Target::Stderr,
+                    };
+                    timestamp = match value {
+                        Some(value) => {
+                            let timestamp: Option<String> = value.get("timestamp")?;
+                            match timestamp {
+                                Some(timestamp) => {
+                                    let ts = match timestamp.as_str() {
+                                        "Millis" => TimestampPrecision::Millis,
+                                        "Nanos" => TimestampPrecision::Nanos,
+                                        "Seconds" => TimestampPrecision::Seconds,
+                                        _ => TimestampPrecision::Micros,
+                                    };
+                                    Some(ts)
+                                }
+                                _ => None,
+                            }
+                        }
+                        None => None,
+                    };
+                    env_logger::builder()
+                        .target(target)
+                        .format_timestamp(timestamp)
+                        .init();
+                    Ok(())
+                }),
+            )
+            .unwrap();
+        module
+            .set(
+                "trace",
+                Function::wrap(|_: &Lua, msg: mlua::String| {
+                    trace!("{}", msg.to_str().unwrap());
+                    Ok(())
+                }),
+            )
+            .unwrap();
+        module
+            .set(
+                "debug",
+                Function::wrap(|_: &Lua, msg: mlua::String| {
+                    debug!("{}", msg.to_str().unwrap());
+                    Ok(())
+                }),
+            )
+            .unwrap();
+        module
+            .set(
+                "info",
+                Function::wrap(|_: &Lua, msg: mlua::String| {
+                    info!("{}", msg.to_str().unwrap());
+                    Ok(())
+                }),
+            )
+            .unwrap();
+        module
+            .set(
+                "warn",
+                Function::wrap(|_: &Lua, msg: mlua::String| {
+                    warn!("{}", msg.to_str().unwrap());
+                    Ok(())
+                }),
+            )
+            .unwrap();
+        module
+            .set(
+                "error",
+                Function::wrap(|_: &Lua, msg: mlua::String| {
+                    error!("{}", msg.to_str().unwrap());
+                    Ok(())
+                }),
+            )
+            .unwrap();
+
+        lua.globals().set("fly_ruler", module).unwrap();
         let _res = lua.load(Path::new("./main.lua")).exec_async().await;
-
-        // system.run(false).await.stop();
-        // cancellation_token.cancel();
     });
-
-    // control_thread.join().unwrap();
-    // viewer_thread.join().unwrap();
 }

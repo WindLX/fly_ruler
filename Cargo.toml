@@ -6,3 +6,4 @@ members = [
     "fly_ruler_plugin",
 ]
 resolver = "2"
+exclude = ["fly_ruler_extern"]

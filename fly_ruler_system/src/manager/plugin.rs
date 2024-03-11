@@ -51,8 +51,11 @@ pub trait AsPluginManager<Pl: AsPlugin> {
             .collect()
     }
 
-    fn info(&self, index: usize) -> Option<PluginInfo> {
-        self.plugin_manager().plugins.get(&index).map(|p| p.info())
+    fn info(&self, plugin_id: usize) -> Option<PluginInfo> {
+        self.plugin_manager()
+            .plugins
+            .get(&plugin_id)
+            .map(|p| p.info())
     }
 
     fn states(&self) -> HashMap<usize, PluginState> {
@@ -63,24 +66,27 @@ pub trait AsPluginManager<Pl: AsPlugin> {
             .collect()
     }
 
-    fn state(&self, index: usize) -> Option<PluginState> {
-        self.plugin_manager().plugins.get(&index).map(|p| p.state())
+    fn state(&self, plugin_id: usize) -> Option<PluginState> {
+        self.plugin_manager()
+            .plugins
+            .get(&plugin_id)
+            .map(|p| p.state())
     }
 
     fn plugin_count(&self) -> usize {
         self.plugin_manager().plugins.len()
     }
 
-    fn plugin(&self, idx: usize) -> Option<&Pl> {
-        self.plugin_manager().plugins.get(&idx)
+    fn plugin(&self, plugin_id: usize) -> Option<&Pl> {
+        self.plugin_manager().plugins.get(&plugin_id)
     }
 
-    fn plugin_mut(&mut self, idx: usize) -> Option<&mut Pl> {
-        self.plugin_manager_mut().plugins.get_mut(&idx)
+    fn plugin_mut(&mut self, plugin_id: usize) -> Option<&mut Pl> {
+        self.plugin_manager_mut().plugins.get_mut(&plugin_id)
     }
 
-    fn enable(&mut self, index: usize, args: &[impl ToString]) -> Result<(), FrError> {
-        let plugin = self.plugin_mut(index);
+    fn enable(&mut self, plugin_id: usize, args: &[impl ToString]) -> Result<(), FrError> {
+        let plugin = self.plugin_mut(plugin_id);
         match plugin {
             Some(pl) => {
                 if pl.state() == PluginState::Disable {
@@ -111,8 +117,8 @@ pub trait AsPluginManager<Pl: AsPlugin> {
         }
     }
 
-    fn disable(&mut self, index: usize) -> Result<(), FrError> {
-        let plugin = self.plugin_mut(index);
+    fn disable(&mut self, plugin_id: usize) -> Result<(), FrError> {
+        let plugin = self.plugin_mut(plugin_id);
         match plugin {
             Some(pl) => {
                 if pl.state() == PluginState::Enable {
@@ -136,7 +142,7 @@ pub trait AsPluginManager<Pl: AsPlugin> {
                 }
             }
             None => {
-                warn!("model {} not found", index);
+                warn!("model {} not found", plugin_id);
                 Ok(())
             }
         }

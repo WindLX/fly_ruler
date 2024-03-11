@@ -14,8 +14,8 @@ impl ModelManager {
         Self { inner }
     }
 
-    pub fn get_model(&self, index: usize) -> Option<&AerodynamicModel> {
-        match self.inner.plugin(index) {
+    pub fn get_model(&self, model_id: usize) -> Option<&AerodynamicModel> {
+        match self.inner.plugin(model_id) {
             Some(model) => {
                 if model.state() == PluginState::Enable {
                     Some(model)
@@ -25,7 +25,7 @@ impl ModelManager {
                 }
             }
             None => {
-                warn!("model {} not found", index);
+                warn!("model {} not found", model_id);
                 None
             }
         }

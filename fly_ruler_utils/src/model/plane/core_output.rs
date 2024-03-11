@@ -76,12 +76,10 @@ impl CoreOutput {
 }
 
 impl mlua::UserData for CoreOutput {
-    fn add_fields<'lua, F: mlua::prelude::LuaUserDataFields<'lua, Self>>(fields: &mut F) {
-        fields.add_field_method_get("value", |lua, this| lua.to_value(this));
-    }
     fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method("to_protobuf", |lua, this, ()| {
             lua.create_string(&this.encode())
         });
+        methods.add_method("to_table", |lua, this, ()| lua.to_value(this));
     }
 }
