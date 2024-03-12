@@ -1,11 +1,9 @@
 /target
 *.csv
+*.ipynb
+*.so
+*.dll
 
-plugins/system/*
-plugins/model/*
-plugins/controller/*
+/modules
 
 .VSCodeCounter
-__pycache__
-.mypy_cache
-.venv

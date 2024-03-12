@@ -1,9 +1,21 @@
 [workspace]
-members = [
-    "fly_ruler_core",
-    "fly_ruler_utils",
-    "fly_ruler_system",
-    "fly_ruler_plugin",
-]
 resolver = "2"
-exclude = ["fly_ruler_extern"]
+members = [
+    # Application libraries
+    "crates/libs/lib_core",
+    "crates/libs/lib_plugin",
+    "crates/libs/lib_utils",
+
+    # Application binaries
+    "crates/systems/lua_system",
+
+    # Application modules
+    "crates/modules/csv_viewer",
+    "crates/modules/json_viewer",
+    "crates/modules/protobuf_viewer",
+
+    # Application runtime
+    "crates/runtime/lua_runtime",
+
+    # Application tools
+]

@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "mexndinterp.h": "c",
-        "hifi_f16_aerodata.h": "c",
-        "stdarg.h": "c"
-    }
-}

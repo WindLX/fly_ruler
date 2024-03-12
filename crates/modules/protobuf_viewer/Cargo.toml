@@ -1,0 +1,19 @@
+[package]
+name = "protobuf_viewer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "protobuf_viewer"
+crate-type = ["cdylib"]
+
+[dependencies]
+mlua = { version = "0.9.6", features = ["lua54", "module"] }
+prost = "0.12.1"
+fly_ruler_utils = { path = "../../libs/lib_utils" }
+lua_runtime = { path = "../../runtime/lua_runtime" }
+
+[build-dependencies]
+prost-build = "0.12.1"
