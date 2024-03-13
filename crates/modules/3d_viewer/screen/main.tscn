@@ -1,0 +1,136 @@
+[gd_scene load_steps=16 format=3 uid="uid://dlyqo73caj7ab"]
+
+[ext_resource type="Script" path="res://script/Direction.cs" id="1_2yvmy"]
+[ext_resource type="ArrayMesh" uid="uid://blqqhyqafnfk7" path="res://model/f16.obj" id="1_7y0w2"]
+[ext_resource type="Texture2D" uid="uid://c6gentciverdf" path="res://image/kloofendal_48d_partly_cloudy_puresky_4k.exr" id="2_7rfgp"]
+[ext_resource type="Shader" path="res://shader/shadow.gdshader" id="3_7ymg3"]
+[ext_resource type="Texture2D" uid="uid://f4b0mju8y6dh" path="res://image/direction.png" id="3_cr3v8"]
+[ext_resource type="Shader" path="res://shader/direction.gdshader" id="3_yd5dh"]
+[ext_resource type="Texture2D" uid="uid://4qkn36ctg7p7" path="res://image/thrust_box.png" id="4_3mlvp"]
+[ext_resource type="Texture2D" uid="uid://ckjdsgk74cbts" path="res://image/thrust.png" id="4_qohay"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wcssp"]
+shader = ExtResource("3_7ymg3")
+shader_parameter/color = Color(0.854902, 0.854902, 0.854902, 1)
+shader_parameter/image = ExtResource("4_3mlvp")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_2b40m"]
+shader = ExtResource("3_7ymg3")
+shader_parameter/color = Color(1, 1, 1, 1)
+shader_parameter/image = ExtResource("4_qohay")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_dhh4f"]
+shader = ExtResource("3_yd5dh")
+shader_parameter/direction = 0.0
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_6ts1q"]
+panorama = ExtResource("2_7rfgp")
+
+[sub_resource type="Sky" id="Sky_vv36o"]
+sky_material = SubResource("PanoramaSkyMaterial_6ts1q")
+
+[sub_resource type="Environment" id="Environment_63ns0"]
+background_mode = 2
+sky = SubResource("Sky_vv36o")
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_4le7y"]
+
+[node name="Main" type="Node"]
+script = ExtResource("1_2yvmy")
+
+[node name="LeftDownUI" type="SubViewportContainer" parent="."]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -118.0
+offset_right = 200.0
+offset_bottom = 2.0
+grow_vertical = 0
+metadata/_edit_use_anchors_ = true
+
+[node name="ThrustBox" type="Control" parent="LeftDownUI"]
+layout_mode = 2
+
+[node name="Background" type="ColorRect" parent="LeftDownUI/ThrustBox"]
+material = SubResource("ShaderMaterial_wcssp")
+layout_mode = 0
+offset_left = 41.0
+offset_right = 57.0
+offset_bottom = 88.0
+color = Color(0.792157, 0.792157, 0.792157, 1)
+
+[node name="Current" type="ColorRect" parent="LeftDownUI/ThrustBox"]
+material = SubResource("ShaderMaterial_2b40m")
+layout_mode = 0
+offset_left = 44.0
+offset_top = 66.0
+offset_right = 54.0
+offset_bottom = 85.0
+pivot_offset = Vector2(0, 72)
+
+[node name="Label" type="Label" parent="LeftDownUI/ThrustBox"]
+layout_mode = 0
+offset_left = 62.0
+offset_top = -4.0
+offset_right = 113.0
+offset_bottom = 19.0
+text = "Thrust"
+horizontal_alignment = 1
+
+[node name="State" type="SubViewport" parent="LeftDownUI"]
+transparent_bg = true
+handle_input_locally = false
+msaa_3d = 3
+size = Vector2i(200, 120)
+render_target_update_mode = 4
+
+[node name="StateCamera" type="Camera3D" parent="LeftDownUI/State"]
+transform = Transform3D(-0.771592, 0.505312, -0.386401, -0.0522738, 0.555014, 0.830197, 0.633966, 0.660772, -0.40183, -5.39671, 12.8751, -6.28048)
+fov = 83.0
+near = 0.044
+far = 122.46
+
+[node name="F16" type="MeshInstance3D" parent="LeftDownUI/State"]
+transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, -1.11976, 0, 2.37487)
+mesh = ExtResource("1_7y0w2")
+skeleton = NodePath("../../..")
+
+[node name="TopUI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+
+[node name="DirectionBox" type="Control" parent="TopUI"]
+clip_contents = true
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_right = 200.0
+offset_bottom = 100.0
+grow_horizontal = 2
+
+[node name="Direction" type="TextureRect" parent="TopUI/DirectionBox"]
+texture_repeat = 2
+material = SubResource("ShaderMaterial_dhh4f")
+layout_mode = 0
+offset_left = -102.0
+offset_top = -198.0
+offset_right = 5362.0
+offset_bottom = 2874.0
+scale = Vector2(0.154835, 0.155801)
+texture = ExtResource("3_cr3v8")
+
+[node name="MainCamera" type="Camera3D" parent="."]
+transform = Transform3D(0.104199, 0, -0.994557, 0, 1, 0, 0.994557, 0, 0.104199, -29.3574, 4.40227, 1.46728)
+current = true
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -36.9398, 19.9017, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_63ns0")
+camera_attributes = SubResource("CameraAttributesPractical_4le7y")
