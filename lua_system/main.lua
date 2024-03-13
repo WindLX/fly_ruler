@@ -1,6 +1,6 @@
 local protobuf_viewer = require("protobuf_viewer")
-local json_viewer = require("json_viewer")
-local csv_viewer = require("csv_viewer")
+-- local json_viewer = require("json_viewer")
+-- local csv_viewer = require("csv_viewer")
 
 fly_ruler.logger.init({
     timestamp = nil,
@@ -65,7 +65,7 @@ local init_control = {
 local controller_1 = system:set_controller(1, init_control)
 local controller_2 = system:set_controller(2, init_control)
 
-local controller_co = coroutine.create(function ()
+local controller_co = coroutine.create(function()
     local count = 0
     while true do
         count = count + 1
@@ -81,14 +81,14 @@ local viewer_1 = system:get_viewer(1)
 local viewer_2 = system:get_viewer(2)
 
 local viewer_co = coroutine.create(function()
-    local writer = csv_viewer.new("plane1.csv")
+    -- local writer = csv_viewer.new("plane1.csv")
     while true do
         local output = viewer_1:receive()
         if output ~= nil then
             print("Plane 1: " .. output.time)
             print(protobuf_viewer.encode(output))
-            print(json_viewer.encode(output))
-            writer:write_line(output)
+            -- print(json_viewer.encode(output))
+            -- writer:write_line(output)
         end
         local output = viewer_2:receive()
         if output ~= nil then
@@ -99,9 +99,7 @@ local viewer_co = coroutine.create(function()
 end)
 
 system:start()
-local count = 0
-while count ~= 15 do
-    count  = count + 1
+while true do
     system:step(false)
     coroutine.resume(viewer_co)
     coroutine.resume(controller_co)

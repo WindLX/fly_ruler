@@ -15,4 +15,9 @@ fly_ruler_plugin = { path = "../../libs/lib_plugin" }
 fly_ruler_core = { path = "../../libs/lib_core" }
 lua_runtime = { path = "../../runtime/lua_runtime" }
 toml = "0.8.8"
-mlua = { version = "0.9.6", features = ["lua54", "async", "serialize"] }
+mlua = { version = "0.9.6", features = [
+    "lua54",
+    "async",
+    "serialize",
+    # "vendored",
+] }

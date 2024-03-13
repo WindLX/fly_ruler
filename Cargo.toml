@@ -13,6 +13,7 @@ members = [
     "crates/modules/csv_viewer",
     "crates/modules/json_viewer",
     "crates/modules/protobuf_viewer",
+    "crates/modules/tcp",
 
     # Application runtime
     "crates/runtime/lua_runtime",
