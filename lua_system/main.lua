@@ -1,3 +1,4 @@
+local fly_ruler = require("lua_system")
 local protobuf_viewer = require("protobuf_viewer")
 -- local json_viewer = require("json_viewer")
 -- local csv_viewer = require("csv_viewer")
@@ -9,7 +10,7 @@ fly_ruler.logger.init({
 
 local system = fly_ruler.system.new()
 
-system:set_dir("../../../modules/model")
+system:set_dir("../modules/model")
 system:init({
     time_scale = 1.0, -- optional
     sample_time = 100 -- ms optional
@@ -19,7 +20,7 @@ for i, v in ipairs(system.models) do
     fly_ruler.logger.info(string.format("Id: %d, Plugin: %s, State: %s", i, v.info.name, v.state))
 end
 
-system:enable_model(1, { "../../../modules/model/f16_model/data" })
+system:enable_model(1, { "../modules/model/f16_model/data" })
 
 local plane_cfg = {
     deflection = { 0.0, 0.0, 0.0 }, -- ele(deg) ail(deg) rud(deg) | optional
@@ -52,8 +53,11 @@ local plane_cfg = {
     }
 }
 
-system:push_plane(1, plane_cfg)
-system:push_plane(1, plane_cfg)
+local co = coroutine.create(function()
+    system:push_plane(1, plane_cfg)
+    system:push_plane(1, plane_cfg)
+end)
+coroutine.resume(co)
 
 local init_control = {
     thrust = 5000.0,
@@ -86,7 +90,7 @@ local viewer_co = coroutine.create(function()
         local output = viewer_1:receive()
         if output ~= nil then
             print("Plane 1: " .. output.time)
-            print(protobuf_viewer.encode(output))
+            -- print(protobuf_viewer.encode(output))
             -- print(json_viewer.encode(output))
             -- writer:write_line(output)
         end
@@ -98,9 +102,18 @@ local viewer_co = coroutine.create(function()
     end
 end)
 
-system:start()
+local co = coroutine.create(function() system:start() end)
+coroutine.resume(co)
+
+local co = coroutine.create(function(system)
+    while true do
+        system:step(false)
+        coroutine.yield()
+    end
+end)
+
 while true do
-    system:step(false)
+    coroutine.resume(co, system)
     coroutine.resume(viewer_co)
     coroutine.resume(controller_co)
 end
