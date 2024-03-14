@@ -1,0 +1,56 @@
+[gd_scene load_steps=6 format=3 uid="uid://cvxqa07ywmdil"]
+
+[ext_resource type="Script" path="res://script/DirectionBox.cs" id="1_2rlxf"]
+[ext_resource type="Texture2D" uid="uid://crl148lqso3bu" path="res://image/pointer.png" id="1_dg7xc"]
+[ext_resource type="Shader" path="res://shader/direction.gdshader" id="2_ad22k"]
+[ext_resource type="Texture2D" uid="uid://f4b0mju8y6dh" path="res://image/direction.png" id="3_1cxfn"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_to5xs"]
+shader = ExtResource("2_ad22k")
+shader_parameter/direction = 0.0
+
+[node name="Top" type="Control"]
+layout_mode = 3
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+
+[node name="DirectionBox" type="Control" parent="."]
+clip_contents = true
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_right = 200.0
+offset_bottom = 100.0
+grow_horizontal = 2
+script = ExtResource("1_2rlxf")
+Direction = 100
+
+[node name="Pointer" type="TextureRect" parent="DirectionBox"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_top = -39.0
+offset_right = 88.0
+offset_bottom = 349.0
+grow_horizontal = 2
+grow_vertical = 2
+scale = Vector2(0.142497, 0.142497)
+texture = ExtResource("1_dg7xc")
+
+[node name="Direction" type="TextureRect" parent="DirectionBox"]
+texture_repeat = 2
+material = SubResource("ShaderMaterial_to5xs")
+layout_mode = 0
+offset_left = -10.0
+offset_top = -197.0
+offset_right = 5454.0
+offset_bottom = 2875.0
+scale = Vector2(0.154835, 0.155801)
+texture = ExtResource("3_1cxfn")

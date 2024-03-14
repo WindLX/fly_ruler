@@ -1,0 +1,34 @@
+[gd_scene load_steps=7 format=3 uid="uid://dl36nycofsi5r"]
+
+[ext_resource type="PackedScene" uid="uid://cvykgol4xsg" path="res://screen/ui/bottom.tscn" id="1_c8udk"]
+[ext_resource type="PackedScene" uid="uid://crbeh2yxb8t4l" path="res://screen/ui/bottom_left.tscn" id="2_rmqsg"]
+[ext_resource type="PackedScene" uid="uid://csdpdgw46fyuv" path="res://screen/ui/bottom_right.tscn" id="3_u082j"]
+[ext_resource type="PackedScene" uid="uid://cvxqa07ywmdil" path="res://screen/ui/top.tscn" id="4_qmuwr"]
+[ext_resource type="PackedScene" uid="uid://dogi2sn5xqpjh" path="res://screen/ui/top_left.tscn" id="5_3aawx"]
+[ext_resource type="PackedScene" uid="uid://bu7qwnd5pstbv" path="res://screen/ui/top_right.tscn" id="6_jg6p8"]
+
+[node name="Ui" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Bottom" parent="." instance=ExtResource("1_c8udk")]
+layout_mode = 1
+
+[node name="BottomLeft" parent="." instance=ExtResource("2_rmqsg")]
+layout_mode = 1
+
+[node name="BottomRight" parent="." instance=ExtResource("3_u082j")]
+layout_mode = 1
+
+[node name="Top" parent="." instance=ExtResource("4_qmuwr")]
+layout_mode = 1
+
+[node name="TopLeft" parent="." instance=ExtResource("5_3aawx")]
+layout_mode = 1
+
+[node name="TopRight" parent="." instance=ExtResource("6_jg6p8")]
+layout_mode = 1

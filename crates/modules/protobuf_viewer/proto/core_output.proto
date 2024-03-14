@@ -5,11 +5,15 @@ import "state.proto";
 import "control.proto";
 import "state_extend.proto";
 
-message ViewMessage {
+message ViewMessageGroup {
   double time = 1;
-  CoreOutput output = 2;
+  repeated ViewMessage view_msg = 2;
 }
 
+message ViewMessage {
+  uint32 id = 1;
+  CoreOutput output = 2;
+}
 
 message CoreOutput {
   state.State state = 1;

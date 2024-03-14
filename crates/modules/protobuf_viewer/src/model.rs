@@ -1,6 +1,6 @@
 use crate::generated::control::Control as ControlGen;
 use crate::generated::core_output::CoreOutput as CoreOutputGen;
-use crate::generated::core_output::ViewMessage;
+use crate::generated::core_output::{ViewMessage, ViewMessageGroup};
 use crate::generated::state::State as StateGen;
 use crate::generated::state_extend::StateExtend as StateExtendGen;
 use fly_ruler_utils::plane_model::{Control, CoreOutput, State, StateExtend};
@@ -60,10 +60,16 @@ impl Into<CoreOutputGen> for CoreOutput {
     }
 }
 
-pub(crate) fn encode_view_message(time: f64, output: &CoreOutput) -> Vec<u8> {
-    let msg = ViewMessage {
+pub(crate) fn encode_view_message(time: f64, msg: Vec<(u32, CoreOutput)>) -> Vec<u8> {
+    let msg_group = ViewMessageGroup {
         time,
-        output: Some(Into::<CoreOutputGen>::into(*output)),
+        view_msg: msg
+            .into_iter()
+            .map(|(id, output)| ViewMessage {
+                id,
+                output: Some(Into::<CoreOutputGen>::into(output)),
+            })
+            .collect(),
     };
-    msg.encode_to_vec()
+    msg_group.encode_to_vec()
 }
