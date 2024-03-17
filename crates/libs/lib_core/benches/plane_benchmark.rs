@@ -42,16 +42,16 @@ fn step(plane: Arc<std::sync::Mutex<PlaneBlock>>, start_time: Instant) {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("core");
-    let model = AerodynamicModel::new("../../../modules/model/f16_model");
+    let model = AerodynamicModel::new("../../../lua_system/model/f16_model");
     let model = model.unwrap();
     let _res = model
         .plugin()
-        .install(&["../../../modules/model/f16_model/data"]);
+        .install(&["../../../lua_system/model/f16_model/data"]);
     let plane = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
     let trim_target = TrimTarget::new(15000.0, 500.0);
     let trim_output = trim(plane, trim_target, None, CL, None, None).unwrap();
     let plane_block = Arc::new(std::sync::Mutex::new(
-        PlaneBlock::new(&model, &trim_output, &[0.0, 0.0, 0.0], CL).unwrap(),
+        PlaneBlock::new(&model, &trim_output, &[0.0, 0.0, 0.0], CL, 0.0).unwrap(),
     ));
     group.bench_function("plane", |b| {
         b.iter(|| step(black_box(plane_block.clone()), black_box(Instant::now())))

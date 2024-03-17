@@ -1,29 +1,24 @@
 [package]
-name = "lua_system"
+name = "rust_system"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[lib]
-name = "lua_system"
-crate-type = ["cdylib"]
 
 [dependencies]
 env_logger = "0.10.1"
 log = "0.4.20"
-tokio = { version = "1.35.1", features = ["sync", "net", "rt"] }
-serde = { version = "1.0.193", features = ["derive"] }
-lua_runtime = { path = "../../runtime/lua_runtime" }
-toml = "0.8.8"
-mlua = { version = "0.9.6", features = [
-    "lua54",
-    "async",
-    "serialize",
-    "module",
-    "send",
-    # "vendored",
+tokio = { version = "1.35.1", features = [
+    "sync",
+    "net",
+    "rt",
+    "io-util",
+    "rt-multi-thread",
 ] }
-futures = "0.3.30"
+serde = { version = "1.0.193", features = ["derive"] }
+toml = "0.8.8"
+serde_json = "1.0.114"
+# mlua = { version = "0.9.6", features = ["lua54", "async", "serialize", "send"] }
 lazy_static = "1.4.0"
 fly_ruler_utils = { path = "../../libs/lib_utils" }
 fly_ruler_plugin = { path = "../../libs/lib_plugin" }

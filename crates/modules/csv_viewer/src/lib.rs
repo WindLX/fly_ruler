@@ -69,25 +69,31 @@ impl CsvWriter {
 
 impl LuaUserData for CsvWriter {
     fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_method_mut("write_line", |lua, this, msg: mlua::Table| {
-            let time = msg.get::<_, f64>("time")?;
-            let output = msg.get::<_, mlua::Value>("data")?;
-            let csv_line = match output {
-                mlua::Value::Table(t) => {
-                    let t = lua.from_value::<CoreOutput>(mlua::Value::Table(t))?;
-                    t
-                }
-                _ => {
-                    return Err(mlua::Error::RuntimeError("Invalid coreoutput".to_string()));
-                }
-            };
-            this.write_line(time, &csv_line)
+        methods.add_method_mut("write_line", |lua, this, data: mlua::Value| match data {
+            mlua::Value::Table(data) => {
+                let time = data.get::<_, f64>("time")?;
+                let output = data.get::<_, mlua::Value>("data")?;
+                let csv_line = match output {
+                    mlua::Value::Table(t) => {
+                        let t = lua.from_value::<CoreOutput>(mlua::Value::Table(t))?;
+                        t
+                    }
+                    _ => {
+                        return Err(mlua::Error::RuntimeError("Invalid coreoutput".to_string()));
+                    }
+                };
+                this.write_line(time, &csv_line)
+            }
+            _ => Err(mlua::Error::RuntimeError("Invalid data".to_string())),
         });
     }
 }
 
-fn new<'lua>(_lua: &'lua Lua, path: mlua::String) -> LuaResult<CsvWriter> {
-    CsvWriter::new(path.to_str().unwrap())
+fn new<'lua>(_lua: &'lua Lua, path: mlua::Value) -> LuaResult<CsvWriter> {
+    match path {
+        mlua::Value::String(path) => Ok(CsvWriter::new(path.to_str()?)?),
+        _ => Err(mlua::Error::RuntimeError("Invalid path".to_string())),
+    }
 }
 
 #[mlua::lua_module]

@@ -1,14 +1,14 @@
 pub mod manager;
 pub mod system;
 
-use crate::system::System;
 use env_logger::{fmt, Target, TimestampPrecision};
-use fly_ruler_utils::plane_model::Control;
-use fly_ruler_utils::Command;
 use lazy_static::lazy_static;
 use log::{debug, error, info, trace, warn};
-use lua_runtime::CommandWrapper;
+use lua_runtime::UuidWrapper;
 use mlua::prelude::*;
+use std::collections::BTreeSet;
+use system::SystemWrapper;
+use uuid::Uuid;
 
 lazy_static! {
     static ref RT: tokio::runtime::Runtime = {
@@ -21,6 +21,52 @@ lazy_static! {
     static ref GUARD: tokio::runtime::EnterGuard<'static> = RT.enter();
 }
 
+struct UuidSet(BTreeSet<UuidWrapper>);
+
+impl UuidSet {
+    pub fn new() -> Self {
+        Self(BTreeSet::new())
+    }
+
+    pub fn add(&mut self, uuid: UuidWrapper) {
+        self.0.insert(uuid);
+    }
+
+    pub fn remove(&mut self, uuid: &UuidWrapper) {
+        self.0.remove(uuid);
+    }
+
+    pub fn contains(&self, uuid: &UuidWrapper) -> bool {
+        self.0.contains(uuid)
+    }
+}
+
+impl LuaUserData for UuidSet {
+    fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method_mut("add", |_, this, uuid: LuaUserDataRef<UuidWrapper>| {
+            this.add(uuid.clone());
+            Ok(())
+        });
+        methods.add_method_mut("remove", |_, this, uuid: LuaUserDataRef<UuidWrapper>| {
+            this.remove(&*uuid);
+            Ok(())
+        });
+        methods.add_method("contains", |_, this, uuid: LuaUserDataRef<UuidWrapper>| {
+            Ok(this.contains(&uuid))
+        });
+        methods.add_method("to_table", |lua, this, ()| {
+            let t = lua.create_table()?;
+            for uuid in this.0.iter() {
+                t.raw_push(uuid.clone())?;
+            }
+            Ok(t)
+        });
+        methods.add_meta_function("__len", |_, this: LuaUserDataRef<UuidSet>| {
+            Ok(this.0.len() as u32)
+        });
+    }
+}
+
 #[mlua::lua_module]
 fn lua_system(lua: &Lua) -> LuaResult<LuaTable> {
     let _guard = &*GUARD;
@@ -28,28 +74,9 @@ fn lua_system(lua: &Lua) -> LuaResult<LuaTable> {
 
     // system
     let system = lua.create_table()?;
-    system.set("new", LuaFunction::wrap(|_: &Lua, ()| Ok(System::new())))?;
-
-    // command
-    let command = lua.create_table()?;
-    command.set(
-        "control",
-        LuaFunction::wrap(|lua: &Lua, value: mlua::Value| match value {
-            mlua::Value::Table(_) => Ok(CommandWrapper::from(Command::Control(
-                lua.from_value(value)?,
-            ))),
-            mlua::Value::Nil => Ok(CommandWrapper::from(Command::Control(Control::default()))),
-            _ => Err(mlua::Error::RuntimeError("Invalid command".to_string())),
-        }),
-    )?;
-    command.set("exit", CommandWrapper::from(Command::Exit))?;
-    command.set(
-        "extra",
-        CommandWrapper::from(Command::Extra("".to_string())),
-    )?;
-    command.set(
-        "default",
-        CommandWrapper::from(Command::Control(Control::default())),
+    system.set(
+        "new",
+        LuaFunction::wrap(|_: &Lua, ()| Ok(SystemWrapper::new())),
     )?;
 
     let logger = lua.create_table()?;
@@ -133,9 +160,20 @@ fn lua_system(lua: &Lua) -> LuaResult<LuaTable> {
         }),
     )?;
 
+    let uuid_set = lua.create_table()?;
+    uuid_set.set("new", LuaFunction::wrap(|_: &Lua, ()| Ok(UuidSet::new())))?;
+    uuid_set.set(
+        "uuid_v4",
+        LuaFunction::wrap(|_: &Lua, uuid: mlua::String| {
+            let u = Uuid::parse_str(uuid.to_str()?)
+                .map_err(|e| mlua::Error::RuntimeError(e.to_string()))?;
+            Ok(UuidWrapper::from(u))
+        }),
+    )?;
+
     exports.set("system", system)?;
-    exports.set("command", command)?;
     exports.set("logger", logger)?;
+    exports.set("uuid_set", uuid_set)?;
 
     Ok(exports)
 }

@@ -9,8 +9,8 @@ pub struct ViewMessageGroup {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ViewMessage {
-    #[prost(uint32, tag = "1")]
-    pub id: u32,
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub output: ::core::option::Option<CoreOutput>,
 }

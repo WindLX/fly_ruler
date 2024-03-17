@@ -1,3 +1,5 @@
 {
-    "cmake.sourceDirectory": "E:/Projects/Complex/FlyRuler/fly_ruler/f16_model/tests"
+    "rust-analyzer.linkedProjects": [
+        ".\\crates\\systems\\rust_system\\Cargo.toml"
+    ]
 }

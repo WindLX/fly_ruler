@@ -37,11 +37,11 @@ fn tr(plane: Arc<std::sync::Mutex<MechanicalModel>>) {
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("core");
     group.measurement_time(Duration::from_secs(30));
-    let model = AerodynamicModel::new("../../../modules/model/f16_model");
+    let model = AerodynamicModel::new("../../../lua_system/model/f16_model");
     let model = model.unwrap();
     let _res = model
         .plugin()
-        .install(&["../../../modules/model/f16_model/data"]);
+        .install(&["../../../lua_system/model/f16_model/data"]);
     let plane = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
     group.bench_function("trim", |b| b.iter(|| tr(black_box(plane.clone()))));
     let _res = model.plugin().uninstall();

@@ -162,6 +162,7 @@ impl LeadingEdgeFlapBlock {
 }
 
 pub struct PlaneBlock {
+    start_time: f64,
     control: ControllerBlock,
     flap: LeadingEdgeFlapBlock,
     integrator: VectorIntegrator,
@@ -179,6 +180,7 @@ impl PlaneBlock {
         init: &TrimOutput,
         deflection: &[f64; 3],
         ctrl_limit: ControlLimit,
+        start_time: f64,
     ) -> Result<Self, FatalCoreError> {
         let flap = LeadingEdgeFlapBlock::new(init.state.alpha, init.d_lef);
         let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
@@ -195,6 +197,7 @@ impl PlaneBlock {
             alpha_limit_bottom: ctrl_limit.alpha_limit_bottom,
             beta_limit_top: ctrl_limit.beta_limit_top,
             beta_limit_bottom: ctrl_limit.beta_limit_bottom,
+            start_time,
         })
     }
 
@@ -203,6 +206,7 @@ impl PlaneBlock {
         control: impl Into<Control>,
         t: f64,
     ) -> Result<CoreOutput, FatalCoreError> {
+        let t = t - self.start_time;
         let state = &mut self.integrator.past();
         let control = self.control.update(control, t);
         let lef = self.flap.past();
@@ -232,10 +236,27 @@ impl PlaneBlock {
         let vt = state[6];
 
         self.flap.update(alpha, alt, vt, t);
+
         let state = state.data;
+        if state.iter().any(|x| x.is_nan()) {
+            return Err(FatalCoreError::Nan);
+        }
+
         let control = self.control.past();
+        if Into::<Vec<f64>>::into(control).iter().any(|x| x.is_nan()) {
+            return Err(FatalCoreError::Nan);
+        }
+
         let d_lef = self.flap.past();
+        if d_lef.is_nan() {
+            return Err(FatalCoreError::Nan);
+        }
+
         let extend = model_output.state_extend;
+        if Into::<Vec<f64>>::into(extend).iter().any(|x| x.is_nan()) {
+            return Err(FatalCoreError::Nan);
+        }
+
         self.extend = Some(StateExtend::from(extend));
 
         let block_output = CoreOutput::new(
@@ -310,13 +331,13 @@ mod core_parts_tests {
 
     fn test_core_init() -> (AerodynamicModel, TrimOutput) {
         test_logger_init();
-        let model = AerodynamicModel::new("../../../modules/model/f16_model");
+        let model = AerodynamicModel::new("../../../lua_system/models/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
         let res = model
             .plugin()
-            .install(&["../../../modules/model/f16_model/data"]);
+            .install(&["../../../lua_system/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
@@ -445,7 +466,7 @@ mod core_parts_tests {
         // set_time_scale(5.0).unwrap();
 
         let control: [f64; 4] = result.control.into();
-        let f16_block = PlaneBlock::new(&model, &result, &[0.0, 0.0, 0.0], CL);
+        let f16_block = PlaneBlock::new(&model, &result, &[0.0, 0.0, 0.0], CL, 0.0);
         let mut f16_block = f16_block.unwrap();
 
         let path = Path::new("output.csv");

@@ -48,11 +48,11 @@ impl Clock {
         self.now_virtual_time = Duration::from_secs(0);
     }
 
-    pub fn add_listener(&mut self) {
+    pub fn subscribe(&mut self) {
         self.listener_count += 1;
     }
 
-    pub fn remove_listener(&mut self) {
+    pub fn unsubscribe(&mut self) {
         self.listener_count -= 1;
     }
 
@@ -124,7 +124,7 @@ mod core_clock_tests {
     #[tokio::test]
     async fn test_now() {
         let mut clock = Clock::new(Some(Duration::from_millis(1000)), None);
-        clock.add_listener();
+        clock.subscribe();
         clock.start();
         let r = clock.now().await;
         assert!(r.as_millis() - 1000 < 100);
@@ -135,7 +135,7 @@ mod core_clock_tests {
     #[tokio::test]
     async fn test_pause() {
         let mut clock = Clock::new(None, None);
-        clock.add_listener();
+        clock.subscribe();
         clock.start();
         clock.pause();
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -150,7 +150,7 @@ mod core_clock_tests {
     #[tokio::test]
     async fn test_scale() {
         let mut clock = Clock::new(None, Some(5.0));
-        clock.add_listener();
+        clock.subscribe();
         clock.start();
         tokio::time::sleep(Duration::from_secs(1)).await;
         let r = clock.now().await;
@@ -160,8 +160,8 @@ mod core_clock_tests {
     #[tokio::test]
     async fn test_listener() {
         let mut clock = Clock::new(Some(Duration::from_millis(1000)), None);
-        clock.add_listener();
-        clock.add_listener();
+        clock.subscribe();
+        clock.subscribe();
         clock.start();
         let r = clock.now().await;
         let r_2 = clock.now().await;

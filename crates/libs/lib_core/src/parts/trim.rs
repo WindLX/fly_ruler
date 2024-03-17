@@ -316,13 +316,13 @@ mod core_trim_tests {
     #[test]
     fn test_trim() {
         test_logger_init();
-        let model = AerodynamicModel::new("../../../modules/model/f16_model");
+        let model = AerodynamicModel::new("../../../lua_system/models/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
         let res = model
             .plugin()
-            .install(&["../../../modules/model/f16_model/data"]);
+            .install(&["../../../lua_system/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));

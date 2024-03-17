@@ -11,7 +11,7 @@ message ViewMessageGroup {
 }
 
 message ViewMessage {
-  uint32 id = 1;
+  string id = 1;
   CoreOutput output = 2;
 }
 

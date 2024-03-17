@@ -60,7 +60,7 @@ impl Into<CoreOutputGen> for CoreOutput {
     }
 }
 
-pub(crate) fn encode_view_message(time: f64, msg: Vec<(u32, CoreOutput)>) -> Vec<u8> {
+pub(crate) fn encode_view_message(time: f64, msg: Vec<(String, CoreOutput)>) -> Vec<u8> {
     let msg_group = ViewMessageGroup {
         time,
         view_msg: msg

@@ -3,8 +3,6 @@ use fly_ruler_core::core::{Core, CoreInitCfg, PlaneInitCfg};
 use fly_ruler_plugin::{PluginInfo, PluginState};
 use fly_ruler_utils::{input_channel, InputSender, OutputReceiver};
 use log::{error, info, trace, warn};
-use lua_runtime::{InputSenderWrapper, OutputReceiverWrapper, UuidWrapper};
-use mlua::{IntoLua, LuaSerdeExt, UserData, UserDataRef};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -43,13 +41,18 @@ impl System {
     }
 
     pub fn get_models(&self) -> HashMap<Uuid, (PluginInfo, PluginState)> {
-        let infos = self.model_manager.as_ref().unwrap().infos();
-        let states = self.model_manager.as_ref().unwrap().states();
-        infos
-            .iter()
-            .zip(states.iter())
-            .map(|(info, state)| (*info.0, (info.1.clone(), state.1.clone())))
-            .collect()
+        if let Some(manager) = &self.model_manager {
+            let infos = manager.infos();
+            let states = manager.states();
+            infos
+                .iter()
+                .zip(states.iter())
+                .map(|(info, state)| (*info.0, (info.1.clone(), state.1.clone())))
+                .collect()
+        } else {
+            warn!("Sys: model manager is not initialized");
+            HashMap::new()
+        }
     }
 
     pub fn enable_model(&mut self, model_id: Uuid, args: &[impl ToString]) {
@@ -89,7 +92,12 @@ impl System {
         model_id: Uuid,
         init_cfg: PlaneInitCfg,
     ) -> Option<(Uuid, OutputReceiver)> {
-        let model = self.model_manager.as_ref().unwrap().get_model(model_id);
+        let model = if let Some(manager) = &mut self.model_manager {
+            manager.get_model(model_id)
+        } else {
+            warn!("Sys: model manager is not initialized");
+            None
+        };
         match model {
             Some(model) => match &mut self.core {
                 Some(core) => {
@@ -238,168 +246,5 @@ impl System {
                 None
             }
         }
-    }
-}
-
-impl UserData for SystemWrapper {
-    fn add_fields<'lua, F: mlua::prelude::LuaUserDataFields<'lua, Self>>(fields: &mut F) {
-        fields.add_field_method_get("models", |lua, this| {
-            let table = lua.create_table().unwrap();
-            let methods = this.0.lock().unwrap().get_models();
-            methods.iter().for_each(|(k, v)| {
-                let t = lua.create_table().unwrap();
-                t.set("info", lua.to_value(&v.0).unwrap()).unwrap();
-                t.set("state", lua.to_value(&v.1).unwrap()).unwrap();
-                table.set(UuidWrapper::from(*k), t).unwrap();
-            });
-            Ok(table)
-        });
-
-        fields.add_field_method_get("planes", |_lua, this| {
-            Ok(match this.0.lock().unwrap().planes() {
-                Some(planes) => Some(
-                    planes
-                        .into_iter()
-                        .map(|p| UuidWrapper::from(p))
-                        .collect::<Vec<_>>(),
-                ),
-                None => None,
-            })
-        })
-    }
-    fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
-        // system
-        methods.add_method_mut("set_dir", |_, this, value: String| {
-            this.0.lock().unwrap().set_dir(value);
-            Ok(())
-        });
-
-        methods.add_method_mut("init", |lua, this, init_cfg: mlua::Value| {
-            let init_cfg: Result<CoreInitCfg, mlua::prelude::LuaError> = lua.from_value(init_cfg);
-            match init_cfg {
-                Ok(cfg) => Ok(this.0.lock().unwrap().init(cfg)),
-                Err(e) => {
-                    error!("{}", e);
-                    Err(e)
-                }
-            }
-        });
-
-        methods.add_async_method_mut("step", |_, this, ()| async move {
-            this.0.lock().unwrap().step().await;
-            Ok(())
-        });
-
-        methods.add_method_mut("stop", |_, this, ()| {
-            this.0.lock().unwrap().stop();
-            Ok(())
-        });
-
-        // model
-        methods.add_method_mut(
-            "enable_model",
-            |_, this, (index, args): (UserDataRef<'lua, UuidWrapper>, Vec<String>)| {
-                Ok(this.0.lock().unwrap().enable_model(index.inner(), &args))
-            },
-        );
-
-        methods.add_method_mut(
-            "disable_model",
-            |_, this, index: UserDataRef<'lua, UuidWrapper>| {
-                Ok(this.0.lock().unwrap().disable_model(index.inner()))
-            },
-        );
-
-        methods.add_method_mut(
-            "get_model_state",
-            |lua, this, index: UserDataRef<'lua, UuidWrapper>| {
-                Ok(lua.to_value(&this.0.lock().unwrap().get_model_state(index.inner())))
-            },
-        );
-
-        // input and output
-        methods.add_method_mut(
-            "set_controller",
-            |_lua, this, (index, buffer): (UserDataRef<'lua, UuidWrapper>, usize)| {
-                let controller = this.0.lock().unwrap().set_controller(index.inner(), buffer);
-                let c = match controller {
-                    Some(c) => Some(InputSenderWrapper::from(c)),
-                    None => None,
-                };
-                Ok(c)
-            },
-        );
-
-        methods.add_method(
-            "subscribe_plane",
-            |_lua, this, index: UserDataRef<'lua, UuidWrapper>| {
-                let viewer = this.0.lock().unwrap().subscribe_plane(index.inner());
-                let v = match viewer {
-                    Some(viewer) => Some(OutputReceiverWrapper::from(viewer)),
-                    None => None,
-                };
-                Ok(v)
-            },
-        );
-
-        // plane
-        methods.add_async_method_mut(
-            "push_plane",
-            |lua, this, (index, init_cfg): (UserDataRef<'lua, UuidWrapper>, mlua::Value)| async move {
-                let init_cfg: Result<PlaneInitCfg, mlua::prelude::LuaError> =
-                    lua.from_value(init_cfg);
-                match init_cfg {
-                    Ok(cfg) => Ok(match this
-                        .0.lock().unwrap().push_plane(index.inner(), cfg)
-                        .await {
-                            Some(o) => {
-                                let t = lua.create_table()?;
-                                t.push(UuidWrapper::from(o.0))?;
-                                t.push(OutputReceiverWrapper::from(o.1))?;
-                            t.into_lua(lua)}
-                            None => Ok(mlua::Value::Nil)
-                        }),
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
-            },
-        );
-
-        methods.add_async_method_mut(
-            "remove_plane",
-            |_lua, this, id: UserDataRef<'lua, UuidWrapper>| async move {
-                this.0.lock().unwrap().remove_plane(id.inner()).await;
-                Ok(())
-            },
-        );
-
-        methods.add_method(
-            "contain_plane",
-            |_, this, index: UserDataRef<'lua, UuidWrapper>| {
-                Ok(this.0.lock().unwrap().contains_plane(index.inner()))
-            },
-        );
-
-        // time
-        methods.add_async_method("get_time", |lua, this, ()| async move {
-            let time = this.0.lock().unwrap().get_time().await;
-            match time {
-                Some(t) => Ok(t.as_millis().into_lua(lua)),
-                None => Ok(mlua::Nil.into_lua(lua)),
-            }
-        });
-
-        methods.add_async_method("pause", |_lua, this, ()| async move {
-            this.0.lock().unwrap().pause().await;
-            Ok(())
-        });
-
-        methods.add_async_method("resume", |_lua, this, ()| async move {
-            this.0.lock().unwrap().pause().await;
-            Ok(())
-        });
-
-        methods.add_method("clone", |_lua, this, ()| Ok(this.clone()));
     }
 }

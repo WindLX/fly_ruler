@@ -19,6 +19,10 @@ fly_ruler_plugin = { path = "../lib_plugin" }
 serde = { version = "1.0.193", features = ["derive"] }
 tokio-util = "0.7.10"
 
+[dependencies.uuid]
+version = "1.7.0"
+features = ["v4", "fast-rng", "macro-diagnostics"]
+
 [dev-dependencies]
 criterion = "0.5.1"
 rand = "0.8.5"

@@ -3,7 +3,9 @@
 *.ipynb
 *.so
 *.dll
+*.lib
 
-/modules
+modules
+models
 
 .VSCodeCounter

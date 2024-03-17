@@ -1,121 +1,186 @@
+package.cpath = package.cpath ..
+    ';.\\modules\\?.dll;.\\modules\\?.so';
+
+-- dll/so
 local fly_ruler = require("lua_system")
 local protobuf_viewer = require("protobuf_viewer")
--- local json_viewer = require("json_viewer")
--- local csv_viewer = require("csv_viewer")
+local json_viewer = require("json_viewer")
+local tcp = require("tcp")
 
-fly_ruler.logger.init({
-    timestamp = nil,
-    target = "Stderr"
-});
+--  lua
+local config = require("config")
+local Command = require("command")
+
+POLL_PENDING = coroutine.wrap(tcp.pending)()
+fly_ruler.logger.init(config.LoggerInitCfg)
+
+Ltrace = fly_ruler.logger.trace
+Ldebug = fly_ruler.logger.debug
+Linfo = fly_ruler.logger.info
+Lwarn = fly_ruler.logger.warn
+Lerror = fly_ruler.logger.error
+
+local server_thread = coroutine.create(function(addr)
+    xpcall(function()
+        coroutine.yield(tcp.tcp_listener.bind(addr))
+    end, print)
+end)
+local _, listener = coroutine.resume(server_thread, config.ServerAddr)
+Linfo(string.format("Server running at %s", config.ServerAddr))
+
+local listen_thread = coroutine.create(function()
+    while true do
+        local client, client_addr = listener:accept()
+        Linfo(string.format("Client connecting: %s", client_addr))
+        if client_addr ~= POLL_PENDING then
+            coroutine.yield(client, client_addr)
+        end
+    end
+end)
 
 local system = fly_ruler.system.new()
+system:set_dir(config.ModelDir)
+system:init(config.SystemInitCfg)
 
-system:set_dir("../modules/model")
-system:init({
-    time_scale = 1.0, -- optional
-    sample_time = 100 -- ms optional
-})
+local keys = {}
 
-for i, v in ipairs(system.models) do
-    fly_ruler.logger.info(string.format("Id: %d, Plugin: %s, State: %s", i, v.info.name, v.state))
+for k, v in pairs(system.models) do
+    system:enable_model(k, config.F16InstallArgs)
+    Linfo(string.format("Id: %s, Model: %s, State: %s", tostring(k), v.info.name, v.state))
+    keys[#keys + 1] = k
 end
 
-system:enable_model(1, { "../modules/model/f16_model/data" })
 
-local plane_cfg = {
-    deflection = { 0.0, 0.0, 0.0 }, -- ele(deg) ail(deg) rud(deg) | optional
+local init_cmd = Command:new_control(config.PlaneInitCfg.trim_init.control)
 
-    trim_target = {
-        altitude = 15000, -- ft
-        velocity = 500    -- ft/s
-    },
+local client_set = {}
+local viewer_set = {}
+local controller_set = {}
+local id_set = fly_ruler.uuid_set.new()
 
-    -- optional
-    trim_init = {
-        alpha = 8.49, -- deg
-        -- thrust(lbs) ele(deg) ail(deg) rud(deg)
-        control = {
-            thrust = 5000.0,
-            elevator = -0.09,
-            aileron = 0.01,
-            rudder = -0.01
-        }
-    },
-
-    flight_condition = "WingsLevel", -- "WingsLevel" | "Turning" | "PullUp" | "Roll" | optional
-
-    -- -- optional
-    optim_options = {
-        max_fun_evals = 50000,
-        max_iter = 10000,
-        tol_fun = 1e-10,
-        tol_x = 1e-10
-    }
-}
-
-local co = coroutine.create(function()
-    system:push_plane(1, plane_cfg)
-    system:push_plane(1, plane_cfg)
-end)
-coroutine.resume(co)
-
-local init_control = {
-    thrust = 5000.0,
-    elevator = -0.09,
-    aileron = 0.01,
-    rudder = -0.01
-}
-
-local controller_1 = system:set_controller(1, init_control)
-local controller_2 = system:set_controller(2, init_control)
-
-local controller_co = coroutine.create(function()
-    local count = 0
+local system_thread = coroutine.create(function()
+    local sys = system:clone()
     while true do
-        count = count + 1
-        if count == 10 then
-            controller_2:send(fly_ruler.command.exit)
-            break
-        end
-        coroutine.yield()
-    end
-end)
-
-local viewer_1 = system:get_viewer(1)
-local viewer_2 = system:get_viewer(2)
-
-local viewer_co = coroutine.create(function()
-    -- local writer = csv_viewer.new("plane1.csv")
-    while true do
-        local output = viewer_1:receive()
-        if output ~= nil then
-            print("Plane 1: " .. output.time)
-            -- print(protobuf_viewer.encode(output))
-            -- print(json_viewer.encode(output))
-            -- writer:write_line(output)
-        end
-        local output = viewer_2:receive()
-        if output ~= nil then
-            print("Plane 2: " .. output.time)
-        end
-        coroutine.yield()
-    end
-end)
-
-local co = coroutine.create(function() system:start() end)
-coroutine.resume(co)
-
-local co = coroutine.create(function(system)
-    while true do
-        system:step(false)
+        xpcall(function() sys:step() end, print)
         coroutine.yield()
     end
 end)
 
 while true do
-    coroutine.resume(co, system)
-    coroutine.resume(viewer_co)
-    coroutine.resume(controller_co)
+    local _, client, client_addr = coroutine.resume(listen_thread)
+
+    if client ~= POLL_PENDING then
+        -- system_thread = nil
+        -- collectgarbage()
+
+        local id, viewer = table.unpack(system:push_plane(keys[1], config.PlaneInitCfg))
+        local controller = system:set_controller(id, 10)
+        client_set[tostring(id)] = client
+        id_set:add(id)
+        Linfo(string.format("Client %s connect Plane %s", client_addr, tostring(id)))
+
+        local viewer_thread = coroutine.create(function(encoder)
+            local disconnect_detected = false
+            local client_addr = client_addr
+            while true do
+                if viewer:has_changed() then
+                    local output = viewer:get_and_update()
+                    local msg = {
+                        time = output.time,
+                        view_msg = { { tostring(id), output.data } }
+                    }
+                    local chars = encoder.encode(msg)
+                    for index, id in ipairs(id_set:to_table()) do
+                        local function f()
+                            local id = tostring(id)
+                            if client_set[id] then
+                                -- client_set[id]:writable()
+                                client_set[id]:write(chars)
+                            end
+                        end
+                        xpcall(f, function(e)
+                            print(e)
+                            Lwarn(string.format("Client %s at %s disconnect", tostring(id), client_addr))
+                            disconnect_detected = true
+                        end)
+                    end
+                end
+                if disconnect_detected then
+                    break
+                end
+                coroutine.yield()
+            end
+        end)
+
+        local controller_thread = coroutine.create(function(encoder)
+            local client = client:clone()
+            local id = id
+            local client_addr = client_addr
+            local disconnect_detected = false
+            while true do
+                local last_command = init_cmd
+                local function f()
+                    client:readable()
+                    local bytes = client:read_until(string.byte('\n'))
+                    if bytes then
+                        last_command = encoder.decode_cmd(bytes)
+                    end
+                    controller:send(last_command)
+                end
+                xpcall(f, function(e)
+                    print(e)
+                    Lwarn(string.format("Client %s at %s disconnect", tostring(id), client_addr))
+                    disconnect_detected = true
+                end)
+                if disconnect_detected then
+                    break
+                end
+                coroutine.yield()
+            end
+        end)
+
+        viewer_set[tostring(id)] = viewer_thread
+        controller_set[tostring(id)] = controller_thread
+        -- system_thread = coroutine.create(step)
+        Ldebug("Create a new client handler")
+    end
+
+    if #id_set ~= 0 then
+        coroutine.resume(system_thread, system)
+    end
+
+    for index, id in ipairs(id_set:to_table()) do
+        local function exit_handler(id)
+            -- system_thread = nil
+            -- collectgarbage()
+
+            local idx = tostring(id)
+            viewer_set[idx] = nil
+            controller_set[idx] = nil
+            client_set[idx] = nil
+            id_set:remove(id)
+            system:remove_plane(id)
+            -- system_thread = coroutine.create(step)
+
+            Ldebug("Remove a client handler")
+        end
+
+        local idx = tostring(id)
+        if viewer_set[idx] ~= nil then
+            if coroutine.status(viewer_set[idx]) == "dead" then
+                exit_handler(id)
+            else
+                coroutine.resume(viewer_set[idx], json_viewer)
+            end
+        end
+        if controller_set[idx] ~= nil then
+            if coroutine.status(controller_set[idx]) == "dead" then
+                exit_handler(id)
+            else
+                coroutine.resume(controller_set[idx], json_viewer)
+            end
+        end
+    end
 end
 
 system:disable_model(1)

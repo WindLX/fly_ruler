@@ -5,6 +5,8 @@ use std::error::Error;
 pub enum FrError {
     /// A read or write error has happened when interacting with file system
     Io(std::io::Error),
+    /// Sync error
+    Sync(String),
     /// Invalid cfg format
     Cfg(String),
     /// Error cause by fly_ruler_core
@@ -27,6 +29,7 @@ impl std::fmt::Display for FrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io(e) => write!(f, "Io: {}", e),
+            Self::Sync(e) => write!(f, "Sync: {}", e),
             Self::Cfg(e) => write!(f, "Cfg: {}", e),
             Self::Core(e) => write!(f, "Core: {}", e),
             Self::Plugin(e) => write!(f, "Plugin: {}", e),
@@ -68,8 +71,9 @@ impl std::fmt::Display for PluginInner {
 /// Model: error occured in extern model
 #[derive(Debug)]
 pub enum FatalCoreError {
-    Controller(usize),
+    Controller(String),
     Plugin(FatalPluginError),
+    Nan,
 }
 
 impl FatalCoreError {}
@@ -79,6 +83,7 @@ impl std::error::Error for FatalCoreError {
         match self {
             Self::Controller(_) => None,
             Self::Plugin(e) => Some(e),
+            Self::Nan => None,
         }
     }
 }
@@ -88,6 +93,7 @@ impl std::fmt::Display for FatalCoreError {
         match self {
             Self::Controller(e) => write!(f, "controller for plane {} not found", e),
             Self::Plugin(_) => write!(f, "{}", self.source().unwrap()),
+            Self::Nan => write!(f, "NaN value"),
         }
     }
 }

@@ -8,6 +8,8 @@ members = [
 
     # Application binaries
     "crates/systems/lua_system",
+    "crates/systems/rust_system",
+    "crates/systems/test_client",
 
     # Application modules
     "crates/modules/csv_viewer",

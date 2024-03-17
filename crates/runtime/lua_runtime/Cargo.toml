@@ -8,3 +8,8 @@ edition = "2021"
 [dependencies]
 mlua = { version = "0.9.6", features = ["async", "lua54", "serialize"] }
 fly_ruler_utils = { path = "../../libs/lib_utils" }
+serde = { version = "1.0.197", features = ["derive"] }
+
+[dependencies.uuid]
+version = "1.7.0"
+features = ["v4", "fast-rng", "macro-diagnostics"]
