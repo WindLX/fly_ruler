@@ -1,0 +1,12 @@
+syntax = "proto3";
+package command;
+
+import "control.proto";
+
+message Command {
+    oneof cmd {
+        control.Control control = 1;
+        string extra = 2;
+        bool exit = 3;
+    }
+}

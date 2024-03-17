@@ -1,0 +1,11 @@
+syntax = "proto3";
+package state_extend;
+
+message StateExtend {
+  double nx = 1;
+  double ny = 2;
+  double nz = 3;
+  double mach = 4;
+  double qbar = 5;
+  double ps = 6;
+}
