@@ -13,6 +13,10 @@ pub enum FrError {
     Core(FatalCoreError),
     /// Error caused by fly_ruler_plugin
     Plugin(FatalPluginError),
+    /// Encode error
+    Encode(String),
+    /// Decode error
+    Decode(String),
 }
 
 impl std::error::Error for FrError {
@@ -33,6 +37,8 @@ impl std::fmt::Display for FrError {
             Self::Cfg(e) => write!(f, "Cfg: {}", e),
             Self::Core(e) => write!(f, "Core: {}", e),
             Self::Plugin(e) => write!(f, "Plugin: {}", e),
+            Self::Encode(e) => write!(f, "Encode: {}", e),
+            Self::Decode(e) => write!(f, "Decode: {}", e),
         }
     }
 }

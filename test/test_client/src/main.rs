@@ -1,23 +1,9 @@
-use fly_ruler_core::{
-    algorithm::nelder_mead::NelderMeadOptions,
-    core::{CoreInitCfg, PlaneInitCfg},
-    parts::trim::{TrimInit, TrimTarget},
-};
-use fly_ruler_utils::{
-    plane_model::{Control, FlightCondition},
-    Command,
-};
+use fly_ruler_utils::{plane_model::Control, Command};
 use log::{error, info};
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
-    net::{TcpListener, TcpStream},
-    sync::Mutex,
+    net::TcpStream,
 };
-use uuid::Uuid;
 
 fn main() {
     env_logger::builder()

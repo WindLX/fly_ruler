@@ -1,5 +1,0 @@
-{
-    "rust-analyzer.linkedProjects": [
-        ".\\crates\\systems\\rust_system\\Cargo.toml"
-    ]
-}

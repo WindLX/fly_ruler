@@ -5,14 +5,12 @@ import "state.proto";
 import "control.proto";
 import "state_extend.proto";
 
-message PlaneMessageGroup {
-  double time = 1;
-  repeated PlaneMessage view_msg = 2;
-}
+message PlaneMessageGroup { repeated PlaneMessage msg = 1; }
 
 message PlaneMessage {
   string id = 1;
-  CoreOutput output = 2;
+  double time = 2;
+  CoreOutput output = 3;
 }
 
 message CoreOutput {

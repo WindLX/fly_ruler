@@ -1,7 +1,10 @@
 use crate::manager::{AsPluginManager, ModelManager};
 use fly_ruler_core::core::{Core, CoreInitCfg, PlaneInitCfg};
 use fly_ruler_plugin::{PluginInfo, PluginState};
-use fly_ruler_utils::{input_channel, InputSender, OutputReceiver};
+use fly_ruler_utils::{
+    error::{FatalCoreError, FrError},
+    input_channel, InputSender, OutputReceiver,
+};
 use log::{error, info, trace, warn};
 use std::{
     collections::HashMap,
@@ -106,7 +109,7 @@ impl System {
                         Ok(state_receiver) => Some(state_receiver),
                         Err(e) => {
                             error!("{}", e);
-                            self.err_stop();
+                            None
                         }
                     }
                 }
@@ -161,22 +164,29 @@ impl System {
         }
     }
 
-    pub async fn step(&mut self) {
+    pub async fn step(&mut self) -> Option<()> {
         match &mut self.core {
             Some(core) => {
                 let output = core.step().await;
                 match output {
                     Err(e) => {
-                        error!("{}", e);
-                        self.err_stop();
+                        if let FrError::Sync(_) | FrError::Core(FatalCoreError::Controller(_)) = e {
+                            warn!("{}", e);
+                            Some(())
+                        } else {
+                            error!("{}", e);
+                            None
+                        }
                     }
                     Ok(_) => {
                         trace!("system step task fininshed");
+                        Some(())
                     }
                 }
             }
             None => {
                 warn!("Sys: core is not initialized");
+                None
             }
         }
     }
@@ -205,7 +215,7 @@ impl System {
         }
     }
 
-    fn err_stop(&mut self) -> ! {
+    pub fn err_stop(&mut self) -> ! {
         let p = self.model_manager.as_mut().unwrap();
         let _ = p.disable_all();
         error!("Sys: system didn't exit successfully");
