@@ -202,6 +202,8 @@ impl Core {
 
             let controller = self.controllers.get_mut(&idx);
             if let None = controller {
+                self.planes.remove(&idx);
+                self.clock.lock().await.unsubscribe();
                 return Err(FrError::Core(FatalCoreError::Controller(idx.to_string())));
             };
 

@@ -1,11 +1,11 @@
 use crate::{
-    system::System,
+    system::{SysError, System},
     utils::{CancellationToken, Counter, Signal},
 };
 use fly_ruler_codec::{Decoder, Encoder, PlaneMessage, ProtoCodec};
 use fly_ruler_core::core::PlaneInitCfg;
 use fly_ruler_utils::{error::FrError, Command, InputSender, OutputReceiver};
-use log::{info, trace, warn};
+use log::{error, info, trace, warn};
 use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
@@ -22,17 +22,13 @@ pub async fn system_step_handler(
     run_signal: Signal,
     plane_counter: Counter,
     cancellation_token: CancellationToken,
-) {
+) -> Result<(), SysError> {
     loop {
         if cancellation_token.is_cancelled() {
-            break;
+            break Ok(());
         }
         if plane_counter.get() >= 1 && run_signal.available() {
-            let r = system.lock().await.step().await;
-            if let None = r {
-                cancellation_token.cancel();
-                break;
-            }
+            system.lock().await.step().await?;
         } else {
             tokio::task::yield_now().await;
         }
@@ -70,7 +66,8 @@ pub async fn server_handler(
             .await
             .push_plane(f16_key.clone(), plane_init_cfg)
             .await;
-        if let None = r {
+        if let Err(e) = r {
+            error!("{}", e);
             cancellation_token.cancel();
             break;
         }
@@ -80,12 +77,12 @@ pub async fn server_handler(
             .await
             .set_controller(id.clone(), 10)
             .await;
-        if let None = controller {
+        if let Err(e) = controller {
+            error!("{}", e);
             cancellation_token.cancel();
             break;
         }
         let controller = controller.unwrap();
-        run_signal.green();
 
         info!("client {} connect Plane {}", client_addr, id);
         let client_channel_sender = client_channel_sender.clone();
@@ -156,6 +153,8 @@ pub async fn server_handler(
                 warn!("client: {} disconnected due to: {}", id, r.err().unwrap());
             }
         });
+
+        run_signal.green();
         tokio::task::yield_now().await;
     }
 }

@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use fly_ruler_codec::{Encoder, ProtoCodec};
 use fly_ruler_utils::{plane_model::Control, Command};
 use log::{error, info};
 use tokio::{
@@ -21,7 +24,7 @@ fn main() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let stream = TcpStream::connect("127.0.0.1:2345").await.unwrap();
+        let stream = TcpStream::connect("127.0.0.1:2350").await.unwrap();
         let (reader, writer) = stream.into_split();
         let viewer_task = tokio::spawn(async move {
             let mut buf_reader = reader;
@@ -46,11 +49,12 @@ fn main() {
             let writer = writer;
             let mut writer = BufWriter::new(writer);
             loop {
-                let buf = serde_json::to_string(&init_cmd).unwrap();
-                let buf = format!("{}\n", buf);
+                let mut codec = ProtoCodec::new();
+                let buf = codec.encode(init_cmd.clone()).unwrap();
                 info!("Send cmd successfully");
-                writer.write_all(&buf.as_bytes()).await.unwrap();
+                writer.write_all(buf.as_slice()).await.unwrap();
                 writer.flush().await.unwrap();
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
         });
 

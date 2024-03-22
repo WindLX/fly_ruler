@@ -216,7 +216,7 @@ impl Encoder<PlaneMessageGroup> for ProtoCodec {
 impl Decoder<PlaneMessage> for ProtoCodec {
     fn decode(&mut self, input: &[u8]) -> Result<PlaneMessage, fly_ruler_utils::error::FrError> {
         let plane_message = PlaneMessageGen::decode(input)
-            .map_err(|e| fly_ruler_utils::error::FrError::Decode(e.to_string()))?;
+            .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
         Ok(Into::<PlaneMessage>::into(plane_message))
     }
 }
@@ -227,7 +227,7 @@ impl Decoder<PlaneMessageGroup> for ProtoCodec {
         input: &[u8],
     ) -> Result<PlaneMessageGroup, fly_ruler_utils::error::FrError> {
         let plane_message_group = PlaneMessageGroupGen::decode(input)
-            .map_err(|e| fly_ruler_utils::error::FrError::Decode(e.to_string()))?;
+            .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
         Ok(Into::<PlaneMessageGroup>::into(plane_message_group))
     }
 }
@@ -242,7 +242,7 @@ impl Encoder<Command> for ProtoCodec {
 impl Decoder<Command> for ProtoCodec {
     fn decode(&mut self, input: &[u8]) -> Result<Command, fly_ruler_utils::error::FrError> {
         let command = CommandGen::decode(input)
-            .map_err(|e| fly_ruler_utils::error::FrError::Decode(e.to_string()))?;
+            .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
         Ok(Into::<Command>::into(command))
     }
 }

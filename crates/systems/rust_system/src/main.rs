@@ -34,15 +34,24 @@ fn main() {
         system.set_dir(model_root_path);
         system.init(core_init_cfg);
 
-        let keys: Vec<Uuid> = system.get_models().keys().cloned().collect();
-        let models = system.get_models();
+        let keys: Vec<Uuid> = system.get_models().map_or_else(|e|{
+            error!("{}",e);
+            std::process::exit(1);
+        }, |f|f).keys().cloned().collect();
+        let models = system.get_models().map_or_else(|e|{
+            error!("{}",e);
+            std::process::exit(1);
+        }, |f|f);
         for (index, k) in keys.iter().enumerate() {
             info!(
                 "Id: {}, Model: {}",
                 k.to_string(),
                 models.get(k).unwrap().0.name,
             );
-            system.enable_model(*k, &model_install_args[index]);
+            if let Err(e) = system.enable_model(*k, &model_install_args[index]){
+                error!("{}",e);
+                std::process::exit(1);
+            }
         }
 
         let f16_key = keys[0];
@@ -53,8 +62,8 @@ fn main() {
         let global_cancellation_token = CancellationToken::new();
 
         tokio::select! {
-            _ = system_step_handler(system.clone(), run_signal.clone(), plane_counter.clone(), global_cancellation_token.clone()) => {
-                error!("System step task finished");
+            Err(e) = system_step_handler(system.clone(), run_signal.clone(), plane_counter.clone(), global_cancellation_token.clone()) => {
+                error!("{}", e);
             },
             _ = server_handler(&server_addr, plane_init_cfg, system.clone(), plane_counter, run_signal, global_cancellation_token, f16_key) =>{
                 error!("Server task finished");

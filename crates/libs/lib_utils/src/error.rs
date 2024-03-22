@@ -1,5 +1,7 @@
 use std::error::Error;
 
+pub type FrResult<T> = Result<T, FrError>;
+
 /// fatal error which may cause critical problem and must be transmit to the fly_ruler system level
 #[derive(Debug)]
 pub enum FrError {
@@ -13,10 +15,8 @@ pub enum FrError {
     Core(FatalCoreError),
     /// Error caused by fly_ruler_plugin
     Plugin(FatalPluginError),
-    /// Encode error
-    Encode(String),
-    /// Decode error
-    Decode(String),
+    /// Codec error
+    Codec(String),
 }
 
 impl std::error::Error for FrError {
@@ -37,8 +37,7 @@ impl std::fmt::Display for FrError {
             Self::Cfg(e) => write!(f, "Cfg: {}", e),
             Self::Core(e) => write!(f, "Core: {}", e),
             Self::Plugin(e) => write!(f, "Plugin: {}", e),
-            Self::Encode(e) => write!(f, "Encode: {}", e),
-            Self::Decode(e) => write!(f, "Decode: {}", e),
+            Self::Codec(e) => write!(f, "Codec: {}", e),
         }
     }
 }

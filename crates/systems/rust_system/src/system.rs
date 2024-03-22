@@ -1,15 +1,15 @@
 use crate::manager::{AsPluginManager, ModelManager};
 use fly_ruler_core::core::{Core, CoreInitCfg, PlaneInitCfg};
 use fly_ruler_plugin::{PluginInfo, PluginState};
-use fly_ruler_utils::{input_channel, InputSender, OutputReceiver};
-use log::{error, info, trace, warn};
+use fly_ruler_utils::{error::FrError, input_channel, InputSender, OutputReceiver};
+use log::{error, info, trace};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    process,
     sync::{Arc, Mutex},
     time::Duration,
 };
+use thiserror::Error;
 use uuid::Uuid;
 
 pub struct System {
@@ -40,85 +40,45 @@ impl System {
         self.model_root = PathBuf::from(model_root_path.as_ref());
     }
 
-    pub fn get_models(&self) -> HashMap<Uuid, (PluginInfo, PluginState)> {
+    pub fn get_models(&self) -> Result<HashMap<Uuid, (PluginInfo, PluginState)>, SysError> {
         if let Some(manager) = &self.model_manager {
             let infos = manager.infos();
             let states = manager.states();
-            infos
+            let r = infos
                 .iter()
                 .zip(states.iter())
                 .map(|(info, state)| (*info.0, (info.1.clone(), state.1.clone())))
-                .collect()
+                .collect();
+            Ok(r)
         } else {
-            warn!("Sys: model manager is not initialized");
-            HashMap::new()
+            Err(SysError::ManagerNotInit)
         }
     }
 
-    pub fn enable_model(&mut self, model_id: Uuid, args: &[impl ToString]) {
+    pub fn enable_model(&mut self, model_id: Uuid, args: &[impl ToString]) -> Result<(), SysError> {
         if let Some(manager) = &mut self.model_manager {
-            let result = manager.enable(model_id, args);
-            match result {
-                Ok(()) => {}
-                Err(e) => {
-                    error!("{}", e);
-                    self.err_stop()
-                }
-            }
+            manager.enable(model_id, args)?;
+            Ok(())
         } else {
-            warn!("Sys: model manager is not initialized");
+            Err(SysError::ManagerNotInit)
         }
     }
 
-    pub fn disable_model(&mut self, model_id: Uuid) {
+    pub fn disable_model(&mut self, model_id: Uuid) -> Result<(), SysError> {
         if let Some(manager) = &mut self.model_manager {
-            let _ = manager.disable(model_id);
+            manager.disable(model_id)?;
+            Ok(())
         } else {
-            warn!("Sys: model manager is not initialized");
+            Err(SysError::ManagerNotInit)
         }
     }
 
-    pub fn get_model_state(&self, model_id: Uuid) -> Option<PluginState> {
+    pub fn get_model_state(&self, model_id: Uuid) -> Result<Option<PluginState>, SysError> {
         if let Some(manager) = &self.model_manager {
-            manager.state(model_id)
+            let r = manager.state(model_id);
+            Ok(r)
         } else {
-            warn!("Sys: model manager is not initialized");
-            None
-        }
-    }
-
-    pub async fn push_plane(
-        &mut self,
-        model_id: Uuid,
-        init_cfg: PlaneInitCfg,
-    ) -> Option<(Uuid, OutputReceiver)> {
-        let model = if let Some(manager) = &mut self.model_manager {
-            manager.get_model(model_id)
-        } else {
-            warn!("Sys: model manager is not initialized");
-            None
-        };
-        match model {
-            Some(model) => match &mut self.core {
-                Some(core) => {
-                    let state_receiver = core.push_plane(model, init_cfg).await;
-                    match state_receiver {
-                        Ok(state_receiver) => Some(state_receiver),
-                        Err(e) => {
-                            error!("{}", e);
-                            None
-                        }
-                    }
-                }
-                None => {
-                    warn!("Sys: core is not initialized");
-                    None
-                }
-            },
-            None => {
-                warn!("Sys: model is not available");
-                None
-            }
+            Err(SysError::ManagerNotInit)
         }
     }
 
@@ -128,90 +88,90 @@ impl System {
         self.core = Some(core);
     }
 
-    pub async fn set_controller(&mut self, plane_id: Uuid, buffer: usize) -> Option<InputSender> {
+    pub async fn push_plane(
+        &mut self,
+        model_id: Uuid,
+        init_cfg: PlaneInitCfg,
+    ) -> Result<(Uuid, OutputReceiver), SysError> {
+        let model = if let Some(manager) = &mut self.model_manager {
+            manager.get_model(model_id)
+        } else {
+            return Err(SysError::ManagerNotInit);
+        };
+        match model {
+            Some(model) => match &mut self.core {
+                Some(core) => Ok(core.push_plane(model, init_cfg).await?),
+                None => Err(SysError::CoreNotInit),
+            },
+            None => Err(SysError::ModelNotAvailable),
+        }
+    }
+
+    pub async fn set_controller(
+        &mut self,
+        plane_id: Uuid,
+        buffer: usize,
+    ) -> Result<InputSender, SysError> {
         let (tx, rx) = input_channel(buffer);
         match &mut self.core {
             Some(core) => {
                 core.set_controller(plane_id, rx).await;
-                Some(tx)
+                Ok(tx)
             }
-            None => {
-                warn!("Sys: core is not initialized");
-                None
-            }
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub fn subscribe_plane(&self, plane_id: Uuid) -> Option<OutputReceiver> {
+    pub fn subscribe_plane(&self, plane_id: Uuid) -> Result<Option<OutputReceiver>, SysError> {
         match &self.core {
-            Some(core) => core.subscribe_plane(plane_id),
-            None => {
-                warn!("Sys: core is not initialized");
-                None
-            }
+            Some(core) => Ok(core.subscribe_plane(plane_id)),
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub async fn remove_plane(&mut self, plane_id: Uuid) {
+    pub async fn remove_plane(&mut self, plane_id: Uuid) -> Result<(), SysError> {
         match &mut self.core {
-            Some(core) => core.remove_plane(plane_id).await,
-            None => {
-                warn!("Sys: core is not initialized");
-            }
+            Some(core) => Ok(core.remove_plane(plane_id).await),
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub async fn step(&mut self) -> Option<()> {
+    pub async fn step(&mut self) -> Result<(), SysError> {
         match &mut self.core {
             Some(core) => {
-                let output = core.step().await;
-                match output {
-                    Err(e) => {
-                        warn!("{}", e);
-                        Some(())
-                    }
-                    Ok(_) => {
-                        trace!("system step task fininshed");
-                        Some(())
-                    }
-                }
+                core.step().await?;
+                trace!("system step task fininshed");
+                Ok(())
             }
-            None => {
-                warn!("Sys: core is not initialized");
-                None
-            }
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub async fn pause(&self) {
+    pub async fn pause(&self) -> Result<(), SysError> {
         match &self.core {
             Some(core) => {
                 core.pause().await;
                 info!("core has been paused");
+                Ok(())
             }
-            None => {
-                warn!("Sys: core is not initialized");
-            }
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub async fn resume(&self) {
+    pub async fn resume(&self) -> Result<(), SysError> {
         match &self.core {
             Some(core) => {
                 core.resume().await;
                 info!("core has been resumed");
+                Ok(())
             }
-            None => {
-                warn!("Sys: core is not initialized");
-            }
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub fn err_stop(&mut self) -> ! {
+    pub fn err_stop(&mut self) {
         let p = self.model_manager.as_mut().unwrap();
         let _ = p.disable_all();
-        error!("Sys: system didn't exit successfully");
-        process::exit(1)
     }
 
     pub fn stop(&mut self) {
@@ -220,33 +180,36 @@ impl System {
         info!("system exited successfully");
     }
 
-    pub fn contains_plane(&self, plane_id: Uuid) -> Option<bool> {
+    pub fn contains_plane(&self, plane_id: Uuid) -> Result<bool, SysError> {
         match &self.core {
-            Some(core) => Some(core.contains_plane(plane_id)),
-            None => {
-                warn!("Sys: core is not initialized");
-                None
-            }
+            Some(core) => Ok(core.contains_plane(plane_id)),
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub fn planes(&self) -> Option<Vec<Uuid>> {
+    pub fn planes(&self) -> Result<Vec<Uuid>, SysError> {
         match &self.core {
-            Some(core) => Some(core.planes()),
-            None => {
-                warn!("Sys: core is not initialized");
-                None
-            }
+            Some(core) => Ok(core.planes()),
+            None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub async fn get_time(&self) -> Option<Duration> {
+    pub async fn get_time(&self) -> Result<Duration, SysError> {
         match &self.core {
-            Some(core) => Some(core.get_time().await),
-            None => {
-                warn!("Sys: core is not initialized");
-                None
-            }
+            Some(core) => Ok(core.get_time().await),
+            None => Err(SysError::CoreNotInit),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum SysError {
+    #[error("Sys: model manager is not initialized")]
+    ManagerNotInit,
+    #[error("Sys: core is not initialized")]
+    CoreNotInit,
+    #[error("{0}")]
+    Fr(#[from] FrError),
+    #[error("Model not available")]
+    ModelNotAvailable,
 }

@@ -1,4 +1,4 @@
-server_addr = "127.0.0.1:2346"
+server_addr = "127.0.0.1:2350"
 
 model_root_path = "./models"
 

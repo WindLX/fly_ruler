@@ -16,6 +16,7 @@ lazy_static = "1.4.0"
 fly_ruler_utils = { path = "../../crates/libs/lib_utils" }
 fly_ruler_plugin = { path = "../../crates/libs/lib_plugin" }
 fly_ruler_core = { path = "../../crates/libs/lib_core" }
+fly_ruler_codec = { path = "../../crates/libs/lib_codec" }
 
 [dependencies.uuid]
 version = "1.7.0"
