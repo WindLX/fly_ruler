@@ -1,10 +1,7 @@
 use crate::manager::{AsPluginManager, ModelManager};
 use fly_ruler_core::core::{Core, CoreInitCfg, PlaneInitCfg};
 use fly_ruler_plugin::{PluginInfo, PluginState};
-use fly_ruler_utils::{
-    error::{FatalCoreError, FrError},
-    input_channel, InputSender, OutputReceiver,
-};
+use fly_ruler_utils::{input_channel, InputSender, OutputReceiver};
 use log::{error, info, trace, warn};
 use std::{
     collections::HashMap,
@@ -131,11 +128,11 @@ impl System {
         self.core = Some(core);
     }
 
-    pub fn set_controller(&mut self, plane_id: Uuid, buffer: usize) -> Option<InputSender> {
+    pub async fn set_controller(&mut self, plane_id: Uuid, buffer: usize) -> Option<InputSender> {
         let (tx, rx) = input_channel(buffer);
         match &mut self.core {
             Some(core) => {
-                core.set_controller(plane_id, rx);
+                core.set_controller(plane_id, rx).await;
                 Some(tx)
             }
             None => {
@@ -170,13 +167,8 @@ impl System {
                 let output = core.step().await;
                 match output {
                     Err(e) => {
-                        if let FrError::Sync(_) | FrError::Core(FatalCoreError::Controller(_)) = e {
-                            warn!("{}", e);
-                            Some(())
-                        } else {
-                            error!("{}", e);
-                            None
-                        }
+                        warn!("{}", e);
+                        Some(())
                     }
                     Ok(_) => {
                         trace!("system step task fininshed");

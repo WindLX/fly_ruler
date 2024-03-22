@@ -175,9 +175,16 @@ impl Core {
         self.clock.lock().await.resume();
     }
 
-    pub fn set_controller(&mut self, id: Uuid, controller: InputReceiver) -> Option<InputReceiver> {
+    pub async fn set_controller(
+        &mut self,
+        id: Uuid,
+        controller: InputReceiver,
+    ) -> Option<InputReceiver> {
+        self.clock.lock().await.pause();
         info!("set controller for plane {id}");
-        self.controllers.insert(id, controller)
+        let r = self.controllers.insert(id, controller);
+        self.clock.lock().await.resume();
+        r
     }
 
     /// main loop step
@@ -189,6 +196,7 @@ impl Core {
         }
         let clock = self.clock.clone();
         for (idx, (plane, state_sender)) in self.planes.clone() {
+            let t = clock.lock().await.now().await;
             clock.lock().await.pause();
             let plane = plane.clone();
 
@@ -199,7 +207,6 @@ impl Core {
 
             let command = controller.unwrap().recv().await;
             clock.lock().await.resume();
-            let t = clock.lock().await.now().await;
 
             match command {
                 Some(command) => match command {
@@ -345,7 +352,10 @@ mod core_tests {
 
         let (tx, rx) = input_channel(10);
 
-        assert!(matches!(core.set_controller(Uuid::new_v4(), rx), None));
+        assert!(matches!(
+            core.set_controller(Uuid::new_v4(), rx).await,
+            None
+        ));
 
         let h = std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -397,8 +407,14 @@ mod core_tests {
         let (tx, rx) = input_channel(10);
         let (ctx, crx) = input_channel(10);
 
-        assert!(matches!(core.set_controller(Uuid::new_v4(), rx), None));
-        assert!(matches!(core.set_controller(Uuid::new_v4(), crx), None));
+        assert!(matches!(
+            core.set_controller(Uuid::new_v4(), rx).await,
+            None
+        ));
+        assert!(matches!(
+            core.set_controller(Uuid::new_v4(), crx).await,
+            None
+        ));
 
         let cancellation_token1 = Arc::new(CancellationToken::new());
         let cancellation_token2 = Arc::new(CancellationToken::new());

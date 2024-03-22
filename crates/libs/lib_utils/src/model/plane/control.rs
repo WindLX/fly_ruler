@@ -5,12 +5,23 @@ use std::ops::{Index, IndexMut};
 /// What the `control` represent
 /// thrust (lbs) ele (deg) ail (deg) rud (deg)
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct Control {
     pub thrust: f64,
     pub elevator: f64,
     pub aileron: f64,
     pub rudder: f64,
+}
+
+impl Default for Control {
+    fn default() -> Self {
+        Self {
+            thrust: 1000.0,
+            elevator: 0.0,
+            aileron: 0.0,
+            rudder: 0.0,
+        }
+    }
 }
 
 impl std::fmt::Display for Control {

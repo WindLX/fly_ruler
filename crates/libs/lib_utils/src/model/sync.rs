@@ -115,14 +115,28 @@ impl InputSender {
 }
 
 /// The receiver end of command channel
-pub struct InputReceiver(mpsc::Receiver<Command>);
+pub struct InputReceiver {
+    receiver: mpsc::Receiver<Command>,
+    last: Command,
+}
 
 impl InputReceiver {
     pub fn new(r: mpsc::Receiver<Command>) -> Self {
-        Self(r)
+        Self {
+            receiver: r,
+            last: Command::default(),
+        }
     }
 
     pub async fn recv(&mut self) -> Option<Command> {
-        self.0.recv().await
+        let result = self.receiver.recv().await;
+        if let Some(ref r) = result {
+            self.last = r.clone();
+        }
+        result
+    }
+
+    pub fn last(&self) -> Command {
+        self.last.clone()
     }
 }

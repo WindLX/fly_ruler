@@ -1,10 +1,10 @@
-server_addr = "127.0.0.1:2345"
+server_addr = "127.0.0.1:2346"
 
 model_root_path = "./models"
 
 core_init_cfg = {
     time_scale = 1.0, -- optional
-    sample_time = 100 -- ms optional
+    sample_time = 10 -- ms optional
 }
 
 model_install_args = { { "./models/f16_model/data" } }
@@ -13,7 +13,7 @@ plane_init_cfg = {
     deflection = { 0.0, 0.0, 0.0 }, -- ele(deg) ail(deg) rud(deg) | optional
 
     trim_target = {
-        altitude = 15000, -- ft
+        altitude = 1000, -- ft
         velocity = 500    -- ft/s
     },
 
@@ -22,7 +22,7 @@ plane_init_cfg = {
         alpha = 8.49, -- deg
         -- thrust(lbs) ele(deg) ail(deg) rud(deg)
         control = {
-            thrust = 5000.0,
+            thrust = 1000.0,
             elevator = -0.09,
             aileron = 0.01,
             rudder = -0.01

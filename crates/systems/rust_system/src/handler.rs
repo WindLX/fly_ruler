@@ -2,13 +2,13 @@ use crate::{
     system::System,
     utils::{CancellationToken, Counter, Signal},
 };
-use fly_ruler_codec::{Decoder, Encoder, JsonCodec, PlaneMessage};
+use fly_ruler_codec::{Decoder, Encoder, PlaneMessage, ProtoCodec};
 use fly_ruler_core::core::PlaneInitCfg;
 use fly_ruler_utils::{error::FrError, Command, InputSender, OutputReceiver};
 use log::{info, trace, warn};
 use std::sync::Arc;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
     net::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpListener,
@@ -50,7 +50,7 @@ pub async fn server_handler(
 ) {
     let listener = TcpListener::bind(server_addr).await.unwrap();
     let (client_channel_sender, _) = broadcast::channel::<Vec<u8>>(100);
-    let codec = JsonCodec::new();
+    let codec = ProtoCodec::new();
 
     loop {
         let cancellation_token = cancellation_token.clone();
@@ -75,7 +75,11 @@ pub async fn server_handler(
             break;
         }
         let (id, viewer) = r.unwrap();
-        let controller = plane_builder.lock().await.set_controller(id.clone(), 10);
+        let controller = plane_builder
+            .lock()
+            .await
+            .set_controller(id.clone(), 10)
+            .await;
         if let None = controller {
             cancellation_token.cancel();
             break;
@@ -121,7 +125,7 @@ pub async fn server_handler(
         let c_ct = cancellation_token.clone();
         let g_c_ct = group_cancellation_token.clone();
         let _client_task = tokio::spawn(async move {
-            let r = client_handler(
+            let r = client_write_handler(
                 id,
                 client_channel_receiver,
                 client_writer,
@@ -185,7 +189,7 @@ async fn viewer_handler(
     Ok(())
 }
 
-async fn client_handler(
+async fn client_write_handler(
     id: Uuid,
     mut client_channel_receiver: broadcast::Receiver<Vec<u8>>,
     client_writer: OwnedWriteHalf,
@@ -222,16 +226,16 @@ async fn controller_handler(
     global_cancellation_token: CancellationToken,
     group_cancellation_token: CancellationToken,
 ) -> Result<(), FrError> {
-    let end_byte = b'\n';
+    // let end_byte = b'\n';
     let mut last_cmd;
     let mut client_reader = BufReader::new(client_reader);
     loop {
         if global_cancellation_token.is_cancelled() || group_cancellation_token.is_cancelled() {
             break;
         }
-        let mut buf = Vec::new();
+        let mut buf = vec![0; 1024 * 10];
         let n = client_reader
-            .read_until(end_byte, &mut buf)
+            .read(&mut buf)
             .await
             .map_err(|e| FrError::Sync(e.to_string()))?;
         last_cmd = codec.decode(&buf[..n])?;
