@@ -430,12 +430,15 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 name = "fly_ruler_codec"
 version = "0.1.0"
 dependencies = [
+ "fly_ruler_core",
+ "fly_ruler_plugin",
  "fly_ruler_utils",
  "log",
  "prost",
  "prost-build",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]

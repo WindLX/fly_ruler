@@ -1,0 +1,42 @@
+syntax = "proto3";
+package plane_init_cfg;
+
+import "control.proto";
+
+message PlaneInitCfg {
+    optional Deflection deflection = 1;
+    TrimTarget trim_target = 2;
+    optional TrimInit trim_init = 3;
+    optional FlightCondition flight_condition = 4;
+    optional NelderMeadOptions optim_options = 5;
+}
+
+message Deflection {
+    double deflection_0 = 1;
+    double deflection_1 = 2;
+    double deflection_2 = 3;
+}
+
+message TrimTarget {
+    double altitude = 1;
+    double velocity = 2;
+}
+
+message TrimInit {
+    control.Control control = 1;
+    double alpha = 2;
+}
+
+enum FlightCondition {
+    WINGS_LEVEL = 0;
+    TURNING = 1;
+    PULL_UP = 2;
+    ROLL = 3;
+}
+
+message NelderMeadOptions {
+    uint32 max_fun_evals = 1;
+    uint32 max_iter = 2;
+    double tol_fun = 3;
+    double tol_x = 4;
+}

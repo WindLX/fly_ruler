@@ -162,7 +162,7 @@ impl LeadingEdgeFlapBlock {
 }
 
 pub struct PlaneBlock {
-    start_time: f64,
+    start_time: Option<f64>,
     control: ControllerBlock,
     flap: LeadingEdgeFlapBlock,
     integrator: VectorIntegrator,
@@ -180,7 +180,6 @@ impl PlaneBlock {
         init: &TrimOutput,
         deflection: &[f64; 3],
         ctrl_limit: ControlLimit,
-        start_time: f64,
     ) -> Result<Self, FatalCoreError> {
         let flap = LeadingEdgeFlapBlock::new(init.state.alpha, init.d_lef);
         let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
@@ -197,7 +196,7 @@ impl PlaneBlock {
             alpha_limit_bottom: ctrl_limit.alpha_limit_bottom,
             beta_limit_top: ctrl_limit.beta_limit_top,
             beta_limit_bottom: ctrl_limit.beta_limit_bottom,
-            start_time,
+            start_time: None,
         })
     }
 
@@ -206,7 +205,10 @@ impl PlaneBlock {
         control: impl Into<Control>,
         t: f64,
     ) -> Result<CoreOutput, FatalCoreError> {
-        let t = t - self.start_time;
+        if self.start_time.is_none() {
+            self.start_time = Some(t);
+        }
+        let t = (t - self.start_time.unwrap()).max(1e-3);
         let state = &mut self.integrator.past();
         let control = self.control.update(control, t);
         let lef = self.flap.past();
@@ -466,7 +468,7 @@ mod core_parts_tests {
         // set_time_scale(5.0).unwrap();
 
         let control: [f64; 4] = result.control.into();
-        let f16_block = PlaneBlock::new(&model, &result, &[0.0, 0.0, 0.0], CL, 0.0);
+        let f16_block = PlaneBlock::new(&model, &result, &[0.0, 0.0, 0.0], CL);
         let mut f16_block = f16_block.unwrap();
 
         let path = Path::new("output.csv");

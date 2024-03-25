@@ -10,7 +10,13 @@ log = "0.4.20"
 serde = { version = "1.0.193", features = ["derive"] }
 prost = "0.12.1"
 serde_json = "1.0.114"
+fly_ruler_plugin = { path = "../../libs/lib_plugin" }
 fly_ruler_utils = { path = "../../libs/lib_utils" }
+fly_ruler_core = { path = "../../libs/lib_core" }
+
+[dependencies.uuid]
+version = "1.7.0"
+features = ["v4", "fast-rng", "macro-diagnostics"]
 
 [build-dependencies]
 prost-build = "0.12.1"

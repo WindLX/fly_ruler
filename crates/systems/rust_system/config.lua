@@ -2,6 +2,9 @@ server_addr = "127.0.0.1:2350"
 
 model_root_path = "./models"
 
+tick_timeout = 10000 -- ms
+is_block = false
+
 core_init_cfg = {
     time_scale = 1.0, -- optional
     sample_time = 10 -- ms optional
@@ -13,7 +16,7 @@ plane_init_cfg = {
     deflection = { 0.0, 0.0, 0.0 }, -- ele(deg) ail(deg) rud(deg) | optional
 
     trim_target = {
-        altitude = 1000, -- ft
+        altitude = 3000, -- ft
         velocity = 500    -- ft/s
     },
 

@@ -1,10 +1,8 @@
 mod generated;
-mod json;
 mod model;
 mod proto;
 
 use fly_ruler_utils::error::FrResult;
-pub use json::JsonCodec;
 pub use model::*;
 pub use proto::ProtoCodec;
 

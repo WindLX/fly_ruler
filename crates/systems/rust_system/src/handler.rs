@@ -1,52 +1,59 @@
 use crate::{
-    system::{SysError, System},
-    utils::{CancellationToken, Counter, Signal},
+    system::System,
+    utils::{CancellationToken, Signal},
 };
-use fly_ruler_codec::{Decoder, Encoder, PlaneMessage, ProtoCodec};
+use anyhow::{anyhow, Result};
+use fly_ruler_codec::{
+    Args, Decoder, Encoder, GetModelInfosResponse, PlaneMessage, PluginInfoTuple, ProtoCodec,
+    PushPlaneResponse, Response, ServiceCall, ServiceCallResponse,
+};
 use fly_ruler_core::core::PlaneInitCfg;
-use fly_ruler_utils::{error::FrError, Command, InputSender, OutputReceiver};
-use log::{error, info, trace, warn};
-use std::sync::Arc;
+use fly_ruler_utils::{InputSender, OutputReceiver};
+use log::{debug, info, trace, warn};
+use std::{net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
     net::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpListener,
     },
-    sync::{broadcast, Mutex},
+    sync::{broadcast, mpsc, Mutex},
+    time,
 };
 use uuid::Uuid;
 
 pub async fn system_step_handler(
     system: Arc<Mutex<System>>,
+    is_block: bool,
     run_signal: Signal,
-    plane_counter: Counter,
     cancellation_token: CancellationToken,
-) -> Result<(), SysError> {
+) -> Result<()> {
     loop {
         if cancellation_token.is_cancelled() {
             break Ok(());
         }
-        if plane_counter.get() >= 1 && run_signal.available() {
-            system.lock().await.step().await?;
-        } else {
-            tokio::task::yield_now().await;
+        let c = system.lock().await.plane_count()?;
+        if c >= 1 && run_signal.available() {
+            let r = system.lock().await.step(is_block).await?;
+            if let Err(e) = r {
+                warn!("System step: {}", e);
+            }
+            debug!("System step one");
         }
+        tokio::task::yield_now().await;
     }
 }
 
 pub async fn server_handler(
     server_addr: &str,
-    plane_init_cfg: PlaneInitCfg,
-    plane_builder: Arc<Mutex<System>>,
-    plane_counter: Counter,
+    tick_timeout: u64,
+    init_cfg: PlaneInitCfg,
+    system: Arc<Mutex<System>>,
     run_signal: Signal,
     cancellation_token: CancellationToken,
-    f16_key: Uuid,
 ) {
     let listener = TcpListener::bind(server_addr).await.unwrap();
-    let (client_channel_sender, _) = broadcast::channel::<Vec<u8>>(100);
-    let codec = ProtoCodec::new();
+    let (broadcast_channel_sender, _) = broadcast::channel::<Vec<u8>>(1024);
 
     loop {
         let cancellation_token = cancellation_token.clone();
@@ -54,120 +61,94 @@ pub async fn server_handler(
             break;
         }
 
-        let plane_counter_1 = plane_counter.clone();
         let (client, client_addr) = listener.accept().await.unwrap();
-        plane_counter.add();
-        info!("accepted connection from {}", client_addr);
+        info!("Accepted connection from {}", client_addr);
 
-        let plane_remover = plane_builder.clone();
-        run_signal.red();
-        let r = plane_builder
-            .lock()
-            .await
-            .push_plane(f16_key.clone(), plane_init_cfg)
-            .await;
-        if let Err(e) = r {
-            error!("{}", e);
-            cancellation_token.cancel();
-            break;
-        }
-        let (id, viewer) = r.unwrap();
-        let controller = plane_builder
-            .lock()
-            .await
-            .set_controller(id.clone(), 10)
-            .await;
-        if let Err(e) = controller {
-            error!("{}", e);
-            cancellation_token.cancel();
-            break;
-        }
-        let controller = controller.unwrap();
+        let (reader, writer) = client.into_split();
+        let plane_id = Arc::new(Mutex::new(None));
+        let grct = CancellationToken::new();
+        let (private_channel_sender, private_channel_receiver) = mpsc::channel::<Vec<u8>>(16);
 
-        info!("client {} connect Plane {}", client_addr, id);
-        let client_channel_sender = client_channel_sender.clone();
-        let client_channel_receiver = client_channel_sender.subscribe();
-        let (client_reader, client_writer) = client.into_split();
-        let group_cancellation_token = CancellationToken::new();
-        let gct = group_cancellation_token.clone();
-
-        let _cancel_task = tokio::spawn(async move {
-            loop {
-                if gct.is_cancelled() {
-                    plane_remover.lock().await.remove_plane(id).await;
-                    plane_counter_1.sub();
-                    break;
+        let _rpc_task = tokio::spawn({
+            let plane_id1 = plane_id.clone();
+            let plane_id2 = plane_id.clone();
+            let gct1 = cancellation_token.clone();
+            let grct1 = grct.clone();
+            let grct2 = grct.clone();
+            let system1 = system.clone();
+            let broadcast_channel_sender1 = broadcast_channel_sender.clone();
+            let run_signal1 = run_signal.clone();
+            async move {
+                let r = rpc_handler(
+                    client_addr,
+                    tick_timeout,
+                    reader,
+                    system1,
+                    init_cfg,
+                    broadcast_channel_sender1,
+                    private_channel_sender,
+                    plane_id1,
+                    run_signal1,
+                    gct1,
+                    grct1,
+                )
+                .await;
+                if let Err(e) = r {
+                    grct2.cancel();
+                    warn!("RPC Client: {} dropped, due to {}", client_addr, e);
+                    if let Some(id) = plane_id2.lock().await.deref() {
+                        let _ = ProtoCodec::new().encode(ServiceCallResponse {
+                            name: "LostPlane".to_string(),
+                            response: Some(Response::LostPlane(id.to_string())),
+                        });
+                    }
                 }
             }
         });
 
-        let v_ct = cancellation_token.clone();
-        let g_v_ct = group_cancellation_token.clone();
-        let _viewer_task = tokio::spawn(async move {
-            let r = viewer_handler(
-                id,
-                client_channel_sender,
-                viewer,
-                codec,
-                v_ct.clone(),
-                g_v_ct.clone(),
-            )
-            .await;
-            if r.is_err() {
-                g_v_ct.cancel();
-                warn!("client: {} disconnected due to: {}", id, r.err().unwrap());
+        let _client_write_task = tokio::task::spawn({
+            let plane_id1 = plane_id.clone();
+            let gct1 = cancellation_token.clone();
+            let grct1 = grct.clone();
+            let grct2 = grct.clone();
+            let broadcast_channel_receiver = broadcast_channel_sender.subscribe();
+            async move {
+                let r = client_write_handler(
+                    client_addr,
+                    broadcast_channel_receiver,
+                    private_channel_receiver,
+                    writer,
+                    gct1,
+                    grct1,
+                )
+                .await;
+                if let Err(e) = r {
+                    grct2.cancel();
+                    warn!("RPC Client: {} dropped, due to {}", client_addr, e);
+                    if let Some(id) = plane_id1.lock().await.deref() {
+                        let _ = ProtoCodec::new().encode(ServiceCallResponse {
+                            name: "LostPlane".to_string(),
+                            response: Some(Response::LostPlane(id.to_string())),
+                        });
+                    }
+                }
             }
         });
 
-        let c_ct = cancellation_token.clone();
-        let g_c_ct = group_cancellation_token.clone();
-        let _client_task = tokio::spawn(async move {
-            let r = client_write_handler(
-                id,
-                client_channel_receiver,
-                client_writer,
-                c_ct.clone(),
-                g_c_ct.clone(),
-            )
-            .await;
-            if r.is_err() {
-                g_c_ct.cancel();
-                warn!("client: {} disconnected due to: {}", id, r.err().unwrap());
-            }
-        });
-
-        let co_ct = cancellation_token.clone();
-        let g_co_ct = group_cancellation_token.clone();
-        let _controller_task = tokio::spawn(async move {
-            let r = controller_handler(
-                id,
-                client_reader,
-                controller,
-                codec,
-                co_ct.clone(),
-                g_co_ct.clone(),
-            )
-            .await;
-            if r.is_err() {
-                g_co_ct.cancel();
-                warn!("client: {} disconnected due to: {}", id, r.err().unwrap());
-            }
-        });
-
-        run_signal.green();
+        tokio::time::sleep(Duration::from_millis(100)).await;
         tokio::task::yield_now().await;
     }
 }
 
 async fn viewer_handler(
     id: Uuid,
-    client_channel_sender: broadcast::Sender<Vec<u8>>,
+    broadcast_channel_sender: broadcast::Sender<Vec<u8>>,
     mut viewer: OutputReceiver,
-    mut codec: impl Encoder<PlaneMessage>,
+    mut codec: impl Encoder<ServiceCallResponse>,
     global_cancellation_token: CancellationToken,
     group_cancellation_token: CancellationToken,
-) -> Result<(), FrError> {
-    let sender = client_channel_sender.clone();
+) -> Result<()> {
+    let sender = broadcast_channel_sender.clone();
     let id = id;
     loop {
         if global_cancellation_token.is_cancelled() || group_cancellation_token.is_cancelled() {
@@ -175,71 +156,227 @@ async fn viewer_handler(
         }
         viewer.changed().await?;
         let output = viewer.get_and_update();
-        let chars = codec.encode(PlaneMessage {
-            id: id.to_string(),
-            time: output.0,
-            output: output.1.clone(),
+        let chars = codec.encode(ServiceCallResponse {
+            name: "Output".to_string(),
+            response: Some(Response::Output(PlaneMessage {
+                id: id.to_string(),
+                time: output.0,
+                output: Some(output.1.clone()),
+            })),
         })?;
-        sender
-            .send(chars)
-            .map_err(|e| FrError::Sync(e.to_string()))?;
-        trace!("received output from viewer: {}", id);
+        sender.send(chars)?;
+        trace!("Received output from viewer: {}", id);
+
+        // tokio::time::sleep(Duration::from_millis(5)).await;
+        tokio::task::yield_now().await;
     }
     Ok(())
 }
 
 async fn client_write_handler(
-    id: Uuid,
-    mut client_channel_receiver: broadcast::Receiver<Vec<u8>>,
+    ip: SocketAddr,
+    mut broadcast_channel_receiver: broadcast::Receiver<Vec<u8>>,
+    mut private_channel_receiver: mpsc::Receiver<Vec<u8>>,
     client_writer: OwnedWriteHalf,
     global_cancellation_token: CancellationToken,
     group_cancellation_token: CancellationToken,
-) -> Result<(), FrError> {
+) -> Result<()> {
     let mut client_writer = BufWriter::new(client_writer);
     loop {
         if global_cancellation_token.is_cancelled() || group_cancellation_token.is_cancelled() {
             break;
         }
-        let msg = client_channel_receiver
-            .recv()
-            .await
-            .map_err(|e| FrError::Sync(e.to_string()))?;
-        client_writer
-            .write_all(msg.as_slice())
-            .await
-            .map_err(|e| FrError::Sync(e.to_string()))?;
-        client_writer
-            .flush()
-            .await
-            .map_err(|e| FrError::Sync(e.to_string()))?;
-        trace!("client send successfully: {}", id);
+
+        // Try receiving from broadcast channel
+        if let Ok(msg) = broadcast_channel_receiver.try_recv() {
+            client_writer.write_all(msg.as_slice()).await?;
+            client_writer.flush().await?;
+            debug!("Broadcast client: {} send successfully", ip);
+        }
+
+        // Try receiving from private channel
+        if let Ok(msg) = private_channel_receiver.try_recv() {
+            client_writer.write_all(msg.as_slice()).await?;
+            client_writer.flush().await?;
+            debug!("Private client: {} send successfully", ip);
+        }
+
+        // tokio::time::sleep(Duration::from_millis(5)).await;
+        tokio::task::yield_now().await;
     }
     Ok(())
 }
 
-async fn controller_handler(
-    id: Uuid,
+async fn rpc_handler(
+    ip: SocketAddr,
+    tick_timeout: u64,
     client_reader: OwnedReadHalf,
-    controller: InputSender,
-    mut codec: impl Decoder<Command>,
+    system: Arc<Mutex<System>>,
+    init_cfg: PlaneInitCfg,
+    broadcast_channel_sender: broadcast::Sender<Vec<u8>>,
+    private_channel_sender: mpsc::Sender<Vec<u8>>,
+    plane_id: Arc<Mutex<Option<Uuid>>>,
+    run_signal: Signal,
     global_cancellation_token: CancellationToken,
     group_cancellation_token: CancellationToken,
-) -> Result<(), FrError> {
-    // let end_byte = b'\n';
-    let mut last_cmd;
+) -> Result<()> {
+    let mut codec = ProtoCodec::new();
     let mut client_reader = BufReader::new(client_reader);
+
+    let mut controller: Option<InputSender> = None;
+    let mut last_tick = time::Instant::now();
     loop {
         if global_cancellation_token.is_cancelled() || group_cancellation_token.is_cancelled() {
             break;
         }
         let mut buf = vec![0; 1024 * 10];
-        let n = client_reader
-            .read(&mut buf)
-            .await
-            .map_err(|e| FrError::Sync(e.to_string()))?;
-        last_cmd = codec.decode(&buf[..n])?;
-        controller.send(&last_cmd).await?;
-        trace!("received command from client: {}", id);
+        let delta_time = time::Instant::now().duration_since(last_tick);
+        if delta_time > Duration::from_millis(tick_timeout) {
+            return Err(anyhow!("Client {} tick timeout", ip));
+        }
+        let n = client_reader.read(&mut buf).await?;
+        if n > 0 {
+            let call: ServiceCall = codec.decode(&buf[..n])?;
+            match call.name.as_str() {
+                "GetModelInfos" => {
+                    let model_infos: Vec<_> = system
+                        .lock()
+                        .await
+                        .get_models()?
+                        .into_iter()
+                        .map(|m| PluginInfoTuple {
+                            id: m.0.to_string(),
+                            info: m.1 .0.into(),
+                            state: m.1 .1.into(),
+                        })
+                        .collect();
+                    let response = ServiceCallResponse {
+                        name: "GetModelInfos".to_string(),
+                        response: Some(Response::GetModelInfos(GetModelInfosResponse {
+                            model_infos,
+                        })),
+                    };
+
+                    // tokio::time::sleep(Duration::from_millis(5)).await;
+                    let response_bytes = codec.encode(response)?;
+                    private_channel_sender.send(response_bytes).await?;
+                    info!("Client: {} request `GetModelInfo`", ip)
+                }
+                "PushPlane" => {
+                    if plane_id.lock().await.is_none() {
+                        run_signal.red();
+
+                        let args = match call.args {
+                            Some(Args::PushPlane(model_id)) => model_id,
+                            _ => {
+                                let err = codec.encode(ServiceCallResponse {
+                                    name: "PushPlane".to_string(),
+                                    response: Some(Response::Error("Invalid RPC args".to_string())),
+                                })?;
+                                private_channel_sender.send(err).await?;
+                                warn!("Invalid RPC args from client: {}", ip);
+                                continue;
+                            }
+                        };
+                        let r = system
+                            .lock()
+                            .await
+                            .push_plane(
+                                Uuid::parse_str(&args.model_id)?,
+                                None,
+                                args.plane_init_cfg.map_or_else(|| init_cfg, |c| c.into()),
+                            )
+                            .await?;
+                        *plane_id.lock().await = Some(r.0);
+                        controller = Some(system.lock().await.set_controller(r.0, 30).await?);
+
+                        // tokio::time::sleep(Duration::from_millis(5)).await;
+                        tokio::task::spawn({
+                            let gct1 = global_cancellation_token.clone();
+                            let grct1 = group_cancellation_token.clone();
+                            let grct2 = group_cancellation_token.clone();
+                            let broadcast_channel_sender1 = broadcast_channel_sender.clone();
+                            async move {
+                                let rr = viewer_handler(
+                                    r.0,
+                                    broadcast_channel_sender1,
+                                    r.1.clone(),
+                                    codec,
+                                    gct1,
+                                    grct1,
+                                )
+                                .await;
+                                if let Err(e) = rr {
+                                    grct2.cancel();
+                                    warn!("RPC Client: {} dropped, due to {}", ip, e);
+                                    let _ = codec.encode(ServiceCallResponse {
+                                        name: "LostPlane".to_string(),
+                                        response: Some(Response::LostPlane(r.0.to_string())),
+                                    });
+                                }
+                            }
+                        });
+
+                        // tokio::time::sleep(Duration::from_millis(5)).await;
+                        let response = ServiceCallResponse {
+                            name: "PushPlane".to_string(),
+                            response: Some(Response::PushPlane(PushPlaneResponse {
+                                plane_id: r.0.to_string(),
+                            })),
+                        };
+                        let response_bytes = codec.encode(response)?;
+                        private_channel_sender.send(response_bytes).await?;
+
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                        let response = ServiceCallResponse {
+                            name: "NewPlane".to_string(),
+                            response: Some(Response::NewPlane(r.0.to_string())),
+                        };
+                        let response_bytes = codec.encode(response)?;
+                        broadcast_channel_sender.send(response_bytes)?;
+
+                        run_signal.green();
+                        info!("Client: {} request `PushPlane`", ip)
+                    }
+                }
+                "SendControl" => {
+                    if let Some(ref controller) = controller {
+                        let control = match call.args {
+                            Some(Args::SendControl(control)) => control,
+                            _ => {
+                                let err = codec.encode(ServiceCallResponse {
+                                    name: "SendControl".to_string(),
+                                    response: Some(Response::Error("Invalid RPC args".to_string())),
+                                })?;
+                                private_channel_sender.send(err).await?;
+                                warn!("Invalid RPC args from client: {}", ip);
+                                continue;
+                            }
+                        };
+                        controller
+                            .send(&control.control.unwrap_or_default())
+                            .await?;
+                    }
+                    info!("Client: {} request `SendControl`", ip)
+                }
+                "Tick" => {
+                    last_tick = time::Instant::now();
+                    debug!("Client: {} request `Tick`", ip)
+                }
+                other => {
+                    let err = codec.encode(ServiceCallResponse {
+                        name: other.to_string(),
+                        response: Some(Response::Error(format!("Invalid RPC command: {}", other))),
+                    })?;
+                    private_channel_sender.send(err).await?;
+                    warn!("Invalid RPC command from client: {}", ip);
+                    // tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        } else {
+            // tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        tokio::task::yield_now().await;
     }
     Ok(())
 }

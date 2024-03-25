@@ -1,39 +1,37 @@
-use crate::generated::command::command::Cmd;
-use crate::generated::command::Command as CommandGen;
 use crate::generated::control::Control as ControlGen;
 use crate::generated::core_output::{
     CoreOutput as CoreOutputGen, PlaneMessage as PlaneMessageGen,
     PlaneMessageGroup as PlaneMessageGroupGen,
 };
+use crate::generated::id::Id as IdGen;
+use crate::generated::plane_init_cfg::{
+    Deflection as DeflectionGen, NelderMeadOptions as NelderMeadOptionsGen,
+    PlaneInitCfg as PlaneInitCfgGen, TrimInit as TrimInitGen, TrimTarget as TrimTargetGen,
+};
+use crate::generated::plugin::{
+    PluginInfo as PluginInfoGen, PluginInfoTuple as PluginInfoTupleGen,
+    PluginState as PluginStateGen,
+};
+use crate::generated::service::{
+    service_call::Args as ArgsGen, service_call_response::Response as ResponseGen,
+    GetModelInfosResponse as GetModelInfosResponseGen, PushPlaneRequest as PushPlaneRequestGen,
+    PushPlaneResponse as PushPlaneResponseGen, SendControlRequest as SendControlRequestGen,
+    ServiceCall as ServiceCallGen, ServiceCallResponse as ServiceCallResponseGen,
+};
 use crate::generated::state::State as StateGen;
 use crate::generated::state_extend::StateExtend as StateExtendGen;
-use crate::{Decoder, Encoder, PlaneMessage, PlaneMessageGroup};
-use fly_ruler_utils::plane_model::{Control, CoreOutput, State, StateExtend};
-use fly_ruler_utils::Command;
+use crate::{
+    Args, Decoder, Encoder, GetModelInfosResponse, PlaneMessage, PlaneMessageGroup,
+    PluginInfoTuple, PushPlaneRequest, PushPlaneResponse, Response, SendControlRequest,
+    ServiceCall, ServiceCallResponse,
+};
+use fly_ruler_core::algorithm::nelder_mead::NelderMeadOptions;
+use fly_ruler_core::core::PlaneInitCfg;
+use fly_ruler_core::parts::trim::{TrimInit, TrimTarget};
+use fly_ruler_plugin::{PluginInfo, PluginState};
+use fly_ruler_utils::plane_model::{Control, CoreOutput, FlightCondition, State, StateExtend};
 use prost::Message;
-
-impl Into<CommandGen> for Command {
-    fn into(self) -> CommandGen {
-        CommandGen {
-            cmd: Some(match self {
-                Command::Control(control) => Cmd::Control(control.into()),
-                Command::Exit => Cmd::Exit(true),
-                Command::Extra(extra) => Cmd::Extra(extra),
-            }),
-        }
-    }
-}
-
-impl Into<Command> for CommandGen {
-    fn into(self) -> Command {
-        match self.cmd {
-            Some(Cmd::Control(control)) => Command::Control(control.into()),
-            Some(Cmd::Exit(true)) => Command::Exit,
-            Some(Cmd::Extra(extra)) => Command::Extra(extra),
-            _ => unreachable!(),
-        }
-    }
-}
+use uuid::Uuid;
 
 impl Into<ControlGen> for Control {
     fn into(self) -> ControlGen {
@@ -146,9 +144,9 @@ impl From<CoreOutputGen> for CoreOutput {
 impl Into<PlaneMessageGen> for PlaneMessage {
     fn into(self) -> PlaneMessageGen {
         PlaneMessageGen {
-            id: self.id,
+            id: Some(Uuid::parse_str(&self.id).unwrap().into()),
             time: self.time,
-            output: Some(Into::<CoreOutputGen>::into(self.output)),
+            output: self.output.map(|a| a.into()),
         }
     }
 }
@@ -156,9 +154,9 @@ impl Into<PlaneMessageGen> for PlaneMessage {
 impl From<PlaneMessageGen> for PlaneMessage {
     fn from(value: PlaneMessageGen) -> Self {
         PlaneMessage {
-            id: value.id,
+            id: Uuid::from(value.id.unwrap()).into(),
             time: value.time,
-            output: Into::<CoreOutput>::into(value.output.unwrap()),
+            output: value.output.map(|a| a.into()),
         }
     }
 }
@@ -187,6 +185,353 @@ impl From<PlaneMessageGroupGen> for PlaneMessageGroup {
     }
 }
 
+impl From<Uuid> for IdGen {
+    fn from(value: Uuid) -> Self {
+        IdGen {
+            id: value.to_string(),
+        }
+    }
+}
+
+impl From<IdGen> for Uuid {
+    fn from(value: IdGen) -> Self {
+        Uuid::parse_str(&value.id).unwrap()
+    }
+}
+
+impl From<String> for IdGen {
+    fn from(value: String) -> Self {
+        IdGen { id: value }
+    }
+}
+
+impl Into<String> for IdGen {
+    fn into(self) -> String {
+        self.id
+    }
+}
+
+impl From<PluginInfo> for PluginInfoGen {
+    fn from(value: PluginInfo) -> Self {
+        PluginInfoGen {
+            name: value.name,
+            author: value.author,
+            version: value.version,
+            description: value.description,
+        }
+    }
+}
+
+impl From<PluginInfoGen> for PluginInfo {
+    fn from(value: PluginInfoGen) -> Self {
+        PluginInfo {
+            name: value.name,
+            author: value.author,
+            version: value.version,
+            description: value.description,
+        }
+    }
+}
+
+impl From<PluginState> for PluginStateGen {
+    fn from(value: PluginState) -> Self {
+        match value {
+            PluginState::Enable => PluginStateGen::Enable,
+            PluginState::Disable => PluginStateGen::Disable,
+            PluginState::Failed => PluginStateGen::Failed,
+        }
+    }
+}
+
+impl From<PluginStateGen> for PluginState {
+    fn from(value: PluginStateGen) -> Self {
+        match value {
+            PluginStateGen::Enable => PluginState::Enable,
+            PluginStateGen::Disable => PluginState::Disable,
+            PluginStateGen::Failed => PluginState::Failed,
+        }
+    }
+}
+
+impl From<PluginInfoTuple> for PluginInfoTupleGen {
+    fn from(value: PluginInfoTuple) -> Self {
+        PluginInfoTupleGen {
+            id: Some(Uuid::parse_str(&value.id).unwrap().into()),
+            info: value.info.map(|a| a.into()),
+            state: PluginStateGen::from(value.state).into(),
+        }
+    }
+}
+
+impl From<PluginInfoTupleGen> for PluginInfoTuple {
+    fn from(value: PluginInfoTupleGen) -> Self {
+        PluginInfoTuple {
+            id: value.id.unwrap().into(),
+            info: value.info.map(|a| a.into()),
+            state: match value.state {
+                0 => PluginState::Enable,
+                1 => PluginState::Disable,
+                2 => PluginState::Failed,
+                _ => PluginState::Failed, // Default to Failed if state is not provided
+            },
+        }
+    }
+}
+
+impl From<GetModelInfosResponseGen> for GetModelInfosResponse {
+    fn from(value: GetModelInfosResponseGen) -> Self {
+        GetModelInfosResponse {
+            model_infos: value
+                .model_infos
+                .into_iter()
+                .map(|info| info.into())
+                .collect(),
+        }
+    }
+}
+
+impl From<GetModelInfosResponse> for GetModelInfosResponseGen {
+    fn from(value: GetModelInfosResponse) -> Self {
+        GetModelInfosResponseGen {
+            model_infos: value
+                .model_infos
+                .into_iter()
+                .map(|info| PluginInfoTupleGen::from(info))
+                .collect(),
+        }
+    }
+}
+
+impl From<PlaneInitCfg> for PlaneInitCfgGen {
+    fn from(value: PlaneInitCfg) -> Self {
+        let deflection = match value.deflection {
+            Some(deflection) => Some(DeflectionGen {
+                deflection_0: deflection[0],
+                deflection_1: deflection[1],
+                deflection_2: deflection[2],
+            }),
+            None => None,
+        };
+        let trim_init = value.trim_init.map(|trim_init| TrimInitGen {
+            control: Some(trim_init.control.into()),
+            alpha: trim_init.alpha,
+        });
+        let flight_condition =
+            value
+                .flight_condition
+                .map(|flight_condition| match flight_condition {
+                    FlightCondition::WingsLevel => 0,
+                    FlightCondition::Turning => 1,
+                    FlightCondition::PullUp => 2,
+                    FlightCondition::Roll => 3,
+                });
+        let optim_options = value
+            .optim_options
+            .map(|optim_options| NelderMeadOptionsGen {
+                max_fun_evals: optim_options.max_fun_evals as u32,
+                max_iter: optim_options.max_iter as u32,
+                tol_fun: optim_options.tol_fun,
+                tol_x: optim_options.tol_x,
+            });
+        PlaneInitCfgGen {
+            deflection,
+            trim_target: Some(TrimTargetGen {
+                altitude: value.trim_target.altitude,
+                velocity: value.trim_target.velocity,
+            }),
+            trim_init,
+            flight_condition,
+            optim_options,
+        }
+    }
+}
+
+impl From<PlaneInitCfgGen> for PlaneInitCfg {
+    fn from(value: PlaneInitCfgGen) -> Self {
+        let deflection = match value.deflection {
+            Some(deflection) => Some([
+                deflection.deflection_0,
+                deflection.deflection_1,
+                deflection.deflection_2,
+            ]),
+            None => None,
+        };
+        let trim_init = value.trim_init.map(|trim_init| TrimInit {
+            control: Into::<ControlGen>::into(trim_init.control.unwrap_or_default()).into(),
+            alpha: trim_init.alpha,
+        });
+        let flight_condition =
+            value
+                .flight_condition
+                .map(|flight_condition| match flight_condition {
+                    0 => FlightCondition::WingsLevel,
+                    1 => FlightCondition::Turning,
+                    2 => FlightCondition::PullUp,
+                    3 => FlightCondition::Roll,
+                    _ => FlightCondition::WingsLevel,
+                });
+        let optim_options = value.optim_options.map(|optim_options| NelderMeadOptions {
+            max_fun_evals: optim_options.max_fun_evals as usize,
+            max_iter: optim_options.max_iter as usize,
+            tol_fun: optim_options.tol_fun,
+            tol_x: optim_options.tol_x,
+        });
+        let trim_target = value.trim_target.map_or_else(
+            || TrimTarget {
+                altitude: 1000.0,
+                velocity: 500.0,
+            },
+            |trim_target| TrimTarget {
+                altitude: trim_target.altitude,
+                velocity: trim_target.velocity,
+            },
+        );
+        PlaneInitCfg {
+            deflection,
+            trim_target,
+            trim_init,
+            flight_condition,
+            optim_options,
+        }
+    }
+}
+
+impl From<PushPlaneRequestGen> for PushPlaneRequest {
+    fn from(value: PushPlaneRequestGen) -> Self {
+        PushPlaneRequest {
+            model_id: value.model_id.unwrap().into(),
+            plane_init_cfg: value.plane_init_cfg.map(|a| a.into()),
+        }
+    }
+}
+
+impl From<PushPlaneRequest> for PushPlaneRequestGen {
+    fn from(value: PushPlaneRequest) -> Self {
+        PushPlaneRequestGen {
+            model_id: Some(value.model_id.into()),
+            plane_init_cfg: value.plane_init_cfg.map(|a| a.into()),
+        }
+    }
+}
+
+impl From<SendControlRequestGen> for SendControlRequest {
+    fn from(value: SendControlRequestGen) -> Self {
+        SendControlRequest {
+            control: value.control.map(|a| a.into()),
+        }
+    }
+}
+
+impl From<SendControlRequest> for SendControlRequestGen {
+    fn from(value: SendControlRequest) -> Self {
+        SendControlRequestGen {
+            control: value.control.map(|a| a.into()),
+        }
+    }
+}
+
+impl From<PushPlaneResponseGen> for PushPlaneResponse {
+    fn from(value: PushPlaneResponseGen) -> Self {
+        PushPlaneResponse {
+            plane_id: value.plane_id.unwrap().into(),
+        }
+    }
+}
+
+impl From<PushPlaneResponse> for PushPlaneResponseGen {
+    fn from(value: PushPlaneResponse) -> Self {
+        PushPlaneResponseGen {
+            plane_id: Some(value.plane_id.into()),
+        }
+    }
+}
+
+impl From<Args> for ArgsGen {
+    fn from(value: Args) -> Self {
+        match value {
+            Args::GetModelInfos => ArgsGen::GetModelInfos(()),
+            Args::PushPlane(req) => ArgsGen::PushPlane(req.into()),
+            Args::SendControl(req) => ArgsGen::SendControl(req.into()),
+            Args::Tick => ArgsGen::Tick(()),
+        }
+    }
+}
+
+impl From<ArgsGen> for Args {
+    fn from(value: ArgsGen) -> Self {
+        match value {
+            ArgsGen::GetModelInfos(()) => Args::GetModelInfos,
+            ArgsGen::PushPlane(req) => Args::PushPlane(req.into()),
+            ArgsGen::SendControl(req) => Args::SendControl(req.into()),
+            ArgsGen::Tick(()) => Args::Tick,
+        }
+    }
+}
+
+impl From<ServiceCallGen> for ServiceCall {
+    fn from(value: ServiceCallGen) -> Self {
+        ServiceCall {
+            name: value.name,
+            args: value.args.map(|a| a.into()),
+        }
+    }
+}
+
+impl From<ServiceCall> for ServiceCallGen {
+    fn from(value: ServiceCall) -> Self {
+        ServiceCallGen {
+            name: value.name,
+            args: value.args.map(|a| a.into()),
+        }
+    }
+}
+
+impl From<ResponseGen> for Response {
+    fn from(value: ResponseGen) -> Self {
+        match value {
+            ResponseGen::SendControl(()) => Response::SendControl,
+            ResponseGen::PushPlane(id) => Response::PushPlane(id.into()),
+            ResponseGen::GetModelInfos(infos) => Response::GetModelInfos(infos.into()),
+            ResponseGen::Output(output) => Response::Output(output.into()),
+            ResponseGen::LostPlane(id) => Response::LostPlane(id.into()),
+            ResponseGen::NewPlane(id) => Response::NewPlane(id.into()),
+            ResponseGen::Error(e) => Response::Error(e),
+        }
+    }
+}
+
+impl From<Response> for ResponseGen {
+    fn from(value: Response) -> Self {
+        match value {
+            Response::SendControl => ResponseGen::SendControl(()),
+            Response::PushPlane(id) => ResponseGen::PushPlane(id.into()),
+            Response::GetModelInfos(infos) => ResponseGen::GetModelInfos(infos.into()),
+            Response::Output(output) => ResponseGen::Output(output.into()),
+            Response::LostPlane(id) => ResponseGen::LostPlane(id.into()),
+            Response::NewPlane(id) => ResponseGen::NewPlane(id.into()),
+            Response::Error(e) => ResponseGen::Error(e),
+        }
+    }
+}
+
+impl From<ServiceCallResponseGen> for ServiceCallResponse {
+    fn from(value: ServiceCallResponseGen) -> Self {
+        ServiceCallResponse {
+            name: value.name,
+            response: value.response.map(|a| a.into()),
+        }
+    }
+}
+
+impl From<ServiceCallResponse> for ServiceCallResponseGen {
+    fn from(value: ServiceCallResponse) -> Self {
+        ServiceCallResponseGen {
+            name: value.name,
+            response: value.response.map(|a| a.into()),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct ProtoCodec;
 
@@ -196,53 +541,35 @@ impl ProtoCodec {
     }
 }
 
-impl Encoder<PlaneMessage> for ProtoCodec {
-    fn encode(&mut self, input: PlaneMessage) -> Result<Vec<u8>, fly_ruler_utils::error::FrError> {
-        let plane_message = Into::<PlaneMessageGen>::into(input);
-        Ok(plane_message.encode_to_vec())
+impl Encoder<ServiceCall> for ProtoCodec {
+    fn encode(&mut self, input: ServiceCall) -> fly_ruler_utils::error::FrResult<Vec<u8>> {
+        let request = Into::<ServiceCallGen>::into(input);
+        Ok(request.encode_to_vec())
     }
 }
 
-impl Encoder<PlaneMessageGroup> for ProtoCodec {
-    fn encode(
-        &mut self,
-        input: PlaneMessageGroup,
-    ) -> Result<Vec<u8>, fly_ruler_utils::error::FrError> {
-        let plane_message_group = Into::<PlaneMessageGroupGen>::into(input);
-        Ok(plane_message_group.encode_to_vec())
-    }
-}
-
-impl Decoder<PlaneMessage> for ProtoCodec {
-    fn decode(&mut self, input: &[u8]) -> Result<PlaneMessage, fly_ruler_utils::error::FrError> {
-        let plane_message = PlaneMessageGen::decode(input)
+impl Decoder<ServiceCall> for ProtoCodec {
+    fn decode(&mut self, input: &[u8]) -> Result<ServiceCall, fly_ruler_utils::error::FrError> {
+        let response = ServiceCallGen::decode(input)
             .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
-        Ok(Into::<PlaneMessage>::into(plane_message))
+        Ok(Into::<ServiceCall>::into(response))
     }
 }
 
-impl Decoder<PlaneMessageGroup> for ProtoCodec {
+impl Encoder<ServiceCallResponse> for ProtoCodec {
+    fn encode(&mut self, input: ServiceCallResponse) -> fly_ruler_utils::error::FrResult<Vec<u8>> {
+        let request = Into::<ServiceCallResponseGen>::into(input);
+        Ok(request.encode_to_vec())
+    }
+}
+
+impl Decoder<ServiceCallResponse> for ProtoCodec {
     fn decode(
         &mut self,
         input: &[u8],
-    ) -> Result<PlaneMessageGroup, fly_ruler_utils::error::FrError> {
-        let plane_message_group = PlaneMessageGroupGen::decode(input)
+    ) -> Result<ServiceCallResponse, fly_ruler_utils::error::FrError> {
+        let response = ServiceCallResponseGen::decode(input)
             .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
-        Ok(Into::<PlaneMessageGroup>::into(plane_message_group))
-    }
-}
-
-impl Encoder<Command> for ProtoCodec {
-    fn encode(&mut self, input: Command) -> Result<Vec<u8>, fly_ruler_utils::error::FrError> {
-        let command = Into::<CommandGen>::into(input);
-        Ok(command.encode_to_vec())
-    }
-}
-
-impl Decoder<Command> for ProtoCodec {
-    fn decode(&mut self, input: &[u8]) -> Result<Command, fly_ruler_utils::error::FrError> {
-        let command = CommandGen::decode(input)
-            .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
-        Ok(Into::<Command>::into(command))
+        Ok(Into::<ServiceCallResponse>::into(response))
     }
 }

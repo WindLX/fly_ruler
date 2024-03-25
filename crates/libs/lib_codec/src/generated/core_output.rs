@@ -7,8 +7,8 @@ pub struct PlaneMessageGroup {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PlaneMessage {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<super::id::Id>,
     #[prost(double, tag = "2")]
     pub time: f64,
     #[prost(message, optional, tag = "3")]

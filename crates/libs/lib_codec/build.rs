@@ -8,11 +8,14 @@ fn main() -> Result<()> {
         .out_dir("src/generated")
         .compile_protos(
             &[
-                "command.proto",
+                "service.proto",
+                "id.proto",
+                "plugin.proto",
                 "core_output.proto",
                 "control.proto",
                 "state.proto",
                 "state_extend.proto",
+                "plane_init_cfg.proto",
             ],
             &["src"],
         )?;

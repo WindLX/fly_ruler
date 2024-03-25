@@ -1,0 +1,55 @@
+syntax = "proto3";
+package service;
+
+import "google/protobuf/empty.proto";
+import "control.proto";
+import "core_output.proto";
+import "id.proto";
+import "plugin.proto";
+import "plane_init_cfg.proto";
+
+message GetModelInfosResponse {
+  repeated plugin.PluginInfoTuple model_infos = 1;
+}
+
+message PushPlaneRequest {
+  id.Id model_id = 1;
+  optional plane_init_cfg.PlaneInitCfg plane_init_cfg = 2;
+}
+
+message SendControlRequest {
+  control.Control control = 1;
+}
+
+message PushPlaneResponse {
+  id.Id plane_id = 1;
+}
+
+service FlyRulerService {
+  rpc GetModelInfos(google.protobuf.Empty) returns (GetModelInfosResponse);
+  rpc PushPlane(PushPlaneRequest) returns (PushPlaneResponse);
+  rpc SendControl(SendControlRequest) returns (google.protobuf.Empty);
+}
+
+message ServiceCall {
+  string name = 1;
+  oneof args {
+    google.protobuf.Empty get_model_infos = 3;
+    PushPlaneRequest push_plane = 4;
+    SendControlRequest send_control = 5;
+    google.protobuf.Empty tick = 6;
+  }
+}
+
+message ServiceCallResponse {
+  string name = 1;
+  oneof response {
+    GetModelInfosResponse get_model_infos = 3;
+    PushPlaneResponse push_plane = 4;
+    google.protobuf.Empty send_control = 5;
+    core_output.PlaneMessage output = 6;
+    id.Id lost_plane = 7;
+    id.Id new_plane = 8;
+    string error = 9;
+  }
+}

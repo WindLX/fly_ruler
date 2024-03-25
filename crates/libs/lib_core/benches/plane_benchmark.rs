@@ -51,7 +51,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let trim_target = TrimTarget::new(15000.0, 500.0);
     let trim_output = trim(plane, trim_target, None, CL, None, None).unwrap();
     let plane_block = Arc::new(std::sync::Mutex::new(
-        PlaneBlock::new(&model, &trim_output, &[0.0, 0.0, 0.0], CL, 0.0).unwrap(),
+        PlaneBlock::new(&model, &trim_output, &[0.0, 0.0, 0.0], CL).unwrap(),
     ));
     group.bench_function("plane", |b| {
         b.iter(|| step(black_box(plane_block.clone()), black_box(Instant::now())))

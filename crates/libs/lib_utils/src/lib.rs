@@ -3,6 +3,6 @@ pub mod logger;
 pub(crate) mod model;
 
 pub use model::{
-    input_channel, matrix::Matrix, plane as plane_model, state_channel, vector::Vector, Command,
+    input_channel, matrix::Matrix, plane as plane_model, state_channel, vector::Vector,
     InputReceiver, InputSender, OutputReceiver, OutputSender,
 };

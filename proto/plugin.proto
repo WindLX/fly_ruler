@@ -1,0 +1,23 @@
+syntax = "proto3";
+package plugin;
+
+import "id.proto";
+
+message PluginInfo {
+  string name = 1;
+  string author = 2;
+  string version = 3;
+  string description = 4;
+}
+
+enum PluginState {
+  ENABLE = 0;
+  DISABLE = 1;
+  FAILED = 2;
+}
+
+message PluginInfoTuple {
+  id.Id id = 1;
+  PluginInfo info = 2;
+  PluginState state = 3;
+}

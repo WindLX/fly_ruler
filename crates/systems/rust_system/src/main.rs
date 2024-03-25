@@ -6,7 +6,7 @@ use rust_system::{
     handler::{server_handler, system_step_handler},
     lua::LuaManager,
     system::System,
-    utils::{CancellationToken, Counter, Signal},
+    utils::{CancellationToken, Signal},
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -20,6 +20,8 @@ fn main() {
     let lua = LuaManager::new(&ARGS.lock().unwrap().config_path);
 
     let server_addr = lua.server_addr();
+    let tick_timeout = lua.tick_timeout();
+    let is_block = lua.is_block();
     let model_root_path = lua.model_root_path();
     let core_init_cfg = lua.core_init_cfg();
     let model_install_args = lua.model_install_args();
@@ -54,18 +56,18 @@ fn main() {
             }
         }
 
-        let f16_key = keys[0];
-
         let system = Arc::new(Mutex::new(system));
-        let plane_counter = Counter::new();
         let run_signal = Signal::new();
         let global_cancellation_token = CancellationToken::new();
+        let gct = global_cancellation_token.clone();
 
         tokio::select! {
-            Err(e) = system_step_handler(system.clone(), run_signal.clone(), plane_counter.clone(), global_cancellation_token.clone()) => {
+            Err(e) = system_step_handler(system.clone(), is_block, run_signal.clone(), global_cancellation_token.clone()) => {
+                gct.cancel();
                 error!("{}", e);
             },
-            _ = server_handler(&server_addr, plane_init_cfg, system.clone(), plane_counter, run_signal, global_cancellation_token, f16_key) =>{
+            _ = server_handler(&server_addr, tick_timeout, plane_init_cfg, system.clone(), run_signal, global_cancellation_token) =>{
+                gct.cancel();
                 error!("Server task finished");
             }
         }

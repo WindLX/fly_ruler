@@ -1,0 +1,120 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: da0d25574c33ac64d98db1c615ce7ff9, type: 3}
+  m_Name: MarkupAttributesPersistentData
+  m_EditorClassIdentifier: 
+  serializedBoolEntries:
+  - key: OceanSystem.OceanSimulationInputsProvider/Main
+    value: 1
+  - key: OceanSystem.OceanSimulationInputsProvider/ShowIfScaleMode/Local Waves
+    value: 1
+  - key: OceanSystem.LocalWavesPreset/Tabs
+    value: 0
+  - key: OceanSystem.LocalWavesPreset/Tabs/Waves/Spectrum
+    value: 1
+  - key: OceanSystem.LocalWavesPreset/Tabs/Waves/Others
+    value: 1
+  - key: OceanSystem.SwellPreset/Spectrum
+    value: 1
+  - key: OceanSystem.SwellPreset/Others
+    value: 1
+  - key: Ocean/Ocean/Tabs
+    value: 0
+  - key: Ocean/Ocean/Tabs/Surface/Refraction
+    value: 1
+  - key: Ocean/Ocean/Tabs/Surface/Reflection Mask
+    value: 1
+  - key: Ocean/Ocean/Tabs/Volume/Subsurface Scattering
+    value: 1
+  - key: FlyRuler.Model.Scriptable.ControlLimits/Thrust
+    value: 1
+  - key: FlyRuler.Model.Scriptable.ControlLimits/Elevator
+    value: 1
+  - key: FlyRuler.Model.Scriptable.ControlLimits/Ailerons
+    value: 1
+  - key: FlyRuler.Model.Scriptable.ControlLimits/Rudder
+    value: 1
+  - key: FlyRuler.Manager.ControllerManager/Controller Curve
+    value: 1
+  - key: FlyRuler.Entity.Fire/Light
+    value: 1
+  - key: FlyRuler.Entity.Fire/Light/Weight
+    value: 1
+  - key: FlyRuler.Entity.Fire/Particle
+    value: 1
+  - key: FlyRuler.Entity.Fire/Particle/LifeTime
+    value: 1
+  - key: FlyRuler.Entity.Fire/Particle/LifeTime/Speed
+    value: 1
+  - key: FlyRuler.Entity.Fire/Speed
+    value: 1
+  - key: FlyRuler.Entity.Plane/Entity
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Top
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Yaw
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/TopLeft
+    value: 0
+  - key: FlyRuler.Manager.PanelManager/Pitch
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Roll
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/AngleSpeed
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/TopRight
+    value: 0
+  - key: FlyRuler.Manager.PanelManager/Position
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Bottom
+    value: 0
+  - key: FlyRuler.Manager.PanelManager/Speed
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Other
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/BottomRight
+    value: 0
+  - key: FlyRuler.Manager.PanelManager/BottomLeft
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Elevator
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Aileron
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Rudder
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Thrust
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Top/Yaw
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/TopLeft/Pitch
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/TopLeft/Pitch/Roll
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/TopLeft/Pitch/Roll/AngleSpeed
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/TopRight/Position
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Bottom/Speed
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/Bottom/Speed/Other
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/BottomRight/StateExtend
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/BottomLeft/Elevator
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/BottomLeft/Elevator/Aileron
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/BottomLeft/Elevator/Aileron/Rudder
+    value: 1
+  - key: FlyRuler.Manager.PanelManager/BottomLeft/Elevator/Aileron/Rudder/Thrust
+    value: 1
+  serializedIntEntries: []

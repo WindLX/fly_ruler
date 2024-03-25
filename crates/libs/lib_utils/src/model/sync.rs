@@ -2,23 +2,8 @@ use crate::{
     error::FrError,
     plane_model::{Control, CoreOutput},
 };
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Command {
-    Control(Control),
-    Extra(String),
-    Exit,
-}
-
-impl Default for Command {
-    fn default() -> Self {
-        Command::Control(Control::default())
-    }
-}
 
 /// Create a state channel
 /// this method is a wrapper of spmc which means single-producer, multi-consumer
@@ -90,7 +75,7 @@ impl OutputReceiver {
 /// Create a command channel
 /// A multi-producer, single-consumer channel that only retains the last sent value.
 pub fn input_channel(buffer: usize) -> (InputSender, InputReceiver) {
-    let (sender, receiver) = mpsc::channel::<Command>(buffer);
+    let (sender, receiver) = mpsc::channel::<Control>(buffer);
     let sender = InputSender::new(sender);
     let receiver = InputReceiver::new(receiver);
     (sender, receiver)
@@ -98,17 +83,17 @@ pub fn input_channel(buffer: usize) -> (InputSender, InputReceiver) {
 
 /// The sender end of command
 #[derive(Clone)]
-pub struct InputSender(mpsc::Sender<Command>);
+pub struct InputSender(mpsc::Sender<Control>);
 
 impl InputSender {
-    pub fn new(r: mpsc::Sender<Command>) -> Self {
+    pub fn new(r: mpsc::Sender<Control>) -> Self {
         Self(r)
     }
 
-    pub async fn send(&self, command: &Command) -> Result<(), FrError> {
+    pub async fn send(&self, control: &Control) -> Result<(), FrError> {
         let sender = &self.0;
         Ok(sender
-            .send(command.clone())
+            .send(control.clone())
             .await
             .map_err(|e| FrError::Sync(e.to_string()))?)
     }
@@ -116,19 +101,19 @@ impl InputSender {
 
 /// The receiver end of command channel
 pub struct InputReceiver {
-    receiver: mpsc::Receiver<Command>,
-    last: Command,
+    receiver: mpsc::Receiver<Control>,
+    last: Control,
 }
 
 impl InputReceiver {
-    pub fn new(r: mpsc::Receiver<Command>) -> Self {
+    pub fn new(r: mpsc::Receiver<Control>) -> Self {
         Self {
             receiver: r,
-            last: Command::default(),
+            last: Control::default(),
         }
     }
 
-    pub async fn recv(&mut self) -> Option<Command> {
+    pub async fn recv(&mut self) -> Option<Control> {
         let result = self.receiver.recv().await;
         if let Some(ref r) = result {
             self.last = r.clone();
@@ -136,7 +121,7 @@ impl InputReceiver {
         result
     }
 
-    pub fn last(&self) -> Command {
+    pub fn last(&self) -> Control {
         self.last.clone()
     }
 }

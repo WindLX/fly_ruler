@@ -63,6 +63,16 @@ impl LuaManager {
         server_addr
     }
 
+    pub fn tick_timeout(&self) -> u64 {
+        let tick_timeout: u64 = self.load_data("tick_timeout");
+        tick_timeout
+    }
+
+    pub fn is_block(&self) -> bool {
+        let is_block: bool = self.load_data("is_block");
+        is_block
+    }
+
     pub fn core_init_cfg(&self) -> CoreInitCfg {
         let cfg: CoreInitCfg = self.load_ser_data("core_init_cfg");
         cfg

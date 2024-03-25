@@ -5,7 +5,4 @@
 *.dll
 *.lib
 
-modules
-models
-
 .VSCodeCounter

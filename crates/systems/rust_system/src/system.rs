@@ -91,6 +91,7 @@ impl System {
     pub async fn push_plane(
         &mut self,
         model_id: Uuid,
+        plane_id: Option<Uuid>,
         init_cfg: PlaneInitCfg,
     ) -> Result<(Uuid, OutputReceiver), SysError> {
         let model = if let Some(manager) = &mut self.model_manager {
@@ -100,7 +101,7 @@ impl System {
         };
         match model {
             Some(model) => match &mut self.core {
-                Some(core) => Ok(core.push_plane(model, init_cfg).await?),
+                Some(core) => Ok(core.push_plane(model, plane_id, init_cfg).await?),
                 None => Err(SysError::CoreNotInit),
             },
             None => Err(SysError::ModelNotAvailable),
@@ -129,19 +130,26 @@ impl System {
         }
     }
 
-    pub async fn remove_plane(&mut self, plane_id: Uuid) -> Result<(), SysError> {
+    pub async fn remove_plane(&mut self, plane_id: Uuid) {
         match &mut self.core {
-            Some(core) => Ok(core.remove_plane(plane_id).await),
+            Some(core) => core.remove_plane(plane_id).await,
+            None => {}
+        }
+    }
+
+    pub fn plane_count(&mut self) -> Result<usize, SysError> {
+        match &mut self.core {
+            Some(core) => Ok(core.plane_count()),
             None => Err(SysError::CoreNotInit),
         }
     }
 
-    pub async fn step(&mut self) -> Result<(), SysError> {
+    pub async fn step(&mut self, is_block: bool) -> Result<Result<(), FrError>, SysError> {
         match &mut self.core {
             Some(core) => {
-                core.step().await?;
+                let r = core.step(is_block).await;
                 trace!("system step task fininshed");
-                Ok(())
+                Ok(r)
             }
             None => Err(SysError::CoreNotInit),
         }
