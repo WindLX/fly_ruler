@@ -1,3 +1,6 @@
 [server]
 host = "127.0.0.1"
 port = 2350
+
+[render]
+preset = "Highfidelity" # "Performant" "Balanced" "Highfidelity" "Ultra"
