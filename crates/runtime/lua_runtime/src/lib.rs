@@ -1,6 +1,8 @@
-use fly_ruler_utils::{plane_model::Control, Command, InputSender, OutputReceiver};
-use mlua::LuaSerdeExt;
+use fly_ruler_utils::{plane_model::Control, InputSender, OutputReceiver};
+use mlua::prelude::*;
 use uuid::Uuid;
+
+pub use mlua::prelude;
 
 #[derive(Clone)]
 pub struct OutputReceiverWrapper(OutputReceiver);
@@ -14,23 +16,18 @@ impl From<OutputReceiver> for OutputReceiverWrapper {
 impl mlua::UserData for OutputReceiverWrapper {
     fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_async_method_mut("changed", |_lua, this, ()| async move {
-            this.0
-                .changed()
-                .await
-                .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
+            this.0.changed().await.map_err(mlua::Error::external)
         });
 
         methods.add_method_mut("has_changed", |_lua, this, ()| {
-            this.0
-                .has_changed()
-                .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
+            this.0.has_changed().map_err(mlua::Error::external)
         });
 
         methods.add_method("get", |lua, this, ()| {
             let (time, value) = this.0.get();
             let table = lua.create_table()?;
             table.set("time", time)?;
-            table.set("data", lua.to_value(&value).unwrap())?;
+            table.set("data", lua.to_value(&value)?)?;
             Ok(mlua::Value::Table(table))
         });
 
@@ -38,7 +35,7 @@ impl mlua::UserData for OutputReceiverWrapper {
             let (time, value) = this.0.get_and_update();
             let table = lua.create_table()?;
             table.set("time", time)?;
-            table.set("data", lua.to_value(&value).unwrap())?;
+            table.set("data", lua.to_value(&value)?)?;
             Ok(mlua::Value::Table(table))
         });
 
@@ -54,64 +51,22 @@ impl From<InputSender> for InputSenderWrapper {
     }
 }
 
-pub fn table_to_cmd<'lua>(
-    lua: &'lua mlua::Lua,
-    command: mlua::Table<'lua>,
-) -> mlua::Result<Command> {
-    let mut cmd = Command::Control(Control::default());
-
-    if command.contains_key("extra")? {
-        cmd = Command::Extra(command.get("extra")?);
-    }
-    if command.contains_key("control")? {
-        let ct: mlua::Table = command.get("control")?;
-        cmd = Command::Control(lua.from_value(mlua::Value::Table(ct))?);
-    }
-    if command.contains_key("exit")? {
-        cmd = Command::Exit;
-    }
-    Ok(cmd)
-}
-
-pub fn cmd_to_table<'lua>(
-    lua: &'lua mlua::Lua,
-    command: Command,
-) -> mlua::Result<mlua::Table<'lua>> {
-    let cmd = lua.create_table()?;
-    match command {
-        Command::Control(ct) => {
-            let ct = lua.to_value(&ct)?;
-            cmd.set("control", ct)?;
-        }
-        Command::Exit => {
-            cmd.set("exit", true)?;
-        }
-        Command::Extra(extra) => {
-            let extra = lua.to_value(&extra)?;
-            cmd.set("extra", extra)?;
-        }
-    }
-    Ok(cmd)
-}
-
 impl mlua::UserData for InputSenderWrapper {
     fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_async_method(
             "send",
-            |lua, this, command: Option<mlua::Table>| async move {
-                match command {
-                    Some(command) => {
-                        let cmd = table_to_cmd(lua, command)?;
-                        this.0
-                            .send(&cmd)
-                            .await
-                            .map_err(|e| mlua::Error::RuntimeError(e.to_string()))
+            |lua, this, control: Option<mlua::Table>| async move {
+                match control {
+                    Some(control) => {
+                        let control = control.into_lua(lua)?;
+                        let control: Control = lua.from_value(control)?;
+                        this.0.send(&control).await.map_err(mlua::Error::external)
                     }
                     None => this
                         .0
-                        .send(&Command::Control(Control::default()))
+                        .send(&Control::default())
                         .await
-                        .map_err(|e| mlua::Error::RuntimeError(e.to_string())),
+                        .map_err(mlua::Error::external),
                 }
             },
         );
@@ -150,6 +105,14 @@ impl From<Uuid> for UuidWrapper {
 impl UuidWrapper {
     pub fn inner(&self) -> Uuid {
         self.0.clone()
+    }
+
+    pub fn new_v4() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn parse_str(s: &str) -> Result<Self, LuaError> {
+        Ok(Self(Uuid::parse_str(s).map_err(mlua::Error::external)?))
     }
 }
 

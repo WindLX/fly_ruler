@@ -8,18 +8,16 @@ members = [
     "crates/libs/lib_utils",
 
     # Application binaries
-    # "crates/systems/lua_system",
-    "crates/systems/rust_system",
+    "crates/engines/universal_simulation_engine",
+    "crates/engines/light_simulation_engine",
 
     # Application tests
     "test/test_client",
 
     # Application modules
-    # "crates/modules/csv_viewer",
-    # "crates/modules/json_viewer",
-    # "crates/modules/protobuf_viewer",
-    # "crates/modules/tcp",
+    # "crates/modules/use_py_client",
 
     # Application runtime
-    # "crates/runtime/lua_runtime",
+    "crates/runtime/lua_runtime",
+    # "crates/runtime/python_runtime",
 ]

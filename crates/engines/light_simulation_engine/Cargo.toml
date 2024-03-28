@@ -1,0 +1,29 @@
+[package]
+name = "light_simulation_engine"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "light_simulation_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+env_logger = "0.10.1"
+log = "0.4.20"
+tokio = { version = "1.35.1", features = ["sync", "net", "rt"] }
+serde = { version = "1.0.193", features = ["derive"] }
+lua_runtime = { path = "../../runtime/lua_runtime" }
+toml = "0.8.8"
+mlua = { version = "0.9.6", features = ["lua54", "module"] }
+futures = "0.3.30"
+lazy_static = "1.4.0"
+thiserror = "1.0.58"
+anyhow = "1.0.81"
+fly_ruler_utils = { path = "../../libs/lib_utils" }
+fly_ruler_plugin = { path = "../../libs/lib_plugin" }
+fly_ruler_core = { path = "../../libs/lib_core" }
+
+[dependencies.uuid]
+version = "1.7.0"
+features = ["v4", "fast-rng", "macro-diagnostics"]

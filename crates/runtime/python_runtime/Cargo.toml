@@ -1,0 +1,15 @@
+[package]
+name = "python_runtime"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pyo3 = { version = "0.21.0", features = ["macros", "experimental-async"] }
+fly_ruler_utils = { path = "../../libs/lib_utils" }
+serde = { version = "1.0.197", features = ["derive"] }
+
+[dependencies.uuid]
+version = "1.7.0"
+features = ["v4", "fast-rng", "macro-diagnostics"]
