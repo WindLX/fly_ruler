@@ -11,6 +11,7 @@ fn main() -> Result<()> {
                 "service.proto",
                 "id.proto",
                 "plugin.proto",
+                "state_extern.proto",
                 "core_output.proto",
                 "control.proto",
                 "state.proto",

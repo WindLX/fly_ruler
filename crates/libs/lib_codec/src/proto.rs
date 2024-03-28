@@ -20,6 +20,7 @@ use crate::generated::service::{
 };
 use crate::generated::state::State as StateGen;
 use crate::generated::state_extend::StateExtend as StateExtendGen;
+use crate::generated::state_extern::StateExtern as StateExternGen;
 use crate::{
     Args, Decoder, Encoder, GetModelInfosResponse, PlaneMessage, PlaneMessageGroup,
     PluginInfoTuple, PushPlaneRequest, PushPlaneResponse, Response, SendControlRequest,
@@ -29,7 +30,10 @@ use fly_ruler_core::algorithm::nelder_mead::NelderMeadOptions;
 use fly_ruler_core::core::PlaneInitCfg;
 use fly_ruler_core::parts::trim::{TrimInit, TrimTarget};
 use fly_ruler_plugin::{PluginInfo, PluginState};
-use fly_ruler_utils::plane_model::{Control, CoreOutput, FlightCondition, State, StateExtend};
+use fly_ruler_utils::plane_model::{
+    Control, CoreOutput, FlightCondition, State, StateExtend, StateExtern,
+};
+use fly_ruler_utils::Vector;
 use prost::Message;
 use uuid::Uuid;
 
@@ -119,13 +123,29 @@ impl From<StateExtendGen> for StateExtend {
     }
 }
 
+impl Into<StateExternGen> for StateExtern {
+    fn into(self) -> StateExternGen {
+        StateExternGen {
+            data: self.0.data.clone(),
+            size: self.0.dim() as u32,
+        }
+    }
+}
+
+impl From<StateExternGen> for StateExtern {
+    fn from(value: StateExternGen) -> Self {
+        StateExtern(Vector::from(value.data))
+    }
+}
+
 impl Into<CoreOutputGen> for CoreOutput {
     fn into(self) -> CoreOutputGen {
         CoreOutputGen {
             state: Some(Into::<StateGen>::into(self.state)),
             state_extend: Some(Into::<StateExtendGen>::into(self.state_extend)),
             control: Some(Into::<ControlGen>::into(self.control)),
-            d_lef: self.d_lef,
+            // d_lef: self.d_lef,
+            state_extern: Some(Into::<StateExternGen>::into(self.state_extern)),
         }
     }
 }
@@ -136,7 +156,8 @@ impl From<CoreOutputGen> for CoreOutput {
             state: Into::<State>::into(value.state.unwrap()),
             state_extend: Into::<StateExtend>::into(value.state_extend.unwrap()),
             control: Into::<Control>::into(value.control.unwrap()),
-            d_lef: value.d_lef,
+            // d_lef: value.d_lef,
+            state_extern: Into::<StateExtern>::into(value.state_extern.unwrap()),
         }
     }
 }
