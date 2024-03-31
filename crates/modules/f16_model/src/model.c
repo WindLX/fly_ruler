@@ -5,6 +5,7 @@
 #include "utils.h"
 #include "lofi_F16_AeroData.h"
 #include "hifi_F16_AeroData.h"
+#include "leading_edge_flap.h"
 #include "fr_model.h"
 #include "fr_plugin.h"
 
@@ -29,76 +30,17 @@ static PlantConstants consts = {
     .j_z = 63100.0,
     .j_x = 9496.0};
 
+static LeadingEdgeFlapBlock lef_block = {
+    .feedback = 0.0,
+    .lef_actuator = NULL,
+    .integrator = NULL};
+
 static int fi_flag = 1;
-
 Logger frplugin_log = NULL;
-AtmosFunc frplugin_atmos = NULL;
-IntegratorNew frplugin_integrator_new = NULL;
-IntegratorUpdate frplugin_integrator_update = NULL;
-IntegratorReset frplugin_integrator_reset = NULL;
-IntegratorPast frplugin_integrator_past = NULL;
-ActuatorNew frplugin_actuator_new = NULL;
-ActuatorUpdate frplugin_actuator_update = NULL;
-ActuatorReset frplugin_actuator_reset = NULL;
-ActuatorPast frplugin_actuator_past = NULL;
-
-static void *lef_actuator = NULL;
-static void *lef_integrator = NULL;
-
-inline static double clamp(double x, double min, double max)
-{
-   return (x < min) ? min : (x > max) ? max
-                                      : x;
-}
 
 void frplugin_register_logger(Logger cb)
 {
    frplugin_log = cb;
-}
-
-void frplugin_register_atmos(AtmosFunc atmos)
-{
-   frplugin_atmos = atmos;
-}
-
-void frplugin_register_integrator_new(IntegratorNew integrator_new)
-{
-   frplugin_integrator_new = integrator_new;
-}
-
-void frplugin_register_integrator_update(IntegratorUpdate integrator_update)
-{
-   frplugin_integrator_update = integrator_update;
-}
-
-void frplugin_register_integrator_reset(IntegratorReset integrator_reset)
-{
-   frplugin_integrator_reset = integrator_reset;
-}
-
-void frplugin_register_integrator_past(IntegratorPast integrator_past)
-{
-   frplugin_integrator_past = integrator_past;
-}
-
-void frplugin_register_actuator_new(ActuatorNew actuator_new)
-{
-   frplugin_actuator_new = actuator_new;
-}
-
-void frplugin_register_actuator_update(ActuatorUpdate actuator_update)
-{
-   frplugin_actuator_update = actuator_update;
-}
-
-void frplugin_register_actuator_reset(ActuatorReset actuator_reset)
-{
-   frplugin_actuator_reset = actuator_reset;
-}
-
-void frplugin_register_actuator_past(ActuatorPast actuator_past)
-{
-   frplugin_actuator_past = actuator_past;
 }
 
 int frplugin_install_hook(int argc, char **argv)
@@ -170,6 +112,9 @@ int frplugin_uninstall_hook(int argc, char **argv)
    free_axis_data();
    trace("free axis data successfully");
 
+   LeadingEdgeFlapBlock *ptr = &lef_block;
+   lef_drop(ptr);
+
    return 0;
 }
 
@@ -228,7 +173,6 @@ static int frmodel_step_helper(
    double xcg = consts.x_cg;
 
    double Heng = consts.h_eng;
-   double r2d = 180.0 / acos(-1);
 
    double Jy = consts.j_y;
    double Jxz = consts.j_xz;
@@ -253,12 +197,12 @@ static int frmodel_step_helper(
 
    temp = (double *)malloc(9 * sizeof(double));
 
-   vt = state->velocity;       /* total velocity */
-   alpha = state->alpha * r2d; /* angle of attack in degrees */
-   beta = state->beta * r2d;   /* sideslip angle in degrees */
-   P = state->p;               /* Roll Rate --- rolling  moment is Lbar */
-   Q = state->q;               /* Pitch Rate--- pitching moment is M */
-   R = state->r;               /* Yaw Rate  --- yawing   moment is N */
+   vt = state->velocity;         /* total velocity */
+   alpha = state->alpha * r2d(); /* angle of attack in degrees */
+   beta = state->beta * r2d();   /* sideslip angle in degrees */
+   P = state->p;                 /* Roll Rate --- rolling  moment is Lbar */
+   Q = state->q;                 /* Pitch Rate--- pitching moment is M */
+   R = state->r;                 /* Yaw Rate  --- yawing   moment is N */
 
    if (vt <= 0.01)
    {
@@ -508,15 +452,7 @@ int frmodel_trim(
    trace("f16 trim start");
    int r = 0;
 
-   double r2d = 180.0 / acos(-1);
-
-   // Calculating qbar, ps and steady state leading edge flap deflection:
-   // (see pg. 43 NASA report)
-   Atmos atmos = frplugin_atmos(state->altitude, state->velocity);
-   double lef = 1.38 * state->alpha * r2d - 9.05 * atmos.qbar / atmos.ps + 1.45;
-
-   // Verify that the calculated leading edge flap have not been violated.
-   lef = clamp(lef, 0.0, 25.0);
+   double lef = get_lef(state);
 
    r = frmodel_step_helper(state, control, lef, c);
 
@@ -529,14 +465,9 @@ int frmodel_init(
 {
    trace("f16 init start");
    int r = 0;
-   double r2d = 180.0 / acos(-1);
 
-   Atmos atmos = frplugin_atmos(state->altitude, state->velocity);
-   double lef = 1.38 * state->alpha * r2d - 9.05 * atmos.qbar / atmos.ps + 1.45;
-
-   lef = clamp(lef, 0.0, 25.0);
-
-   frplugin_actuator_new(lef_actuator, lef, 25.0, 0.0, 25.0, 1.0 / 0.136);
+   LeadingEdgeFlapBlock *lef_block_ptr = &lef_block;
+   lef_new(lef_block_ptr, state);
 
    trace("f16 init finished");
    return r;
@@ -546,11 +477,21 @@ int frmodel_step(
     const State *state, const Control *control, double t,
     C *c)
 {
-   trace("f16 step start");
-   // TODO
-   int r = 0;
-   r = frmodel_step_helper(state, control, t, c);
+   trace("[t: %f.2] f16 step start", t);
 
-   trace("f16 step finished");
+   int r = 0;
+   double lef = 0.0;
+   LeadingEdgeFlapBlock *lef_block_ptr = &lef_block;
+
+   r = lef_update(lef_block_ptr, state, t, &lef);
+   if (r < 0)
+   {
+      error_("[t: %f.2] f16 step failed to update lef", t);
+      return r;
+   }
+
+   r = frmodel_step_helper(state, control, lef, c);
+
+   trace("[t: %f.2] f16 step finished", t);
    return r;
 }

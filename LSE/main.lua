@@ -55,7 +55,7 @@ local viewer_thread = coroutine.create(function()
             local output = viewer:get_and_update()
             time = output.time
             print(time)
-            if time >= 1 then
+            if time >= 10 then
                 exit_flag = true
             end
         end

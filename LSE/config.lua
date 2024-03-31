@@ -8,7 +8,7 @@ module = {
 
     system_init_cfg = {
         time_scale = 1.0, -- optional
-        sample_time = 100 -- ms optional
+        sample_time = 10 -- ms optional
     },
 
     F16_install_args = { "./models/f16_model/data" },

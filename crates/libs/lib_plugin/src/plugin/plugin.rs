@@ -1,9 +1,10 @@
 use super::ffi::{
-    actuator_new_callback, actuator_past_callback, actuator_reset_callback,
-    actuator_update_callback, atmos_callback, integrator_new_callback, integrator_past_callback,
-    integrator_reset_callback, integrator_update_callback, logger_callback,
-    FrPluginActuatorNewRegister, FrPluginActuatorPastRegister, FrPluginActuatorResetRegister,
-    FrPluginActuatorUpdateRegister, FrPluginAtmosFuncRegister, FrPluginHook,
+    actuator_drop_callback, actuator_new_callback, actuator_past_callback, actuator_reset_callback,
+    actuator_update_callback, atmos_callback, integrator_drop_callback, integrator_new_callback,
+    integrator_past_callback, integrator_reset_callback, integrator_update_callback,
+    logger_callback, FrPluginActuatorDropRegister, FrPluginActuatorNewRegister,
+    FrPluginActuatorPastRegister, FrPluginActuatorResetRegister, FrPluginActuatorUpdateRegister,
+    FrPluginAtmosFuncRegister, FrPluginHook, FrPluginIntegratorDropRegister,
     FrPluginIntegratorNewRegister, FrPluginIntegratorPastRegister, FrPluginIntegratorResetRegister,
     FrPluginIntegratorUpdateRegister, FrPluginLogRegister,
 };
@@ -104,6 +105,11 @@ impl Plugin {
         unsafe {
             r(integrator_new_callback);
         }
+        let r = self
+            .load_function::<FrPluginIntegratorDropRegister>("frplugin_register_integrator_drop")?;
+        unsafe {
+            r(integrator_drop_callback);
+        }
         let r = self.load_function::<FrPluginIntegratorUpdateRegister>(
             "frplugin_register_integrator_update",
         )?;
@@ -126,6 +132,11 @@ impl Plugin {
             self.load_function::<FrPluginActuatorNewRegister>("frplugin_register_actuator_new")?;
         unsafe {
             r(actuator_new_callback);
+        }
+        let r =
+            self.load_function::<FrPluginActuatorDropRegister>("frplugin_register_actuator_drop")?;
+        unsafe {
+            r(actuator_drop_callback);
         }
         let r = self
             .load_function::<FrPluginActuatorUpdateRegister>("frplugin_register_actuator_update")?;

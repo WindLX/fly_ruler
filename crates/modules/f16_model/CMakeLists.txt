@@ -10,6 +10,7 @@ include_directories(include)
 set(SOURCES "src/hifi_F16_AeroData.c"
             "src/lofi_F16_AeroData.c"
             "src/mexndinterp.c"
+            "src/leading_edge_flap.c"
             "src/model.c"
             "src/utils.c")
 

@@ -10,36 +10,36 @@
 #define DATA_LEN 44
 #define GET_BIT(num, pos) ((num >> pos) & 1)
 
-#define GET_COEFF_ALPHA(axisIndex, hifiIndex)                  \
+#define GET_COEFF_ALPHA(axisIndex, hifiIndex)                \
 	double targetData[1] = {alpha};                            \
 	double **axis = get_axis_data(axisIndex);                  \
 	double r = interpn(axis, hifiData[hifiIndex], targetData); \
 	free(axis);                                                \
 	return r
 
-#define GET_COEFF2(axisIndex, hifiIndex)                       \
+#define GET_COEFF2(axisIndex, hifiIndex)                     \
 	double targetData[2] = {alpha, beta};                      \
 	double **axis = get_axis_data(axisIndex);                  \
 	double r = interpn(axis, hifiData[hifiIndex], targetData); \
 	free(axis);                                                \
 	return r
 
-#define GET_COEFF3(axisIndex, hifiIndex)                       \
+#define GET_COEFF3(axisIndex, hifiIndex)                     \
 	double targetData[3] = {alpha, beta, dele};                \
 	double **axis = get_axis_data(axisIndex);                  \
 	double r = interpn(axis, hifiData[hifiIndex], targetData); \
 	free(axis);                                                \
 	return r
 
-#define CHECK_NAN(len)                                    \
-	for (int i = 0; i < len; i++)                         \
-	{                                                     \
-		if (isnan(retVal[i]))                             \
-		{                                                 \
+#define CHECK_NAN(len)                              \
+	for (int i = 0; i < len; i++)                     \
+	{                                                 \
+		if (isnan(retVal[i]))                           \
+		{                                               \
 			trace("check NAN fail at: (%d, %d)", len, i); \
 			return -1;                                    \
-		}                                                 \
-	}                                                     \
+		}                                               \
+	}                                                 \
 	return 0
 
 static Tensor **hifiData;

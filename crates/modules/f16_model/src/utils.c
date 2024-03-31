@@ -41,6 +41,15 @@ int sign(double in)
     return out;
 }
 
+double clamp(double x, double min, double max)
+{
+    return (x < min) ? min : (x > max) ? max
+                                       : x;
+}
+
+double r2d() { return 180.0 / acos(-1); }
+double d2r() { return 180.0 / acos(-1); }
+
 Tensor *create_tensor(int n_dimension, int *n_points)
 {
     int length = 1;

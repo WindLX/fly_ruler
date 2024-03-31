@@ -1,3 +1,5 @@
+use std::f64::consts::PI;
+
 use crate::parts::{
     flight::{disturbance, MechanicalModel},
     trim::TrimOutput,
@@ -10,7 +12,6 @@ use fly_ruler_utils::{
     Vector,
 };
 use log::{debug, trace};
-use std::f64::consts::PI;
 
 pub(crate) struct ControllerBlock {
     actuators: Vec<Actuator>,
@@ -111,12 +112,14 @@ impl ControllerBlock {
     }
 }
 
+#[deprecated]
 pub(crate) struct LeadingEdgeFlapBlock {
     lef_actuator: Actuator,
     integrator: Integrator,
     feedback: f64,
 }
 
+#[deprecated]
 impl LeadingEdgeFlapBlock {
     pub fn new(alpha_init: f64, d_lef: f64) -> Self {
         trace!(
@@ -232,12 +235,6 @@ impl PlaneBlock {
             .integrator
             .derivative_add(Into::<Vector>::into(model_output.state_dot), t);
 
-        // let alpha = state[7];
-        // let alt = state[2];
-        // let vt = state[6];
-
-        // self.flap.update(alpha, alt, vt, t);
-
         let state = state.data;
         if state.iter().any(|x| x.is_nan()) {
             return Err(FatalCoreError::Nan);
@@ -323,13 +320,13 @@ mod core_parts_tests {
 
     fn test_core_init() -> (AerodynamicModel, TrimOutput) {
         test_logger_init();
-        let model = AerodynamicModel::new("../../../lua_system/models/f16_model");
+        let model = AerodynamicModel::new("../../../LSE/models/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
         let res = model
             .plugin()
-            .install(&["../../../lua_system/models/f16_model/data"]);
+            .install(&["../../../LSE/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));

@@ -51,6 +51,15 @@ int fix(double in);
 // sign function
 int sign(double in);
 
+// clamp function
+double clamp(double x, double min, double max);
+
+// r2d function
+double r2d();
+
+// d2r function
+double d2r();
+
 // log trace
 void trace(const char *format, ...);
 

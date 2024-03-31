@@ -314,13 +314,13 @@ mod core_tests {
 
     fn test_core_init() -> (AerodynamicModel, Core, PlaneInitCfg) {
         test_logger_init();
-        let model = AerodynamicModel::new("../../../lua_system/models/f16_model");
+        let model = AerodynamicModel::new("../../../LSE/models/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
         let res = model
             .plugin()
-            .install(&["../../../lua_system/models/f16_model/data"]);
+            .install(&["../../../LSE/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);

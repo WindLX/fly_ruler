@@ -29,16 +29,16 @@ namespace CoreOutput {
             "IjsKEVBsYW5lTWVzc2FnZUdyb3VwEiYKA21zZxgBIAMoCzIZLmNvcmVfb3V0",
             "cHV0LlBsYW5lTWVzc2FnZSJZCgxQbGFuZU1lc3NhZ2USEgoCaWQYASABKAsy",
             "Bi5pZC5JZBIMCgR0aW1lGAIgASgBEicKBm91dHB1dBgDIAEoCzIXLmNvcmVf",
-            "b3V0cHV0LkNvcmVPdXRwdXQijAEKCkNvcmVPdXRwdXQSGwoFc3RhdGUYASAB",
-            "KAsyDC5zdGF0ZS5TdGF0ZRIhCgdjb250cm9sGAIgASgLMhAuY29udHJvbC5D",
-            "b250cm9sEg0KBWRfbGVmGAMgASgBEi8KDHN0YXRlX2V4dGVuZBgEIAEoCzIZ",
-            "LnN0YXRlX2V4dGVuZC5TdGF0ZUV4dGVuZGIGcHJvdG8z"));
+            "b3V0cHV0LkNvcmVPdXRwdXQifQoKQ29yZU91dHB1dBIbCgVzdGF0ZRgBIAEo",
+            "CzIMLnN0YXRlLlN0YXRlEiEKB2NvbnRyb2wYAiABKAsyEC5jb250cm9sLkNv",
+            "bnRyb2wSLwoMc3RhdGVfZXh0ZW5kGAQgASgLMhkuc3RhdGVfZXh0ZW5kLlN0",
+            "YXRlRXh0ZW5kYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Id.IdReflection.Descriptor, global::State.StateReflection.Descriptor, global::Control.ControlReflection.Descriptor, global::StateExtend.StateExtendReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::CoreOutput.PlaneMessageGroup), global::CoreOutput.PlaneMessageGroup.Parser, new[]{ "Msg" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::CoreOutput.PlaneMessage), global::CoreOutput.PlaneMessage.Parser, new[]{ "Id", "Time", "Output" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::CoreOutput.CoreOutput), global::CoreOutput.CoreOutput.Parser, new[]{ "State", "Control", "DLef", "StateExtend" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::CoreOutput.CoreOutput), global::CoreOutput.CoreOutput.Parser, new[]{ "State", "Control", "StateExtend" }, null, null, null, null)
           }));
     }
     #endregion
@@ -543,7 +543,6 @@ namespace CoreOutput {
     public CoreOutput(CoreOutput other) : this() {
       state_ = other.state_ != null ? other.state_.Clone() : null;
       control_ = other.control_ != null ? other.control_.Clone() : null;
-      dLef_ = other.dLef_;
       stateExtend_ = other.stateExtend_ != null ? other.stateExtend_.Clone() : null;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
@@ -578,18 +577,6 @@ namespace CoreOutput {
       }
     }
 
-    /// <summary>Field number for the "d_lef" field.</summary>
-    public const int DLefFieldNumber = 3;
-    private double dLef_;
-    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public double DLef {
-      get { return dLef_; }
-      set {
-        dLef_ = value;
-      }
-    }
-
     /// <summary>Field number for the "state_extend" field.</summary>
     public const int StateExtendFieldNumber = 4;
     private global::StateExtend.StateExtend stateExtend_;
@@ -619,7 +606,6 @@ namespace CoreOutput {
       }
       if (!object.Equals(State, other.State)) return false;
       if (!object.Equals(Control, other.Control)) return false;
-      if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(DLef, other.DLef)) return false;
       if (!object.Equals(StateExtend, other.StateExtend)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
@@ -630,7 +616,6 @@ namespace CoreOutput {
       int hash = 1;
       if (state_ != null) hash ^= State.GetHashCode();
       if (control_ != null) hash ^= Control.GetHashCode();
-      if (DLef != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(DLef);
       if (stateExtend_ != null) hash ^= StateExtend.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
@@ -658,10 +643,6 @@ namespace CoreOutput {
         output.WriteRawTag(18);
         output.WriteMessage(Control);
       }
-      if (DLef != 0D) {
-        output.WriteRawTag(25);
-        output.WriteDouble(DLef);
-      }
       if (stateExtend_ != null) {
         output.WriteRawTag(34);
         output.WriteMessage(StateExtend);
@@ -684,10 +665,6 @@ namespace CoreOutput {
         output.WriteRawTag(18);
         output.WriteMessage(Control);
       }
-      if (DLef != 0D) {
-        output.WriteRawTag(25);
-        output.WriteDouble(DLef);
-      }
       if (stateExtend_ != null) {
         output.WriteRawTag(34);
         output.WriteMessage(StateExtend);
@@ -707,9 +684,6 @@ namespace CoreOutput {
       }
       if (control_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(Control);
-      }
-      if (DLef != 0D) {
-        size += 1 + 8;
       }
       if (stateExtend_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(StateExtend);
@@ -737,9 +711,6 @@ namespace CoreOutput {
           Control = new global::Control.Control();
         }
         Control.MergeFrom(other.Control);
-      }
-      if (other.DLef != 0D) {
-        DLef = other.DLef;
       }
       if (other.stateExtend_ != null) {
         if (stateExtend_ == null) {
@@ -776,10 +747,6 @@ namespace CoreOutput {
             input.ReadMessage(Control);
             break;
           }
-          case 25: {
-            DLef = input.ReadDouble();
-            break;
-          }
           case 34: {
             if (stateExtend_ == null) {
               StateExtend = new global::StateExtend.StateExtend();
@@ -814,10 +781,6 @@ namespace CoreOutput {
               Control = new global::Control.Control();
             }
             input.ReadMessage(Control);
-            break;
-          }
-          case 25: {
-            DLef = input.ReadDouble();
             break;
           }
           case 34: {
