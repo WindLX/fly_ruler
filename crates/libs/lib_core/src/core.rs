@@ -141,7 +141,6 @@ impl Core {
         let (tx, rx) = state_channel(&CoreOutput {
             state: trim_output.state,
             control: trim_output.control,
-            d_lef: trim_output.d_lef,
             state_extend: trim_output.state_extend,
         });
 

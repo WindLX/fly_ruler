@@ -1,4 +1,6 @@
-use super::ffi::{logger_callback, FrPluginHook, FrPluginLogRegister};
+use super::ffi::{
+    atmos_callback, logger_callback, FrPluginAtmosFuncRegister, FrPluginHook, FrPluginLogRegister,
+};
 use fly_ruler_utils::error::FatalPluginError;
 use libc::{c_char, c_int};
 use libloading::Library;
@@ -80,10 +82,14 @@ impl Plugin {
         }
     }
 
-    fn register_logger(&self) -> Result<(), PluginError> {
+    fn register_utils(&self) -> Result<(), PluginError> {
         let r = self.load_function::<FrPluginLogRegister>("frplugin_register_logger")?;
         unsafe {
             r(logger_callback);
+        }
+        let r = self.load_function::<FrPluginAtmosFuncRegister>("frplugin_register_atmos")?;
+        unsafe {
+            r(atmos_callback);
         }
         Ok(())
     }
@@ -136,7 +142,7 @@ impl Plugin {
         &self,
         args: &[impl ToString],
     ) -> Result<Result<(), PluginError>, FatalPluginError> {
-        if let Err(e) = self.register_logger() {
+        if let Err(e) = self.register_utils() {
             warn!("{}", e)
         };
         trace!("{} logger is registered", self.info.name);

@@ -1,11 +1,15 @@
-use super::ffi::{FrModelLoadConstants, FrModelLoadCtrlLimits, FrModelStep};
+use super::ffi::{
+    FrModelInit, FrModelLoadConstants, FrModelLoadCtrlLimits, FrModelStep, FrModelTrim,
+};
 use crate::plugin::{AsPlugin, Plugin, PluginError};
 use fly_ruler_utils::error::FatalPluginError;
 use fly_ruler_utils::plane_model::{ControlLimit, MechanicalModelInput, PlaneConstants, C};
 use log::debug;
 use std::path::Path;
 
-pub type AerodynamicModelStepFn = dyn Fn(&MechanicalModelInput) -> Result<C, FatalPluginError>;
+pub type AerodynamicModelTrimFn = dyn Fn(&MechanicalModelInput) -> Result<C, FatalPluginError>;
+pub type AerodynamicModelInitFn = dyn Fn(&MechanicalModelInput) -> Result<(), FatalPluginError>;
+pub type AerodynamicModelStepFn = dyn Fn(&MechanicalModelInput, f64) -> Result<C, FatalPluginError>;
 
 #[derive(Debug)]
 pub struct AerodynamicModel {
@@ -62,6 +66,20 @@ impl AerodynamicModel {
         }
     }
 
+    pub fn get_trim_handler(&self) -> Result<FrModelTrim, FatalPluginError> {
+        let init = self
+            .load_function::<FrModelTrim>("frmodel_trim")
+            .map_err(|e| FatalPluginError::symbol(e.to_string()))?;
+        Ok(*init)
+    }
+
+    pub fn get_init_handler(&self) -> Result<FrModelInit, FatalPluginError> {
+        let init = self
+            .load_function::<FrModelInit>("frmodel_init")
+            .map_err(|e| FatalPluginError::symbol(e.to_string()))?;
+        Ok(*init)
+    }
+
     pub fn get_step_handler(&self) -> Result<FrModelStep, FatalPluginError> {
         let step = self
             .load_function::<FrModelStep>("frmodel_step")
@@ -70,8 +88,32 @@ impl AerodynamicModel {
     }
 }
 
-pub fn step_handler_constructor(
-    handler: FrModelStep,
+pub fn init_handler_constructor(
+    handler: FrModelInit,
+    name: String,
+) -> Box<dyn Fn(&MechanicalModelInput) -> Result<(), FatalPluginError>> {
+    let name = name.clone();
+    let h = move |input: &MechanicalModelInput| {
+        let state = Box::new(input.state);
+        let control = Box::new(input.control);
+        unsafe {
+            let res = handler(&*state, &*control);
+            if res < 0 {
+                return Err(FatalPluginError::inner(
+                    &name,
+                    res,
+                    "when call frmodel_init",
+                ));
+            } else {
+                Ok(())
+            }
+        }
+    };
+    Box::new(h)
+}
+
+pub fn trim_handler_constructor(
+    handler: FrModelTrim,
     name: String,
 ) -> Box<dyn Fn(&MechanicalModelInput) -> Result<C, FatalPluginError>> {
     let name = name.clone();
@@ -81,7 +123,34 @@ pub fn step_handler_constructor(
         let mut c = Box::new(C::default());
         let c_ptr = &mut *c;
         unsafe {
-            let res = handler(&*state, &*control, input.lef, c_ptr);
+            let res = handler(&*state, &*control, c_ptr);
+            if res < 0 {
+                return Err(FatalPluginError::inner(
+                    &name,
+                    res,
+                    "when call frmodel_step",
+                ));
+            } else {
+                let c = *c_ptr;
+                Ok(c)
+            }
+        }
+    };
+    Box::new(h)
+}
+
+pub fn step_handler_constructor(
+    handler: FrModelStep,
+    name: String,
+) -> Box<dyn Fn(&MechanicalModelInput, f64) -> Result<C, FatalPluginError>> {
+    let name = name.clone();
+    let h = move |input: &MechanicalModelInput, t: f64| {
+        let state = Box::new(input.state);
+        let control = Box::new(input.control);
+        let mut c = Box::new(C::default());
+        let c_ptr = &mut *c;
+        unsafe {
+            let res = handler(&*state, &*control, t, c_ptr);
             if res < 0 {
                 return Err(FatalPluginError::inner(
                     &name,
@@ -207,10 +276,10 @@ mod plugin_model_tests {
             -0.0935778861396136,
             0.0944687551889544,
         ];
-        let d_lef = 6.28161378774449;
+        // let d_lef = 6.28161378774449;
         let h = res.unwrap();
         let f = step_handler_constructor(h, model.info().name.clone());
-        let r = f(&MechanicalModelInput::new(state, control, d_lef));
+        let r = f(&MechanicalModelInput::new(state, control), 0.0);
         debug!("{:?}", &r);
 
         let res = model.plugin().uninstall();

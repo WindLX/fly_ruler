@@ -1,12 +1,11 @@
 use crate::parts::{
-    basic::{Integrator, VectorIntegrator},
-    flight::{disturbance, Atmos, MechanicalModel},
-    group::Actuator,
+    flight::{disturbance, MechanicalModel},
     trim::TrimOutput,
 };
 use fly_ruler_plugin::AerodynamicModel;
 use fly_ruler_utils::{
     error::FatalCoreError,
+    parts::{Actuator, Atmos, Integrator, VectorIntegrator},
     plane_model::{Control, ControlLimit, CoreOutput, MechanicalModelInput, State, StateExtend},
     Vector,
 };
@@ -164,7 +163,6 @@ impl LeadingEdgeFlapBlock {
 pub struct PlaneBlock {
     start_time: Option<f64>,
     control: ControllerBlock,
-    flap: LeadingEdgeFlapBlock,
     integrator: VectorIntegrator,
     plane: MechanicalModel,
     extend: Option<StateExtend>,
@@ -181,14 +179,16 @@ impl PlaneBlock {
         deflection: &[f64; 3],
         ctrl_limit: ControlLimit,
     ) -> Result<Self, FatalCoreError> {
-        let flap = LeadingEdgeFlapBlock::new(init.state.alpha, init.d_lef);
         let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
         let integrator = VectorIntegrator::new(Into::<Vector>::into(init.state));
         let plane = MechanicalModel::new(model)?;
+        plane.init(&MechanicalModelInput {
+            state: init.state,
+            control: init.control,
+        })?;
         trace!("PlaneBlock init finished");
         Ok(PlaneBlock {
             control,
-            flap,
             integrator,
             plane,
             extend: None,
@@ -211,7 +211,6 @@ impl PlaneBlock {
         let t = (t - self.start_time.unwrap()).max(1e-3);
         let state = &mut self.integrator.past();
         let control = self.control.update(control, t);
-        let lef = self.flap.past();
 
         state.data[7] = state[7].clamp(
             self.alpha_limit_bottom.to_radians(),
@@ -223,9 +222,9 @@ impl PlaneBlock {
             self.beta_limit_top.to_radians(),
         );
 
-        let model_output =
-            self.plane
-                .step(&MechanicalModelInput::new(state.data.clone(), control, lef))?;
+        let model_output = self
+            .plane
+            .step(&MechanicalModelInput::new(state.data.clone(), control), t)?;
 
         trace!("[t: {t:.2}] PlantBlock: model_output:\n{}", model_output);
 
@@ -233,11 +232,11 @@ impl PlaneBlock {
             .integrator
             .derivative_add(Into::<Vector>::into(model_output.state_dot), t);
 
-        let alpha = state[7];
-        let alt = state[2];
-        let vt = state[6];
+        // let alpha = state[7];
+        // let alt = state[2];
+        // let vt = state[6];
 
-        self.flap.update(alpha, alt, vt, t);
+        // self.flap.update(alpha, alt, vt, t);
 
         let state = state.data;
         if state.iter().any(|x| x.is_nan()) {
@@ -246,11 +245,6 @@ impl PlaneBlock {
 
         let control = self.control.past();
         if Into::<Vec<f64>>::into(control).iter().any(|x| x.is_nan()) {
-            return Err(FatalCoreError::Nan);
-        }
-
-        let d_lef = self.flap.past();
-        if d_lef.is_nan() {
             return Err(FatalCoreError::Nan);
         }
 
@@ -264,7 +258,6 @@ impl PlaneBlock {
         let block_output = CoreOutput::new(
             State::from(state),
             Control::from(control),
-            d_lef,
             self.extend.unwrap(),
         );
         debug!("[t: {t:.2}] PlantBlock: block_output:\n{}", block_output);
@@ -273,7 +266,6 @@ impl PlaneBlock {
     }
 
     pub fn reset(&mut self) {
-        self.flap.reset();
         self.control.reset();
         self.integrator.reset();
         trace!("PlantBlock reset finished")
@@ -282,12 +274,10 @@ impl PlaneBlock {
     pub fn state(&self) -> Result<CoreOutput, FatalCoreError> {
         let state = &self.integrator.past();
         let control = self.control.past();
-        let d_lef = self.flap.past();
 
         Ok(CoreOutput::new(
             State::from(state.clone()),
             Control::from(control),
-            d_lef,
             self.extend.unwrap_or_default(),
         ))
     }
@@ -297,14 +287,14 @@ impl PlaneBlock {
 mod core_parts_tests {
     use crate::algorithm::nelder_mead::NelderMeadOptions;
     use crate::parts::{
-        basic::step,
-        block::{ControllerBlock, LeadingEdgeFlapBlock, PlaneBlock},
+        block::{ControllerBlock, PlaneBlock},
         flight::{multi_to_deg, MechanicalModel},
         trim::{trim, TrimOutput, TrimTarget},
     };
     use csv::Writer;
     use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
     use fly_ruler_utils::logger::test_logger_init;
+    use fly_ruler_utils::parts::step;
     use fly_ruler_utils::plane_model::ControlLimit;
     use log::{debug, trace};
     use std::fs::File;
@@ -419,6 +409,7 @@ mod core_parts_tests {
         test_core_fin(model)
     }
 
+    /*
     #[test]
     fn test_flap() {
         let (model, result) = test_core_init();
@@ -460,7 +451,7 @@ mod core_parts_tests {
         writer.flush().unwrap();
 
         test_core_fin(model)
-    }
+    }*/
 
     #[test]
     fn test_plane() {

@@ -1,4 +1,4 @@
-use crate::parts::basic::Integrator;
+use super::Integrator;
 
 #[derive(Clone)]
 pub struct Actuator {
@@ -59,8 +59,10 @@ impl Actuator {
 
 #[cfg(test)]
 mod core_parts_tests {
-    use crate::parts::{basic::step, group::Actuator};
-    use fly_ruler_utils::logger::test_logger_init;
+    use crate::{
+        logger::test_logger_init,
+        parts::{basic::step, group::Actuator},
+    };
     use log::trace;
     use std::time::{Duration, SystemTime};
 

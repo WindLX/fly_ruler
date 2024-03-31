@@ -82,14 +82,30 @@ int frmodel_load_constants(PlantConstants *constants);
 /// @return <0 represent occur some err
 int frmodel_load_ctrl_limits(ControlLimit *ctrl_limits);
 
+/// @brief get the air data coeff of the plant at trim stage
+/// @param state    the state vector of current model
+/// @param control  the control vector
+/// @param c        the air data under this condition
+/// @return <0 represent occur some err
+int frmodel_trim(
+    const State *state, const Control *control,
+    C *c);
+
+/// @brief init model, it will be called when create a new model
+/// @param state    the state vector of current model
+/// @param control  the control vector
+/// @return <0 represent occur some err
+int frmodel_init(
+    const State *state, const Control *control);
+
 /// @brief get the air data coeff of the plant
 /// @param state    the state vector of current model
 /// @param control  the control vector
-/// @param d_lef    the delta of leading edge flap
+/// @param t        time
 /// @param c        the air data under this condition
 /// @return <0 represent occur some err
 int frmodel_step(
-    const State *state, const Control *control, double d_lef,
+    const State *state, const Control *control, double t,
     C *c);
 
 #endif // FR_MODEL_H

@@ -1,7 +1,4 @@
-use crate::{
-    algorithm::nelder_mead::*,
-    parts::flight::{Atmos, MechanicalModel},
-};
+use crate::{algorithm::nelder_mead::*, parts::flight::MechanicalModel};
 use fly_ruler_utils::{
     error::FatalCoreError,
     plane_model::{
@@ -77,7 +74,6 @@ pub struct TrimOutput {
     pub state: State,
     pub control: Control,
     pub state_extend: StateExtend,
-    pub d_lef: f64,
     pub nelder_mead_result: NelderMeadResult,
 }
 
@@ -85,7 +81,6 @@ impl std::fmt::Display for TrimOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "state:  \n{}", self.state)?;
         writeln!(f, "control:\n{}", self.control)?;
-        writeln!(f, "d_lef:  {}", self.d_lef)?;
         writeln!(f, "extend: \n{}", self.state_extend)?;
         writeln!(f, "nelder_mead_result: \n{}", self.nelder_mead_result)
     }
@@ -96,14 +91,12 @@ impl TrimOutput {
         state: State,
         control: Control,
         state_extend: StateExtend,
-        d_lef: f64,
         nelder_mead_result: NelderMeadResult,
     ) -> Self {
         Self {
             state,
             control,
             state_extend,
-            d_lef,
             nelder_mead_result,
         }
     }
@@ -170,7 +163,6 @@ pub fn trim(
         State::from(&o[..12]),
         Control::from(&res.x[..4]),
         StateExtend::from(&o[12..18]),
-        o[18],
         res,
     ))
 }
@@ -223,11 +215,11 @@ fn trim_func(
 
     // Calculating qbar, ps and steady state leading edge flap deflection:
     // (see pg. 43 NASA report)
-    let (_mach, qbar, ps) = Atmos::atmos(altitude, velocity).into();
-    let mut lef = 1.38 * alpha.to_degrees() - 9.05 * qbar / ps + 1.45;
+    // let (_mach, qbar, ps) = Atmos::atmos(altitude, velocity).into();
+    // let mut lef = 1.38 * alpha.to_degrees() - 9.05 * qbar / ps + 1.45;
 
     // Verify that the calculated leading edge flap have not been violated.
-    lef = lef.clamp(0.0, 25.0);
+    // lef = lef.clamp(0.0, 25.0);
 
     let state = [
         0.0,              // npos (ft)
@@ -266,7 +258,7 @@ fn trim_func(
     let output = plane
         .lock()
         .unwrap()
-        .step(&MechanicalModelInput::new(state, control, lef))?;
+        .trim(&MechanicalModelInput::new(state, control))?;
 
     let state_dot = Vector::from(Into::<Vec<f64>>::into(output.state_dot));
     let cost = weight.dot(&(state_dot.clone() * state_dot));
@@ -274,7 +266,6 @@ fn trim_func(
     let mut state_out = state.to_vec();
     let state_extend = Into::<Vec<f64>>::into(output.state_extend);
     state_out.extend_from_slice(&state_extend);
-    state_out.push(lef);
     *output_vec.borrow_mut() = state_out;
 
     Ok(cost)
@@ -316,13 +307,13 @@ mod core_trim_tests {
     #[test]
     fn test_trim() {
         test_logger_init();
-        let model = AerodynamicModel::new("../../../lua_system/models/f16_model");
+        let model = AerodynamicModel::new("../../../LSE/models/f16_model");
         assert!(matches!(model, Ok(_)));
 
         let model = model.unwrap();
         let res = model
             .plugin()
-            .install(&["../../../lua_system/models/f16_model/data"]);
+            .install(&["../../../LSE/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
         let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
@@ -332,8 +323,8 @@ mod core_trim_tests {
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
             max_iter: 10000,
-            tol_fun: 1e-6,
-            tol_x: 1e-6,
+            tol_fun: 1e-10,
+            tol_x: 1e-10,
         });
 
         let result = trim(plant.clone(), trim_target, trim_init, CL, None, nm_options).unwrap();

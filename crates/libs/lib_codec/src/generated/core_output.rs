@@ -21,9 +21,6 @@ pub struct CoreOutput {
     pub state: ::core::option::Option<super::state::State>,
     #[prost(message, optional, tag = "2")]
     pub control: ::core::option::Option<super::control::Control>,
-    /// double d_lef = 3;
-    #[prost(message, optional, tag = "3")]
-    pub state_extern: ::core::option::Option<super::state_extern::StateExtern>,
     #[prost(message, optional, tag = "4")]
     pub state_extend: ::core::option::Option<super::state_extend::StateExtend>,
 }

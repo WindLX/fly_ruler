@@ -28,47 +28,6 @@ pub fn multi_to_deg(input: &Vector) -> Vector {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Atmos {
-    pub mach: f64,
-    pub qbar: f64,
-    pub ps: f64,
-}
-
-impl Atmos {
-    pub fn new(mach: f64, qbar: f64, ps: f64) -> Self {
-        Self { mach, qbar, ps }
-    }
-
-    /// Function for mach and qbar
-    pub fn atmos(altitude: f64, velocity: f64) -> Self {
-        let rho0 = 2.377e-3;
-        let tfac = 1.0 - 0.703e-5 * altitude;
-
-        let mut temp = 519.0 * tfac;
-        if altitude >= 35000.0 {
-            temp = 390.0;
-        }
-
-        let mach = velocity / (1.4 * 1716.3 * temp).sqrt();
-        let rho = rho0 * tfac.powf(4.14);
-        let qbar = 0.5 * rho * velocity.powi(2);
-        let mut ps = 1715.0 * rho * temp;
-
-        if ps.abs() < 1.0e-6 {
-            ps = 1715.0;
-        }
-
-        Atmos::new(mach, qbar, ps)
-    }
-}
-
-impl Into<(f64, f64, f64)> for Atmos {
-    fn into(self) -> (f64, f64, f64) {
-        (self.mach, self.qbar, self.ps)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
 pub struct Vector3 {
     pub x: f64,
     pub y: f64,

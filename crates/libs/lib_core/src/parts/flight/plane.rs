@@ -1,9 +1,11 @@
-use super::basic::{AirAngles, AngleRates, Atmos, Orientation, Vector3, G};
+use super::basic::{AirAngles, AngleRates, Orientation, Vector3, G};
 use fly_ruler_plugin::{
-    AsPlugin, {step_handler_constructor, AerodynamicModel, AerodynamicModelStepFn},
+    init_handler_constructor, step_handler_constructor, trim_handler_constructor, AerodynamicModel,
+    AerodynamicModelInitFn, AerodynamicModelStepFn, AerodynamicModelTrimFn, AsPlugin,
 };
 use fly_ruler_utils::{
     error::FatalCoreError,
+    parts::Atmos,
     plane_model::{
         MechanicalModelInput, MechanicalModelOutput, PlaneConstants, State, StateExtend, C,
     },
@@ -11,7 +13,9 @@ use fly_ruler_utils::{
 
 pub struct MechanicalModel {
     constants: PlaneConstants,
-    model_func: Box<AerodynamicModelStepFn>,
+    model_trim_func: Box<AerodynamicModelTrimFn>,
+    model_init_func: Box<AerodynamicModelInitFn>,
+    model_step_func: Box<AerodynamicModelStepFn>,
 }
 
 impl MechanicalModel {
@@ -19,17 +23,31 @@ impl MechanicalModel {
         let constants = model
             .load_constants()
             .map_err(|e| FatalCoreError::from(e))?;
-        let handler = model
+        let trim_handler = model
+            .get_trim_handler()
+            .map_err(|e| FatalCoreError::from(e))?;
+        let init_handler = model
+            .get_init_handler()
+            .map_err(|e| FatalCoreError::from(e))?;
+        let step_handler = model
             .get_step_handler()
             .map_err(|e| FatalCoreError::from(e))?;
-        let model_func = step_handler_constructor(handler, model.info().name.clone());
+        let model_trim_func = trim_handler_constructor(trim_handler, model.info().name.clone());
+        let model_init_func = init_handler_constructor(init_handler, model.info().name.clone());
+        let model_step_func = step_handler_constructor(step_handler, model.info().name.clone());
         Ok(Self {
             constants,
-            model_func,
+            model_trim_func,
+            model_init_func,
+            model_step_func,
         })
     }
 
-    pub fn step(
+    pub fn init(&self, model_input: &MechanicalModelInput) -> Result<(), FatalCoreError> {
+        (self.model_init_func)(model_input).map_err(|e| FatalCoreError::from(e))
+    }
+
+    pub fn trim(
         &self,
         model_input: &MechanicalModelInput,
     ) -> Result<MechanicalModelOutput, FatalCoreError> {
@@ -46,7 +64,62 @@ impl MechanicalModel {
         let (position_dot, sub_velocity) = navgation(velocity, &orientation, &air_angles);
         let orientation_dot = kinematics(&orientation, &angle_rates);
 
-        let c = (self.model_func)(model_input).map_err(|e| FatalCoreError::from(e))?;
+        let c = (self.model_trim_func)(model_input).map_err(|e| FatalCoreError::from(e))?;
+
+        let (velocity_dot, sub_velocity_dot) = velocity_derivation(
+            &c,
+            &self.constants,
+            velocity,
+            &sub_velocity,
+            &orientation,
+            &angle_rates,
+            qbar,
+            &control.thrust,
+        );
+        let (alpha_dot, beta_dot) =
+            air_angles.derivation(velocity, velocity_dot, &sub_velocity, &sub_velocity_dot);
+        let angle_rate_dot = angle_rates.derivation(&c, &self.constants, qbar);
+
+        let n = accels(sub_velocity, sub_velocity_dot, &orientation, &angle_rates);
+
+        let state_dot = State::from([
+            position_dot.x,
+            position_dot.y,
+            position_dot.z,
+            orientation_dot.x,
+            orientation_dot.y,
+            orientation_dot.z,
+            velocity_dot,
+            alpha_dot,
+            beta_dot,
+            angle_rate_dot.p,
+            angle_rate_dot.q,
+            angle_rate_dot.r,
+        ]);
+        let state_extend = StateExtend::from([n.x, n.y, n.z, mach, qbar, ps]);
+
+        Ok(MechanicalModelOutput::new(state_dot, state_extend))
+    }
+
+    pub fn step(
+        &self,
+        model_input: &MechanicalModelInput,
+        t: f64,
+    ) -> Result<MechanicalModelOutput, FatalCoreError> {
+        let state = &model_input.state;
+        let control = &model_input.control;
+
+        let orientation = Orientation::from(state);
+        let air_angles = AirAngles::from(state);
+        let angle_rates = AngleRates::from(state);
+        let velocity = state.velocity.max(0.01);
+        let altitude = state.altitude;
+
+        let (mach, qbar, ps) = Atmos::atmos(altitude, velocity).into();
+        let (position_dot, sub_velocity) = navgation(velocity, &orientation, &air_angles);
+        let orientation_dot = kinematics(&orientation, &angle_rates);
+
+        let c = (self.model_step_func)(model_input, t).map_err(|e| FatalCoreError::from(e))?;
 
         let (velocity_dot, sub_velocity_dot) = velocity_derivation(
             &c,

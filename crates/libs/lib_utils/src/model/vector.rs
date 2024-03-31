@@ -1,5 +1,6 @@
 use super::matrix::Matrix;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     ops::{
@@ -8,7 +9,7 @@ use std::{
     },
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vector {
     dim: usize,
     pub data: Vec<f64>,

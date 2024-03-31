@@ -31,10 +31,16 @@ static PlantConstants consts = {
 
 static int fi_flag = 1;
 Logger frplugin_log = NULL;
+AtmosFunc frplugin_atmos = NULL;
 
 void frplugin_register_logger(Logger cb)
 {
    frplugin_log = cb;
+}
+
+void frplugin_register_atmos(AtmosFunc atmos)
+{
+   frplugin_atmos = atmos;
 }
 
 int frplugin_install_hook(int argc, char **argv)
@@ -148,16 +154,14 @@ int frmodel_load_ctrl_limits(ControlLimit *ctrl_limits)
        .beta_limit_top = 30.0,
        .beta_limit_bottom = -30.0};
    *ctrl_limits = limits;
-   
+
    return 0;
 }
 
-int frmodel_step(
+static int frmodel_step_helper(
     const State *state, const Control *control, double d_lef,
     C *c)
 {
-   trace("f16 step start");
-
    double m = consts.m;
    double B = consts.b;
    double S = consts.s;
@@ -425,7 +429,7 @@ int frmodel_step(
 
 #pragma endregion
 
-   debug("f16 coeff:\nCl=%f, Cm=%f, Cn=%f,\nCx=%f, Cy=%f, Cz=%f", Cl_tot, Cm_tot, Cn_tot, Cx_tot, Cy_tot, Cz_tot);
+   trace("f16 coeff:\nCl=%f, Cm=%f, Cn=%f,\nCx=%f, Cy=%f, Cz=%f", Cl_tot, Cm_tot, Cn_tot, Cx_tot, Cy_tot, Cz_tot);
 
    c->c_l = Cl_tot;
    c->c_m = Cm_tot;
@@ -436,7 +440,55 @@ int frmodel_step(
 
    free(temp);
 
-   trace("f16 step finished");
-
    return 0;
 };
+
+inline static double clamp(double x, double min, double max)
+{
+   return (x < min) ? min : (x > max) ? max
+                                      : x;
+}
+
+int frmodel_trim(
+    const State *state, const Control *control,
+    C *c)
+{
+   trace("f16 trim start");
+   int r = 0;
+
+   double r2d = 180.0 / acos(-1);
+
+   // Calculating qbar, ps and steady state leading edge flap deflection:
+   // (see pg. 43 NASA report)
+   Atmos atmos = frplugin_atmos(state->altitude, state->velocity);
+   int lef = 1.38 * state->alpha * r2d - 9.05 * atmos.qbar / atmos.ps + 1.45;
+
+   // Verify that the calculated leading edge flap have not been violated.
+   lef = clamp(lef, 0.0, 25.0);
+   debug("alpha:%f", state->alpha);
+   r = frmodel_step_helper(state, control, lef, c);
+
+   trace("f16 trim finished");
+   return r;
+}
+
+int frmodel_init(
+    const State *state, const Control *control)
+{
+   trace("f16 init start");
+   trace("f16 init start");
+   return 0;
+}
+
+int frmodel_step(
+    const State *state, const Control *control, double t,
+    C *c)
+{
+   trace("f16 step start");
+   // TODO
+   int r = 0;
+   r = frmodel_step_helper(state, control, t, c);
+
+   trace("f16 step finished");
+   return r;
+}

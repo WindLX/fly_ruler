@@ -15,7 +15,7 @@ members = [
     "test/test_client",
 
     # Application modules
-    # "crates/modules/use_py_client",
+    # "crates/modules/user_py_client",
 
     # Application runtime
     "crates/runtime/lua_runtime",

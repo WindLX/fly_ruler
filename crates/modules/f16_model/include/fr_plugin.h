@@ -34,4 +34,17 @@ int frplugin_install_hook(int argc, char **argv);
 /// @return <0 represent occur some err
 int frplugin_uninstall_hook(int argc, char **argv);
 
+typedef struct
+{
+    double mach;
+    double qbar;
+    double ps;
+} Atmos;
+
+typedef Atmos (*AtmosFunc)(double altitude, double velocity);
+
+extern AtmosFunc frplugin_atmos;
+
+void frplugin_register_atmos(AtmosFunc atmos);
+
 #endif // FR_PLUGIN

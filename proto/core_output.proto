@@ -17,6 +17,5 @@ message PlaneMessage {
 message CoreOutput {
   state.State state = 1;
   control.Control control = 2;
-  double d_lef = 3;
   state_extend.StateExtend state_extend = 4;
 }
