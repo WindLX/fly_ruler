@@ -30,8 +30,26 @@ static PlantConstants consts = {
     .j_x = 9496.0};
 
 static int fi_flag = 1;
+
 Logger frplugin_log = NULL;
 AtmosFunc frplugin_atmos = NULL;
+IntegratorNew frplugin_integrator_new = NULL;
+IntegratorUpdate frplugin_integrator_update = NULL;
+IntegratorReset frplugin_integrator_reset = NULL;
+IntegratorPast frplugin_integrator_past = NULL;
+ActuatorNew frplugin_actuator_new = NULL;
+ActuatorUpdate frplugin_actuator_update = NULL;
+ActuatorReset frplugin_actuator_reset = NULL;
+ActuatorPast frplugin_actuator_past = NULL;
+
+static void *lef_actuator = NULL;
+static void *lef_integrator = NULL;
+
+inline static double clamp(double x, double min, double max)
+{
+   return (x < min) ? min : (x > max) ? max
+                                      : x;
+}
 
 void frplugin_register_logger(Logger cb)
 {
@@ -41,6 +59,46 @@ void frplugin_register_logger(Logger cb)
 void frplugin_register_atmos(AtmosFunc atmos)
 {
    frplugin_atmos = atmos;
+}
+
+void frplugin_register_integrator_new(IntegratorNew integrator_new)
+{
+   frplugin_integrator_new = integrator_new;
+}
+
+void frplugin_register_integrator_update(IntegratorUpdate integrator_update)
+{
+   frplugin_integrator_update = integrator_update;
+}
+
+void frplugin_register_integrator_reset(IntegratorReset integrator_reset)
+{
+   frplugin_integrator_reset = integrator_reset;
+}
+
+void frplugin_register_integrator_past(IntegratorPast integrator_past)
+{
+   frplugin_integrator_past = integrator_past;
+}
+
+void frplugin_register_actuator_new(ActuatorNew actuator_new)
+{
+   frplugin_actuator_new = actuator_new;
+}
+
+void frplugin_register_actuator_update(ActuatorUpdate actuator_update)
+{
+   frplugin_actuator_update = actuator_update;
+}
+
+void frplugin_register_actuator_reset(ActuatorReset actuator_reset)
+{
+   frplugin_actuator_reset = actuator_reset;
+}
+
+void frplugin_register_actuator_past(ActuatorPast actuator_past)
+{
+   frplugin_actuator_past = actuator_past;
 }
 
 int frplugin_install_hook(int argc, char **argv)
@@ -443,12 +501,6 @@ static int frmodel_step_helper(
    return 0;
 };
 
-inline static double clamp(double x, double min, double max)
-{
-   return (x < min) ? min : (x > max) ? max
-                                      : x;
-}
-
 int frmodel_trim(
     const State *state, const Control *control,
     C *c)
@@ -461,11 +513,11 @@ int frmodel_trim(
    // Calculating qbar, ps and steady state leading edge flap deflection:
    // (see pg. 43 NASA report)
    Atmos atmos = frplugin_atmos(state->altitude, state->velocity);
-   int lef = 1.38 * state->alpha * r2d - 9.05 * atmos.qbar / atmos.ps + 1.45;
+   double lef = 1.38 * state->alpha * r2d - 9.05 * atmos.qbar / atmos.ps + 1.45;
 
    // Verify that the calculated leading edge flap have not been violated.
    lef = clamp(lef, 0.0, 25.0);
-   debug("alpha:%f", state->alpha);
+
    r = frmodel_step_helper(state, control, lef, c);
 
    trace("f16 trim finished");
@@ -476,8 +528,18 @@ int frmodel_init(
     const State *state, const Control *control)
 {
    trace("f16 init start");
-   trace("f16 init start");
-   return 0;
+   int r = 0;
+   double r2d = 180.0 / acos(-1);
+
+   Atmos atmos = frplugin_atmos(state->altitude, state->velocity);
+   double lef = 1.38 * state->alpha * r2d - 9.05 * atmos.qbar / atmos.ps + 1.45;
+
+   lef = clamp(lef, 0.0, 25.0);
+
+   frplugin_actuator_new(lef_actuator, lef, 25.0, 0.0, 25.0, 1.0 / 0.136);
+
+   trace("f16 init finished");
+   return r;
 }
 
 int frmodel_step(

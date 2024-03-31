@@ -1,8 +1,8 @@
 use fly_ruler_utils::{
     logger,
-    parts::{Atmos, Integrator},
+    parts::{Actuator, Atmos, Integrator},
 };
-use libc::{c_char, c_int, c_void};
+use libc::{c_char, c_int};
 use log::Level;
 use std::ffi::CStr;
 
@@ -44,8 +44,122 @@ pub unsafe extern "C" fn atmos_callback(altitude: f64, velocity: f64) -> Atmos {
     Atmos::atmos(altitude, velocity)
 }
 
-pub type IntegratorNew = unsafe extern "C" fn(init: f64) -> *mut Integrator;
+pub type IntegratorNew = unsafe extern "C" fn(integrator: *mut Integrator, init: f64);
 pub type FrPluginIntegratorNewRegister = unsafe extern "C" fn(func: IntegratorNew);
-pub unsafe extern "C" fn integrator_new_callback(init: f64) -> *mut Integrator {
-    Box::into_raw(Box::new(Integrator::new(init)))
+pub unsafe extern "C" fn integrator_new_callback(integrator: *mut Integrator, init: f64) {
+    *integrator = Integrator::new(init);
+}
+
+pub type IntegratorUpdate =
+    unsafe extern "C" fn(integrator: *mut Integrator, value: f64, t: f64, result: *mut f64) -> i32;
+pub type FrPluginIntegratorUpdateRegister = unsafe extern "C" fn(func: IntegratorUpdate);
+pub unsafe extern "C" fn integrator_update_callback(
+    integrator: *mut Integrator,
+    value: f64,
+    t: f64,
+    result: *mut f64,
+) -> i32 {
+    match integrator.as_mut() {
+        Some(integrator) => {
+            *result = integrator.integrate(value, t);
+            return 0;
+        }
+        None => return -1,
+    }
+}
+
+pub type IntegratorPast =
+    unsafe extern "C" fn(integrator: *mut Integrator, result: *mut f64) -> i32;
+pub type FrPluginIntegratorPastRegister = unsafe extern "C" fn(func: IntegratorPast);
+pub unsafe extern "C" fn integrator_past_callback(
+    integrator: *mut Integrator,
+    result: *mut f64,
+) -> i32 {
+    match integrator.as_mut() {
+        Some(integrator) => {
+            *result = integrator.past();
+            return 0;
+        }
+        None => return -1,
+    }
+}
+
+pub type IntegratorReset = unsafe extern "C" fn(integrator: *mut Integrator) -> i32;
+pub type FrPluginIntegratorResetRegister = unsafe extern "C" fn(func: IntegratorReset);
+pub unsafe extern "C" fn integrator_reset_callback(integrator: *mut Integrator) -> i32 {
+    match integrator.as_mut() {
+        Some(integrator) => {
+            integrator.reset();
+            return 0;
+        }
+        None => return -1,
+    }
+}
+
+pub type ActuatorNew = unsafe extern "C" fn(
+    actuator: *mut Actuator,
+    init: f64,
+    command_saturation_top: f64,
+    command_saturation_bottom: f64,
+    rate_saturation: f64,
+    gain: f64,
+);
+pub type FrPluginActuatorNewRegister = unsafe extern "C" fn(func: ActuatorNew);
+pub unsafe extern "C" fn actuator_new_callback(
+    actuator: *mut Actuator,
+    init: f64,
+    command_saturation_top: f64,
+    command_saturation_bottom: f64,
+    rate_saturation: f64,
+    gain: f64,
+) {
+    *actuator = Actuator::new(
+        init,
+        command_saturation_top,
+        command_saturation_bottom,
+        rate_saturation,
+        gain,
+    );
+}
+
+pub type ActuatorUpdate =
+    unsafe extern "C" fn(actuator: *mut Actuator, value: f64, t: f64, result: *mut f64) -> i32;
+pub type FrPluginActuatorUpdateRegister = unsafe extern "C" fn(func: ActuatorUpdate);
+pub unsafe extern "C" fn actuator_update_callback(
+    actuator: *mut Actuator,
+    value: f64,
+    t: f64,
+    result: *mut f64,
+) -> i32 {
+    match actuator.as_mut() {
+        Some(actuator) => {
+            *result = actuator.update(value, t);
+            return 0;
+        }
+        None => return -1,
+    }
+}
+
+pub type ActuatorPast = unsafe extern "C" fn(actuator: *mut Actuator, result: *mut f64) -> i32;
+pub type FrPluginActuatorPastRegister = unsafe extern "C" fn(func: ActuatorPast);
+pub unsafe extern "C" fn actuator_past_callback(actuator: *mut Actuator, result: *mut f64) -> i32 {
+    match actuator.as_mut() {
+        Some(actuator) => {
+            *result = actuator.past();
+            return 0;
+        }
+        None => return -1,
+    }
+}
+
+pub type ActuatorReset = unsafe extern "C" fn(actuator: *mut Actuator) -> i32;
+pub type FrPluginActuatorResetRegister = unsafe extern "C" fn(func: ActuatorReset);
+pub unsafe extern "C" fn actuator_reset_callback(actuator: *mut Actuator) -> i32 {
+    match actuator.as_mut() {
+        Some(actuator) => {
+            actuator.reset();
+            return 0;
+        }
+        None => return -1,
+    }
 }

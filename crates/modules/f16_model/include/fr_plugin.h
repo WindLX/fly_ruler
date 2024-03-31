@@ -47,4 +47,57 @@ extern AtmosFunc frplugin_atmos;
 
 void frplugin_register_atmos(AtmosFunc atmos);
 
+typedef void (*IntegratorNew)(void *integrator, double init);
+
+extern IntegratorNew frplugin_integrator_new;
+
+void frplugin_register_integrator_new(IntegratorNew integrator_new);
+
+typedef int (*IntegratorUpdate)(void *integrator, double value, double t, double *result);
+
+extern IntegratorUpdate frplugin_integrator_update;
+
+void frplugin_register_integrator_update(IntegratorUpdate integrator_update);
+
+typedef int (*IntegratorPast)(void *integrator, double *result);
+
+extern IntegratorPast frplugin_integrator_past;
+
+void frplugin_register_integrator_past(IntegratorPast integrator_past);
+
+typedef int (*IntegratorReset)(void *integrator);
+
+extern IntegratorReset frplugin_integrator_reset;
+
+void frplugin_register_integrator_reset(IntegratorReset integrator_reset);
+
+typedef void (*ActuatorNew)(void *actuator,
+                            double init,
+                            double command_saturation_top,
+                            double command_saturation_bottom,
+                            double rate_saturation,
+                            double gain);
+
+extern ActuatorNew frplugin_actuator_new;
+
+void frplugin_register_actuator_new(ActuatorNew actuator_new);
+
+typedef int (*ActuatorUpdate)(void *actuator, double value, double t, double *result);
+
+extern ActuatorUpdate frplugin_actuator_update;
+
+void frplugin_register_actuator_update(ActuatorUpdate actuator_update);
+
+typedef int (*ActuatorPast)(void *actuator, double *result);
+
+extern ActuatorPast frplugin_actuator_past;
+
+void frplugin_register_actuator_past(ActuatorPast actuator_past);
+
+typedef int (*ActuatorReset)(void *actuator);
+
+extern ActuatorReset frplugin_actuator_reset;
+
+void frplugin_register_actuator_reset(ActuatorReset actuator_reset);
+
 #endif // FR_PLUGIN

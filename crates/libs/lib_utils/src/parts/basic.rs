@@ -1,5 +1,6 @@
 use crate::Vector;
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Atmos {
     pub mach: f64,
