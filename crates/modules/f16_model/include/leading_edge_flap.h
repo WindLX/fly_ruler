@@ -4,7 +4,7 @@
 #include "fr_plugin.h"
 #include "fr_model.h"
 
-inline double get_lef(const State *state);
+double get_lef(const State *state);
 
 typedef struct
 {

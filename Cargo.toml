@@ -1,5 +1,4 @@
 [workspace]
-resolver = "2"
 members = [
     # Application libraries
     "crates/libs/lib_core",
@@ -15,9 +14,10 @@ members = [
     "test/test_client",
 
     # Application modules
-    # "crates/modules/user_py_client",
+    "crates/modules/python_client",
 
     # Application runtime
     "crates/runtime/lua_runtime",
-    # "crates/runtime/python_runtime",
+    "crates/runtime/python_runtime",
 ]
+resolver = "2"

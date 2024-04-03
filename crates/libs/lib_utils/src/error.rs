@@ -19,6 +19,12 @@ pub enum FrError {
     Codec(String),
 }
 
+impl From<std::io::Error> for FrError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
 impl std::error::Error for FrError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {

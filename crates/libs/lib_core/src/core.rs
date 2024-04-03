@@ -37,7 +37,7 @@ impl std::fmt::Display for CoreInitCfg {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PlaneInitCfg {
     pub deflection: Option<[f64; 3]>,
     pub trim_target: TrimTarget,

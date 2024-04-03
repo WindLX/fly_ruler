@@ -1,5 +1,3 @@
-use std::f64::consts::PI;
-
 use crate::parts::{
     flight::{disturbance, MechanicalModel},
     trim::TrimOutput,
@@ -7,7 +5,7 @@ use crate::parts::{
 use fly_ruler_plugin::AerodynamicModel;
 use fly_ruler_utils::{
     error::FatalCoreError,
-    parts::{Actuator, Atmos, Integrator, VectorIntegrator},
+    parts::{Actuator, VectorIntegrator},
     plane_model::{Control, ControlLimit, CoreOutput, MechanicalModelInput, State, StateExtend},
     Vector,
 };
@@ -109,57 +107,6 @@ impl ControllerBlock {
             a.reset()
         }
         trace!("ControllerBlock reset finished")
-    }
-}
-
-#[deprecated]
-pub(crate) struct LeadingEdgeFlapBlock {
-    lef_actuator: Actuator,
-    integrator: Integrator,
-    feedback: f64,
-}
-
-#[deprecated]
-impl LeadingEdgeFlapBlock {
-    pub fn new(alpha_init: f64, d_lef: f64) -> Self {
-        trace!(
-            "LEFBlock: alpha_init: {:.2}, d_lef: {:.2}",
-            alpha_init,
-            d_lef
-        );
-        let lef_actuator = Actuator::new(d_lef, 25.0, 0.0, 25.0, 1.0 / 0.136);
-        let integrator = Integrator::new(-alpha_init * 180.0 / PI);
-        LeadingEdgeFlapBlock {
-            lef_actuator,
-            integrator,
-            feedback: 0.0,
-        }
-    }
-
-    pub fn update(&mut self, alpha: f64, alt: f64, vt: f64, t: f64) -> f64 {
-        trace!("[t: {t:.2}] LEFBlock: alpha: {alpha:.2}, altitude: {alt:.2}, velocity: {vt:.2}");
-        let atmos = Atmos::atmos(alt, vt);
-        let r_1 = atmos.qbar / atmos.ps * 9.05;
-        let alpha = alpha * 180.0 / PI;
-        let r_2 = (alpha - self.feedback) * 7.25;
-        let r_3 = self.integrator.integrate(r_2, t);
-        let r_4 = r_3 + 2.0 * alpha;
-        self.feedback = r_4;
-        let r_5 = r_4 * 1.38;
-        let r = self.lef_actuator.update(1.45 + r_5 - r_1, t);
-        trace!("[t: {t:.2}] LEFBlock: lef: {r:.4}");
-        r
-    }
-
-    pub fn past(&self) -> f64 {
-        self.lef_actuator.past()
-    }
-
-    pub fn reset(&mut self) {
-        self.lef_actuator.reset();
-        self.integrator.reset();
-        self.feedback = 0.0;
-        trace!("LEFBlock reset finished")
     }
 }
 

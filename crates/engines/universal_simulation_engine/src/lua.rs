@@ -68,6 +68,12 @@ impl LuaManager {
         tick_timeout
     }
 
+    pub fn read_rate(&self) -> u64 {
+        let mut read_rate: u64 = self.load_data("read_rate");
+        read_rate = read_rate.max(1);
+        read_rate
+    }
+
     pub fn is_block(&self) -> bool {
         let is_block: bool = self.load_data("is_block");
         is_block

@@ -415,6 +415,7 @@ impl From<PushPlaneRequest> for PushPlaneRequestGen {
 impl From<SendControlRequestGen> for SendControlRequest {
     fn from(value: SendControlRequestGen) -> Self {
         SendControlRequest {
+            plane_id: value.plane_id.unwrap().into(),
             control: value.control.map(|a| a.into()),
         }
     }
@@ -423,6 +424,7 @@ impl From<SendControlRequestGen> for SendControlRequest {
 impl From<SendControlRequest> for SendControlRequestGen {
     fn from(value: SendControlRequest) -> Self {
         SendControlRequestGen {
+            plane_id: Some(value.plane_id.into()),
             control: value.control.map(|a| a.into()),
         }
     }
@@ -530,42 +532,30 @@ impl From<ServiceCallResponse> for ServiceCallResponseGen {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct ProtoCodec;
-
-impl ProtoCodec {
-    pub fn new() -> Self {
-        ProtoCodec
-    }
-}
-
-impl Encoder<ServiceCall> for ProtoCodec {
-    fn encode(&mut self, input: ServiceCall) -> fly_ruler_utils::error::FrResult<Vec<u8>> {
-        let request = Into::<ServiceCallGen>::into(input);
+impl Encoder for ServiceCall {
+    fn encode(self) -> fly_ruler_utils::error::FrResult<Vec<u8>> {
+        let request = Into::<ServiceCallGen>::into(self);
         Ok(request.encode_to_vec())
     }
 }
 
-impl Decoder<ServiceCall> for ProtoCodec {
-    fn decode(&mut self, input: &[u8]) -> Result<ServiceCall, fly_ruler_utils::error::FrError> {
+impl Decoder for ServiceCall {
+    fn decode(input: &[u8]) -> Result<ServiceCall, fly_ruler_utils::error::FrError> {
         let response = ServiceCallGen::decode(input)
             .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
         Ok(Into::<ServiceCall>::into(response))
     }
 }
 
-impl Encoder<ServiceCallResponse> for ProtoCodec {
-    fn encode(&mut self, input: ServiceCallResponse) -> fly_ruler_utils::error::FrResult<Vec<u8>> {
-        let request = Into::<ServiceCallResponseGen>::into(input);
+impl Encoder for ServiceCallResponse {
+    fn encode(self) -> fly_ruler_utils::error::FrResult<Vec<u8>> {
+        let request = Into::<ServiceCallResponseGen>::into(self);
         Ok(request.encode_to_vec())
     }
 }
 
-impl Decoder<ServiceCallResponse> for ProtoCodec {
-    fn decode(
-        &mut self,
-        input: &[u8],
-    ) -> Result<ServiceCallResponse, fly_ruler_utils::error::FrError> {
+impl Decoder for ServiceCallResponse {
+    fn decode(input: &[u8]) -> Result<ServiceCallResponse, fly_ruler_utils::error::FrError> {
         let response = ServiceCallResponseGen::decode(input)
             .map_err(|e| fly_ruler_utils::error::FrError::Codec(e.to_string()))?;
         Ok(Into::<ServiceCallResponse>::into(response))

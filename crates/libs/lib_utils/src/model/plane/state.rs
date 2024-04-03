@@ -1,5 +1,6 @@
 use crate::Vector;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// What the `state` represent
 /// npos (ft) epos (ft)
@@ -128,5 +129,24 @@ impl From<Vector> for State {
 impl Into<Vector> for State {
     fn into(self) -> Vector {
         Vector::from(<State as Into<Vec<f64>>>::into(self))
+    }
+}
+
+impl Into<HashMap<String, f64>> for State {
+    fn into(self) -> HashMap<String, f64> {
+        let mut map = HashMap::new();
+        map.insert("npos".to_string(), self.npos);
+        map.insert("epos".to_string(), self.epos);
+        map.insert("altitude".to_string(), self.altitude);
+        map.insert("phi".to_string(), self.phi);
+        map.insert("theta".to_string(), self.theta);
+        map.insert("psi".to_string(), self.psi);
+        map.insert("velocity".to_string(), self.velocity);
+        map.insert("alpha".to_string(), self.alpha);
+        map.insert("beta".to_string(), self.beta);
+        map.insert("p".to_string(), self.p);
+        map.insert("q".to_string(), self.q);
+        map.insert("r".to_string(), self.r);
+        map
     }
 }

@@ -1,5 +1,6 @@
 use crate::Vector;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// What the `state_extend` represent
 /// nx(g) ny(g) nz(g)
@@ -85,5 +86,18 @@ impl From<Vector> for StateExtend {
 impl Into<Vector> for StateExtend {
     fn into(self) -> Vector {
         Vector::from(<StateExtend as Into<Vec<f64>>>::into(self))
+    }
+}
+
+impl Into<HashMap<String, f64>> for StateExtend {
+    fn into(self) -> HashMap<String, f64> {
+        let mut map = HashMap::new();
+        map.insert("nx".to_string(), self.nx);
+        map.insert("ny".to_string(), self.ny);
+        map.insert("nz".to_string(), self.nz);
+        map.insert("mach".to_string(), self.mach);
+        map.insert("qbar".to_string(), self.qbar);
+        map.insert("ps".to_string(), self.ps);
+        map
     }
 }

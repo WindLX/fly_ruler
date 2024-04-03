@@ -1,8 +1,7 @@
+use fly_ruler_core::core::PlaneInitCfg;
 use fly_ruler_plugin::{PluginInfo, PluginState};
 use fly_ruler_utils::plane_model::{Control, CoreOutput};
 use serde::{Deserialize, Serialize};
-
-use crate::generated::plane_init_cfg::PlaneInitCfg;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlaneMessageGroup {
@@ -41,6 +40,7 @@ pub struct PushPlaneResponse {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SendControlRequest {
+    pub plane_id: String,
     pub control: Option<Control>,
 }
 

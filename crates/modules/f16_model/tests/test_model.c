@@ -26,13 +26,13 @@ int frsys_step()
         0.0944687551889544};
 
     // Leading edge flap setting in degrees
-    double d_lef = 6.28161378774449;
+    // double d_lef = 6.28161378774449;
 
     C c = {0};
 
-    frmodel_step(&state, &control, d_lef, &c);
+    int r = frmodel_step(&state, &control, 0.0, &c);
 
-    return 0;
+    return r;
 }
 
 int main()

@@ -18,12 +18,11 @@ message PushPlaneRequest {
 }
 
 message SendControlRequest {
-  control.Control control = 1;
+  id.Id plane_id = 1;
+  control.Control control = 2;
 }
 
-message PushPlaneResponse {
-  id.Id plane_id = 1;
-}
+message PushPlaneResponse { id.Id plane_id = 1; }
 
 service FlyRulerService {
   rpc GetModelInfos(google.protobuf.Empty) returns (GetModelInfosResponse);

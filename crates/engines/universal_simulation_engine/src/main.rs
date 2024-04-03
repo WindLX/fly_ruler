@@ -21,6 +21,7 @@ fn main() {
 
     let server_addr = lua.server_addr();
     let tick_timeout = lua.tick_timeout();
+    let read_rate = lua.read_rate();
     let is_block = lua.is_block();
     let model_root_path = lua.model_root_path();
     let core_init_cfg = lua.core_init_cfg();
@@ -66,7 +67,7 @@ fn main() {
                 gct.cancel();
                 error!("{}", e);
             },
-            _ = server_handler(&server_addr, tick_timeout, plane_init_cfg, system.clone(), run_signal, global_cancellation_token) =>{
+            _ = server_handler(&server_addr, tick_timeout, read_rate, plane_init_cfg, system.clone(), run_signal, global_cancellation_token) =>{
                 gct.cancel();
                 error!("Server task finished");
             }

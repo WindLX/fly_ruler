@@ -3,11 +3,12 @@ server_addr = "127.0.0.1:2350"
 model_root_path = "./models"
 
 tick_timeout = 10000 -- ms
-is_block = false
+read_rate = 1000
+is_block = true
 
 core_init_cfg = {
     time_scale = 1.0, -- optional
-    sample_time = 10 -- ms optional
+    sample_time = 100 -- ms optional
 }
 
 model_install_args = { { "./models/f16_model/data" } }

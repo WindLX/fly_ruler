@@ -11,7 +11,7 @@ use system::SystemWrapper;
 lazy_static! {
     static ref RT: tokio::runtime::Runtime = {
         std::thread::spawn(|| RT.block_on(futures::future::pending::<()>()));
-        tokio::runtime::Builder::new_current_thread()
+        tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .unwrap()

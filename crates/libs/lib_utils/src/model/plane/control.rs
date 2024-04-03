@@ -1,6 +1,9 @@
 use crate::Vector;
 use serde::{Deserialize, Serialize};
-use std::ops::{Index, IndexMut};
+use std::{
+    collections::HashMap,
+    ops::{Index, IndexMut},
+};
 
 /// What the `control` represent
 /// thrust (lbs) ele (deg) ail (deg) rud (deg)
@@ -114,5 +117,16 @@ impl From<Vector> for Control {
 impl Into<Vector> for Control {
     fn into(self) -> Vector {
         Vector::from(<Control as Into<Vec<f64>>>::into(self))
+    }
+}
+
+impl Into<HashMap<String, f64>> for Control {
+    fn into(self) -> HashMap<String, f64> {
+        let mut map = HashMap::new();
+        map.insert("thrust".to_string(), self.thrust);
+        map.insert("elevator".to_string(), self.elevator);
+        map.insert("aileron".to_string(), self.aileron);
+        map.insert("rudder".to_string(), self.rudder);
+        map
     }
 }

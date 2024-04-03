@@ -16,6 +16,8 @@ pub struct PushPlaneRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendControlRequest {
     #[prost(message, optional, tag = "1")]
+    pub plane_id: ::core::option::Option<super::id::Id>,
+    #[prost(message, optional, tag = "2")]
     pub control: ::core::option::Option<super::control::Control>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

@@ -1,15 +1,22 @@
+mod frame;
 mod generated;
 mod model;
 mod proto;
 
 use fly_ruler_utils::error::FrResult;
+pub use frame::*;
 pub use model::*;
-pub use proto::ProtoCodec;
 
-pub trait Encoder<T> {
-    fn encode(&mut self, input: T) -> FrResult<Vec<u8>>;
+pub trait Encoder
+where
+    Self: Sized,
+{
+    fn encode(self) -> FrResult<Vec<u8>>;
 }
 
-pub trait Decoder<T> {
-    fn decode(&mut self, input: &[u8]) -> FrResult<T>;
+pub trait Decoder
+where
+    Self: Sized,
+{
+    fn decode(input: &[u8]) -> FrResult<Self>;
 }

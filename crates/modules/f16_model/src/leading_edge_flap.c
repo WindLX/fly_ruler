@@ -71,7 +71,7 @@ void frplugin_register_actuator_past(ActuatorPast actuator_past)
   frplugin_actuator_past = actuator_past;
 }
 
-inline double get_lef(const State *state)
+double get_lef(const State *state)
 {
   Atmos atmos = frplugin_atmos(state->altitude, state->velocity);
   double lef = 1.38 * state->alpha * r2d() - 9.05 * atmos.qbar / atmos.ps + 1.45;

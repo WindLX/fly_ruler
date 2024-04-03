@@ -6,17 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-env_logger = "0.10.1"
+env_logger = "0.11.3"
 log = "0.4.20"
-tokio = { version = "1.35.1", features = ["sync", "net", "rt", "io-util"] }
+tokio = { version = "1.35.1", features = ["sync", "net", "rt"] }
 serde = { version = "1.0.193", features = ["derive"] }
-toml = "0.8.8"
-serde_json = "1.0.114"
-lazy_static = "1.4.0"
 fly_ruler_utils = { path = "../../crates/libs/lib_utils" }
 fly_ruler_plugin = { path = "../../crates/libs/lib_plugin" }
 fly_ruler_core = { path = "../../crates/libs/lib_core" }
 fly_ruler_codec = { path = "../../crates/libs/lib_codec" }
+tokio-util = { version = "0.7.10", features = ["codec"] }
+futures-util = { version = "0.3.30", features = ["sink"] }
 
 [dependencies.uuid]
 version = "1.7.0"
