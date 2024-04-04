@@ -1,6 +1,6 @@
 use fly_ruler_utils::{error::FatalCoreError, Matrix, Vector};
-use log::trace;
 use serde::{Deserialize, Serialize};
+use tracing::{event, span, Level};
 
 /// 单纯形搜索法设置
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -70,6 +70,9 @@ pub fn nelder_mead(
     x_0: Vector,
     options: Option<NelderMeadOptions>,
 ) -> Result<NelderMeadResult, FatalCoreError> {
+    let s = span!(Level::TRACE, "nelder mead");
+    let _ = s.enter();
+
     let options = options.unwrap_or_default();
     // 设定反射 rho、扩展 gamma、收缩 psi、回退 sigma 系数
     let rho = 1.0;
@@ -104,12 +107,13 @@ pub fn nelder_mead(
 
     let mut sim = fval_sim.zip_sort(&sim);
 
-    trace!(
-        "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
+    event!(
+        Level::TRACE,
+        "iter: {}, func-count: {}, f(x): {:.4}, procedure: {}",
         0,
         fun_evals,
         fval_sim.min(),
-        "Init"
+        "init"
     );
 
     while iter < options.max_iter && fun_evals < options.max_fun_evals {
@@ -130,12 +134,13 @@ pub fn nelder_mead(
         let x_r = x_bar.clone() * (1.0 + rho) - sim.last().unwrap() * rho;
         let fval_x_r = func(&x_r)?;
         fun_evals += 1;
-        trace!(
-            "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
+        event!(
+            Level::TRACE,
+            "iter: {}, func-count: {}, f(x): {:.4}, procedure: {}",
             iter,
             fun_evals,
             fval_sim.min(),
-            "Reflect"
+            "reflect"
         );
 
         // 控制是否回退
@@ -156,12 +161,13 @@ pub fn nelder_mead(
                 sim[n] = x_r;
                 fval_sim[n] = fval_x_r;
             }
-            trace!(
-                "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
+            event!(
+                Level::TRACE,
+                "iter: {}, func-count: {}, f(x): {:.4}, procedure: {}",
                 iter,
                 fun_evals,
                 fval_sim.min(),
-                "Expand"
+                "expand"
             );
         } else {
             // 反射点不是最优点
@@ -186,12 +192,13 @@ pub fn nelder_mead(
                     } else {
                         doshrink = true;
                     }
-                    trace!(
-                        "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
+                    event!(
+                        Level::TRACE,
+                        "iter: {}, func-count: {}, f(x): {:.4}, procedure: {}",
                         iter,
                         fun_evals,
                         fval_sim.min(),
-                        "Contract Outside"
+                        "contract outside"
                     );
                 } else {
                     // 反射点差于最差点
@@ -206,12 +213,13 @@ pub fn nelder_mead(
                     } else {
                         doshrink = true;
                     }
-                    trace!(
-                        "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
+                    event!(
+                        Level::TRACE,
+                        "iter: {}, func-count: {}, f(x): {:.4}, procedure: {}",
                         iter,
                         fun_evals,
                         fval_sim.min(),
-                        "Contract Inside"
+                        "contract inside"
                     );
                 }
             }
@@ -222,12 +230,13 @@ pub fn nelder_mead(
                     fval_sim[j] = func(&sim[j])?
                 }
                 fun_evals += n;
-                trace!(
-                    "Iter: {}, Func-count: {}, f(x): {:.4}, Procedure: {}",
+                event!(
+                    Level::TRACE,
+                    "iter: {}, func-count: {}, f(x): {:.4}, procedure: {}",
                     iter,
                     fun_evals,
                     fval_sim.min(),
-                    "Backward"
+                    "backward"
                 );
             }
         }

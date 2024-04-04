@@ -1,10 +1,7 @@
-use fly_ruler_utils::{
-    logger,
-    parts::{Actuator, Atmos, Integrator},
-};
+use fly_ruler_utils::parts::{Actuator, Atmos, Integrator};
 use libc::{c_char, c_int};
-use log::Level;
 use std::ffi::CStr;
+use tracing::{event, Level};
 
 pub type FrPluginHook = unsafe extern "C" fn(argc: c_int, argv: *const *const c_char) -> c_int;
 
@@ -21,11 +18,11 @@ pub enum LogLevel {
 impl From<LogLevel> for Level {
     fn from(level: LogLevel) -> Self {
         match level {
-            LogLevel::TRACE => Level::Trace,
-            LogLevel::DEBUG => Level::Debug,
-            LogLevel::INFO => Level::Info,
-            LogLevel::WARN => Level::Warn,
-            LogLevel::ERROR => Level::Error,
+            LogLevel::TRACE => Level::TRACE,
+            LogLevel::DEBUG => Level::DEBUG,
+            LogLevel::INFO => Level::INFO,
+            LogLevel::WARN => Level::WARN,
+            LogLevel::ERROR => Level::ERROR,
         }
     }
 }
@@ -35,7 +32,13 @@ pub(in crate::plugin) type FrPluginLogRegister = unsafe extern "C" fn(lg: Logger
 pub(in crate::plugin) unsafe extern "C" fn logger_callback(msg: *const c_char, level: LogLevel) {
     let msg = CStr::from_ptr(msg);
     let msg = String::from_utf8_lossy(msg.to_bytes()).to_string();
-    logger::log_output(Level::from(level), &msg)
+    match level {
+        LogLevel::TRACE => event!(Level::TRACE, msg),
+        LogLevel::DEBUG => event!(Level::DEBUG, msg),
+        LogLevel::INFO => event!(Level::INFO, msg),
+        LogLevel::WARN => event!(Level::WARN, msg),
+        LogLevel::ERROR => event!(Level::ERROR, msg),
+    }
 }
 
 pub(in crate::plugin) type AtmosFunc = unsafe extern "C" fn(altitude: f64, velocity: f64) -> Atmos;

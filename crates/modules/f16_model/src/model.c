@@ -431,7 +431,7 @@ static int frmodel_step_helper(
 
 #pragma endregion
 
-   trace("f16 coeff:\nCl=%f, Cm=%f, Cn=%f,\nCx=%f, Cy=%f, Cz=%f", Cl_tot, Cm_tot, Cn_tot, Cx_tot, Cy_tot, Cz_tot);
+   trace("f16 coeff:Cl=%f, Cm=%f, Cn=%f,Cx=%f, Cy=%f, Cz=%f", Cl_tot, Cm_tot, Cn_tot, Cx_tot, Cy_tot, Cz_tot);
 
    c->c_l = Cl_tot;
    c->c_m = Cm_tot;
@@ -477,7 +477,7 @@ int frmodel_step(
     const State *state, const Control *control, double t,
     C *c)
 {
-   trace("[t: %f.2] f16 step start", t);
+   trace("[t: %f] f16 step start", t);
 
    int r = 0;
    double lef = 0.0;
@@ -486,12 +486,12 @@ int frmodel_step(
    r = lef_update(lef_block_ptr, state, t, &lef);
    if (r < 0)
    {
-      error_("[t: %f.2] f16 step failed to update lef", t);
+      error_("[t: %f] f16 step failed to update lef", t);
       return r;
    }
 
    r = frmodel_step_helper(state, control, lef, c);
 
-   trace("[t: %f.2] f16 step finished", t);
+   trace("[t: %f] f16 step finished", t);
    return r;
 }

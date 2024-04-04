@@ -10,7 +10,7 @@ namespace FlyRuler.Manager
 {
     public class ControllerManager : SingletonMono<ControllerManager>
     {
-        public float updateTimeout = 10f;
+        public float updateTimeout = 4f;
 
         public Action<Control.Control> onRawControlUpdate;
         public Action<Id.Id> onSetSelf;
@@ -26,26 +26,17 @@ namespace FlyRuler.Manager
 
         private Control.Control control = new();
 
-        private float lastUpdateTime = 0.0f;
-
         private bool firstConfirm = true;
         private bool firstCancel = true;
 
-        void Update()
+        void FixedUpdate()
         {
-            lastUpdateTime += Time.deltaTime;
-            if (lastUpdateTime > updateTimeout / 1000)
-            {
-                lastUpdateTime = 0.0f;
-                onRawControlUpdate?.Invoke(control.Clone());
-            }
+            onRawControlUpdate?.Invoke(control.Clone());
         }
 
         public void Thrust(InputAction.CallbackContext context)
         {
             control.Thrust = context.ReadValue<float>();
-            lastUpdateTime = 0.0f;
-            onRawControlUpdate?.Invoke(control.Clone());
         }
 
         public void Elevator(InputAction.CallbackContext context)
@@ -58,8 +49,6 @@ namespace FlyRuler.Manager
             }
             var elevator = fixInput;
             control.Elevator = elevator;
-            lastUpdateTime = 0.0f;
-            onRawControlUpdate?.Invoke(control.Clone());
         }
 
         public void Rudder(InputAction.CallbackContext context)
@@ -72,8 +61,6 @@ namespace FlyRuler.Manager
             }
             var rudder = fixInput;
             control.Rudder = -rudder;
-            lastUpdateTime = 0.0f;
-            onRawControlUpdate?.Invoke(control.Clone());
         }
 
         public void Ailerons(InputAction.CallbackContext context)
@@ -86,20 +73,18 @@ namespace FlyRuler.Manager
             }
             var ailerons = fixInput;
             control.Aileron = ailerons;
-            lastUpdateTime = 0.0f;
-            onRawControlUpdate?.Invoke(control.Clone());
         }
 
         public void Confirm(InputAction.CallbackContext context)
         {
-            if (firstConfirm)
+            if (firstConfirm && PlaneManager.Instance.SelfId == null)
             {
                 UniTask.RunOnThreadPool(async () =>
                 {
                     // TODO a model manger and panel
-                    await RPCClient.Instance.Connect();
-                    var modelInfos = await RPCClient.Instance.GetModelInfos();
-                    var id = await RPCClient.Instance.PushPlane(modelInfos[0].Id, null);
+                    await RPCClientAsync.Instance.Connect();
+                    var modelInfos = await RPCClientAsync.Instance.GetModelInfos();
+                    var id = await RPCClientAsync.Instance.PushPlane(modelInfos[0].Id, null);
                     onSetSelf?.Invoke(id);
                 });
                 firstConfirm = false;
@@ -115,7 +100,7 @@ namespace FlyRuler.Manager
         {
             if (firstCancel)
             {
-                RPCClient.Instance.Disconnect();
+                RPCClientAsync.Instance.Disconnect();
                 firstCancel = false;
                 UniTask.RunOnThreadPool(async () =>
                 {

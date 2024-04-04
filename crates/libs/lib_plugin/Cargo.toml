@@ -9,6 +9,6 @@ edition = "2021"
 fly_ruler_utils = { path = "../lib_utils" }
 libc = "0.2.151"
 libloading = "0.8.1"
-log = "0.4.20"
 serde = { version = "1.0.193", features = ["derive"] }
 toml = "0.8.8"
+tracing = "0.1.40"

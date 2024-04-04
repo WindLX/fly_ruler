@@ -37,6 +37,7 @@ message ServiceCall {
     PushPlaneRequest push_plane = 4;
     SendControlRequest send_control = 5;
     google.protobuf.Empty tick = 6;
+    google.protobuf.Empty disconnect = 7;
   }
 }
 

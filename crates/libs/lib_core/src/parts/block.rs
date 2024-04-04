@@ -3,13 +3,14 @@ use crate::parts::{
     trim::TrimOutput,
 };
 use fly_ruler_plugin::AerodynamicModel;
+use fly_ruler_plugin::AsPlugin;
 use fly_ruler_utils::{
     error::FatalCoreError,
     parts::{Actuator, VectorIntegrator},
     plane_model::{Control, ControlLimit, CoreOutput, MechanicalModelInput, State, StateExtend},
     Vector,
 };
-use log::{debug, trace};
+use tracing::{event, span, Level};
 
 pub(crate) struct ControllerBlock {
     actuators: Vec<Actuator>,
@@ -23,13 +24,9 @@ impl ControllerBlock {
         control_limit: ControlLimit,
     ) -> Self {
         let control_init: Control = control_init.into();
-        trace!("ControllerBlock:\ncontrol init: \n{}", control_init);
-        trace!(
-            "deflections: ele: {:.2}, ail: {:.2}, rud: {:.2}",
-            deflection[0],
-            deflection[1],
-            deflection[2]
-        );
+        let s = span!(Level::TRACE, "create", control_init = %control_init, deflections = ?deflection, ctrl_limit = %control_limit);
+        let _ = s.enter();
+
         let thrust_ac = Actuator::new(
             control_init.thrust,
             control_limit.thrust_cmd_limit_top,
@@ -66,11 +63,10 @@ impl ControllerBlock {
 
     pub fn update(&mut self, control_input: impl Into<Control>, t: f64) -> Control {
         let mut control_input: Control = control_input.into();
-        trace!(
-            "[t:{:.2}] ControllerBlock: actual control input: \n{}",
-            t,
-            control_input
-        );
+
+        let s = span!(Level::TRACE, "update", t = t, control_input = %control_input);
+        let _ = s.enter();
+
         control_input.thrust = self.actuators[0].update(control_input[0], t);
         for i in 0..4 {
             if i < 3 {
@@ -85,9 +81,9 @@ impl ControllerBlock {
             control_input[i] = self.actuators[i].update(control_input[i], t)
             // }
         }
-        trace!(
-            "[t:{:.2}] ControllerBlock: correctional control input: \n{}",
-            t,
+        event!(
+            Level::TRACE,
+            "correctional control input: \n{}",
             control_input
         );
         control_input
@@ -106,7 +102,6 @@ impl ControllerBlock {
         for a in &mut self.actuators {
             a.reset()
         }
-        trace!("ControllerBlock reset finished")
     }
 }
 
@@ -129,6 +124,9 @@ impl PlaneBlock {
         deflection: &[f64; 3],
         ctrl_limit: ControlLimit,
     ) -> Result<Self, FatalCoreError> {
+        let s =
+            span!(Level::TRACE, "new", model_name = model.info().name, init_state = %init.state);
+        let _ = s.enter();
         let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
         let integrator = VectorIntegrator::new(Into::<Vector>::into(init.state));
         let plane = MechanicalModel::new(model)?;
@@ -136,7 +134,6 @@ impl PlaneBlock {
             state: init.state,
             control: init.control,
         })?;
-        trace!("PlaneBlock init finished");
         Ok(PlaneBlock {
             control,
             integrator,
@@ -155,8 +152,12 @@ impl PlaneBlock {
         control: impl Into<Control>,
         t: f64,
     ) -> Result<CoreOutput, FatalCoreError> {
+        let s = span!(Level::TRACE, "update", t = t);
+        let _ = s.enter();
+
         if self.start_time.is_none() {
             self.start_time = Some(t);
+            event!(Level::DEBUG, "start time {t}");
         }
         let t = (t - self.start_time.unwrap()).max(1e-3);
         let state = &mut self.integrator.past();
@@ -176,7 +177,7 @@ impl PlaneBlock {
             .plane
             .step(&MechanicalModelInput::new(state.data.clone(), control), t)?;
 
-        trace!("[t: {t:.2}] PlantBlock: model_output:\n{}", model_output);
+        event!(Level::TRACE, "model_output:\n{}", model_output);
 
         let state = self
             .integrator
@@ -204,7 +205,7 @@ impl PlaneBlock {
             Control::from(control),
             self.extend.unwrap(),
         );
-        debug!("[t: {t:.2}] PlantBlock: block_output:\n{}", block_output);
+        event!(Level::TRACE, "block_output:\n{}", block_output);
 
         Ok(block_output)
     }
@@ -212,7 +213,6 @@ impl PlaneBlock {
     pub fn reset(&mut self) {
         self.control.reset();
         self.integrator.reset();
-        trace!("PlantBlock reset finished")
     }
 
     pub fn state(&self) -> Result<CoreOutput, FatalCoreError> {
@@ -237,10 +237,9 @@ mod core_parts_tests {
     };
     use csv::Writer;
     use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
-    use fly_ruler_utils::logger::test_logger_init;
+    use fly_ruler_utils::logger::{debug, test_logger_init, trace};
     use fly_ruler_utils::parts::step;
     use fly_ruler_utils::plane_model::ControlLimit;
-    use log::{debug, trace};
     use std::fs::File;
     use std::path::Path;
     use std::sync::Arc;
@@ -352,50 +351,6 @@ mod core_parts_tests {
 
         test_core_fin(model)
     }
-
-    /*
-    #[test]
-    fn test_flap() {
-        let (model, result) = test_core_init();
-
-        let (alpha, d_lef, alt, vt) = (
-            result.state.alpha,
-            result.d_lef,
-            result.state.altitude,
-            result.state.velocity,
-        );
-        let mut flap = LeadingEdgeFlapBlock::new(alpha, d_lef);
-
-        let path = Path::new("output_flap.csv");
-        let file = File::create(&path).unwrap();
-        let mut writer = Writer::from_writer(file);
-        let start_time = SystemTime::now();
-        writer.write_record(&["time(s)", "d_lef"]).unwrap();
-
-        loop {
-            let current_time = SystemTime::now();
-            let delta_time = current_time.duration_since(start_time).unwrap();
-
-            let result = flap.update(
-                alpha,
-                step(alt, 20000.0, 1.0, delta_time.as_secs_f64()),
-                vt,
-                delta_time.as_secs_f64(),
-            );
-            trace!("time: {:?} \n{:?}\n", delta_time, result);
-
-            let record = vec![delta_time.as_secs_f32().to_string(), result.to_string()];
-            writer.write_record(&record).unwrap();
-            writer.flush().unwrap();
-            if delta_time > Duration::from_secs_f32(10.0) {
-                break;
-            }
-        }
-
-        writer.flush().unwrap();
-
-        test_core_fin(model)
-    }*/
 
     #[test]
     fn test_plane() {

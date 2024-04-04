@@ -1,7 +1,7 @@
 use super::{plugin::AsPluginManager, PluginManager};
 use fly_ruler_plugin::{AerodynamicModel, AsPlugin, PluginState};
-use log::warn;
 use std::path::Path;
+use tracing::{event, Level};
 
 pub struct ModelManager {
     inner: PluginManager<AerodynamicModel>,
@@ -20,12 +20,12 @@ impl ModelManager {
                 if model.state() == PluginState::Enable {
                     Some(model)
                 } else {
-                    warn!("model {} is not enabled", model.info().name);
+                    event!(Level::WARN, "model {} is not enabled", model.info().name);
                     None
                 }
             }
             None => {
-                warn!("model {} not found", model_id);
+                event!(Level::WARN, "model {} not found", model_id);
                 None
             }
         }

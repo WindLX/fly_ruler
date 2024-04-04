@@ -40,7 +40,6 @@ namespace FlyRuler.Manager
                 {
                     GraphicsSettings.defaultRenderPipeline = highfidelityRenderPipelineAsset;
                 }
-                Debug.Log(GraphicsSettings.currentRenderPipeline.name);
             }
         }
     }

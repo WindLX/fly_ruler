@@ -6,7 +6,6 @@ use fly_ruler_codec::{
 };
 use futures::{SinkExt, StreamExt};
 use lazy_static::lazy_static;
-use log::{error, trace};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use python_runtime::{
     ControlWrapper, CoreOutputWrapper, FlightConditionWrapper, NelderMeadOptionsWrapper,
@@ -17,6 +16,10 @@ use python_runtime::{
 use std::time::Duration;
 use tokio::{net::TcpStream, sync, task::JoinHandle};
 use tokio_util::codec::{FramedRead, FramedWrite};
+use tracing::{event, Level};
+use tracing_appender::{non_blocking, rolling};
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter, Registry};
 use utils::CancellationToken;
 
 lazy_static! {
@@ -28,6 +31,34 @@ lazy_static! {
             .unwrap()
     };
     static ref GUARD: tokio::runtime::EnterGuard<'static> = RT.enter();
+}
+
+#[pyfunction]
+pub fn register_logger(filter: String, dir: Option<String>, file: Option<String>) {
+    let env_filter = EnvFilter::new(filter);
+    let formatting_layer = fmt::layer().pretty().with_writer(std::io::stderr);
+
+    match (dir, file) {
+        (Some(dir), Some(file)) => {
+            let file_appender = rolling::daily(dir, file);
+            let (non_blocking_appender, _guard) = non_blocking(file_appender);
+            let file_layer = fmt::layer()
+                .with_ansi(false)
+                .with_writer(non_blocking_appender);
+
+            Registry::default()
+                .with(env_filter)
+                .with(formatting_layer)
+                .with(file_layer)
+                .init();
+        }
+        _ => {
+            Registry::default()
+                .with(env_filter)
+                .with(formatting_layer)
+                .init();
+        }
+    }
 }
 
 #[pyclass]
@@ -48,6 +79,12 @@ pub struct PyClient {
 impl PyClient {
     #[staticmethod]
     pub async fn new(host: String, port: u16) -> PyResult<Self> {
+        event!(
+            Level::INFO,
+            "Connecting to server {host}:{port}",
+            host = host,
+            port = port
+        );
         let stream = TcpStream::connect(format!("{host}:{port}")).await?;
 
         let (reader, writer) = stream.into_split();
@@ -78,6 +115,7 @@ impl PyClient {
                             }
 
                             if let Ok(msg) = tick_rx.try_recv() {
+                                event!(Level::TRACE, "tick");
                                 writer.send(msg).await?;
                             }
                         }
@@ -88,12 +126,12 @@ impl PyClient {
                     Ok(r) => match r {
                         Ok(()) => {}
                         Err(e) => {
-                            error!("{}", e);
+                            event!(Level::ERROR, "{}", e);
                             w_ct2.cancel();
                         }
                     },
                     Err(e) => {
-                        error!("{}", e);
+                        event!(Level::ERROR, "{}", e);
                         w_ct2.cancel();
                     }
                 }
@@ -126,7 +164,9 @@ impl PyClient {
                                             }
                                         }
                                     }
-                                    Err(e) => {}
+                                    Err(e) => {
+                                        return Err(anyhow::anyhow!(e));
+                                    }
                                 },
                                 None => {
                                     tokio::task::yield_now().await;
@@ -140,12 +180,12 @@ impl PyClient {
                     Ok(r) => match r {
                         Ok(()) => {}
                         Err(e) => {
-                            error!("{}", e);
+                            event!(Level::ERROR, "{}", e);
                             r_ct2.cancel();
                         }
                     },
                     Err(e) => {
-                        error!("{}", e);
+                        event!(Level::ERROR, "{}", e);
                         r_ct2.cancel();
                     }
                 }
@@ -170,16 +210,22 @@ impl PyClient {
 
     pub async fn stop(&mut self) {
         self.cancellation_token.cancel();
+        let call = ServiceCall {
+            name: "Disconnect".to_string(),
+            args: Some(Args::Disconnect),
+        };
+        let _ = self.request_sender.send(call).await;
         let mut count = 0;
         while let Some(task) = self.tasks.pop() {
-            trace!("task {} stop start", count);
+            event!(Level::DEBUG, "task {} stop start", count);
             let _ = task.abort();
-            trace!("task {} stop successfully", count);
+            event!(Level::DEBUG, "task {} stop successfully", count);
             count += 1;
         }
     }
 
     pub async fn get_model_infos(&mut self) -> PyResult<Vec<PluginInfoTupleWrapper>> {
+        event!(Level::DEBUG, "get_model_infos start");
         let call = ServiceCall {
             name: "GetModelInfos".to_string(),
             args: Some(Args::GetModelInfos),
@@ -189,6 +235,11 @@ impl PyClient {
             .await
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         let r = self.get_model_infos_receiver.recv().await;
+        event!(
+            Level::DEBUG,
+            "get_model_infos end {response:?}",
+            response = r
+        );
         match r {
             Some(r) => Ok(r
                 .model_infos
@@ -203,6 +254,7 @@ impl PyClient {
         &mut self,
         arg: (UuidWrapper, Option<PlaneInitCfgWrapper>),
     ) -> PyResult<UuidWrapper> {
+        event!(Level::DEBUG, "push_plane start");
         let call = ServiceCall {
             name: "PushPlane".to_string(),
             args: Some(Args::PushPlane(PushPlaneRequest {
@@ -215,6 +267,7 @@ impl PyClient {
             .await
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         let r = self.push_plane_receiver.recv().await;
+        event!(Level::DEBUG, "push_plane end {response:?}", response = r);
         match r {
             Some(r) => Ok(UuidWrapper::parse_str(&r.plane_id)
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?),
@@ -226,6 +279,7 @@ impl PyClient {
         &mut self,
         arg: (UuidWrapper, Option<ControlWrapper>),
     ) -> PyResult<()> {
+        event!(Level::DEBUG, "send_control start {arg:?}", arg = arg);
         let call = ServiceCall {
             name: "SendControl".to_string(),
             args: Some(Args::SendControl(SendControlRequest {
@@ -270,12 +324,12 @@ impl PyClient {
                     Ok(r) => match r {
                         Ok(()) => {}
                         Err(e) => {
-                            error!("{}", e);
+                            event!(Level::ERROR, "{}", e);
                             t_ct2.cancel();
                         }
                     },
                     Err(e) => {
-                        error!("{}", e);
+                        event!(Level::ERROR, "{}", e);
                         t_ct2.cancel();
                     }
                 }
@@ -287,6 +341,7 @@ impl PyClient {
 
     pub async fn output(&mut self) -> PyResult<PlaneMessageWrapper> {
         let r = self.output_receiver.recv().await;
+        event!(Level::DEBUG, "output: {:?}", r);
         match r {
             Some(r) => Ok(r.into()),
             None => Err(PyRuntimeError::new_err("Output channel dropped")),
@@ -295,6 +350,7 @@ impl PyClient {
 
     pub async fn lost_plane(&mut self) -> PyResult<String> {
         let r = self.lost_plane_receiver.recv().await;
+        event!(Level::INFO, "lost_plane: {:?}", r);
         match r {
             Some(r) => Ok(r),
             None => Err(PyRuntimeError::new_err("Lost Plane channel dropped")),
@@ -303,6 +359,7 @@ impl PyClient {
 
     pub async fn new_plane(&mut self) -> PyResult<String> {
         let r = self.new_plane_receiver.recv().await;
+        event!(Level::INFO, "new_plane: {:?}", r);
         match r {
             Some(r) => Ok(r),
             None => Err(PyRuntimeError::new_err("New Plane channel dropped")),
@@ -311,6 +368,7 @@ impl PyClient {
 
     pub async fn error(&mut self) -> PyResult<String> {
         let r = self.error_receiver.recv().await;
+        event!(Level::ERROR, "error: {:?}", r);
         match r {
             Some(r) => Ok(PyRuntimeError::new_err(r).to_string()),
             None => Err(PyRuntimeError::new_err("Error channel dropped")),
@@ -322,7 +380,7 @@ impl PyClient {
 #[pyo3(name = "flyruler_py_client")]
 fn fr_py_client(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let _guard = &*GUARD;
-    env_logger::builder().init();
+    m.add_function(wrap_pyfunction!(register_logger, m)?)?;
     m.add_class::<PyClient>()?;
     m.add_class::<PlaneMessageWrapper>()?;
     m.add_class::<ControlWrapper>()?;

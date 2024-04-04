@@ -2,13 +2,13 @@ use crate::manager::{AsPluginManager, ModelManager};
 use fly_ruler_core::core::{Core, CoreInitCfg, PlaneInitCfg};
 use fly_ruler_plugin::{PluginInfo, PluginState};
 use fly_ruler_utils::{error::FrError, input_channel, InputSender, OutputReceiver};
-use log::{error, info, trace};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     time::Duration,
 };
 use thiserror::Error;
+use tracing::{event, instrument, Level};
 use uuid::Uuid;
 
 pub struct System {
@@ -18,6 +18,7 @@ pub struct System {
 }
 
 impl System {
+    #[instrument(level = Level::INFO)]
     pub fn new() -> Self {
         Self {
             model_root: PathBuf::from("models"),
@@ -26,10 +27,12 @@ impl System {
         }
     }
 
+    #[instrument(skip_all,level = Level::INFO)]
     pub fn set_dir<P: AsRef<Path>>(&mut self, model_root_path: P) {
         self.model_root = PathBuf::from(model_root_path.as_ref());
     }
 
+    #[instrument(skip_all, level = Level::INFO, err, ret)]
     pub fn get_models(&self) -> Result<HashMap<Uuid, (PluginInfo, PluginState)>, SysError> {
         if let Some(manager) = &self.model_manager {
             let infos = manager.infos();
@@ -45,6 +48,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self, args), level = Level::INFO, err)]
     pub fn enable_model(&mut self, model_id: Uuid, args: &[impl ToString]) -> Result<(), SysError> {
         if let Some(manager) = &mut self.model_manager {
             manager.enable(model_id, args)?;
@@ -54,6 +58,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err)]
     pub fn disable_model(&mut self, model_id: Uuid) -> Result<(), SysError> {
         if let Some(manager) = &mut self.model_manager {
             manager.disable(model_id)?;
@@ -63,6 +68,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err, ret)]
     pub fn get_model_state(&self, model_id: Uuid) -> Result<Option<PluginState>, SysError> {
         if let Some(manager) = &self.model_manager {
             let r = manager.state(model_id);
@@ -72,12 +78,14 @@ impl System {
         }
     }
 
+    #[instrument(skip_all, level = Level::INFO)]
     pub fn init(&mut self, init_cfg: CoreInitCfg) {
         self.model_manager = Some(ModelManager::new(&self.model_root));
         let core = Core::new(init_cfg);
         self.core = Some(core);
     }
 
+    #[instrument(skip(self, init_cfg), level = Level::INFO, err)]
     pub async fn push_plane(
         &mut self,
         model_id: Uuid,
@@ -98,6 +106,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), err)]
     pub async fn set_controller(
         &mut self,
         plane_id: Uuid,
@@ -113,6 +122,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err)]
     pub fn subscribe_plane(&self, plane_id: Uuid) -> Result<Option<OutputReceiver>, SysError> {
         match &self.core {
             Some(core) => Ok(core.subscribe_plane(plane_id)),
@@ -120,6 +130,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO)]
     pub async fn remove_plane(&mut self, plane_id: Uuid) {
         match &mut self.core {
             Some(core) => core.remove_plane(plane_id).await,
@@ -134,50 +145,55 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err)]
     pub async fn step(&mut self, is_block: bool) -> Result<Result<(), FrError>, SysError> {
         match &mut self.core {
             Some(core) => {
                 let r = core.step(is_block).await;
-                trace!("system step task fininshed");
                 Ok(r)
             }
             None => Err(SysError::CoreNotInit),
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err)]
     pub async fn pause(&self) -> Result<(), SysError> {
         match &self.core {
             Some(core) => {
                 core.pause().await;
-                info!("core has been paused");
+                event!(Level::INFO, "core has been paused");
                 Ok(())
             }
             None => Err(SysError::CoreNotInit),
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err)]
     pub async fn resume(&self) -> Result<(), SysError> {
         match &self.core {
             Some(core) => {
                 core.resume().await;
-                info!("core has been resumed");
+                event!(Level::INFO, "core has been resumed");
                 Ok(())
             }
             None => Err(SysError::CoreNotInit),
         }
     }
 
+    #[instrument(skip(self), level = Level::ERROR)]
     pub fn err_stop(&mut self) {
         let p = self.model_manager.as_mut().unwrap();
         let _ = p.disable_all();
     }
 
+    #[instrument(skip(self), level = Level::INFO)]
     pub fn stop(&mut self) {
         let p = self.model_manager.as_mut().unwrap();
         let _ = p.disable_all();
-        info!("system exited successfully");
+        event!(Level::INFO, "system exited successfully");
     }
 
+    #[instrument(skip(self), level = Level::INFO, err)]
     pub fn contains_plane(&self, plane_id: Uuid) -> Result<bool, SysError> {
         match &self.core {
             Some(core) => Ok(core.contains_plane(plane_id)),
@@ -185,6 +201,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err, ret)]
     pub fn planes(&self) -> Result<Vec<Uuid>, SysError> {
         match &self.core {
             Some(core) => Ok(core.planes()),
@@ -192,6 +209,7 @@ impl System {
         }
     }
 
+    #[instrument(skip(self), level = Level::INFO, err, ret)]
     pub async fn get_time(&self) -> Result<Duration, SysError> {
         match &self.core {
             Some(core) => Ok(core.get_time().await),

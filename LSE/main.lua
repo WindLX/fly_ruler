@@ -35,14 +35,17 @@ local controller = system:set_controller(id, 10)
 
 local time = 0
 local exit_flag = false
+local count = 0
 
 local system_thread = coroutine.create(function()
     local sys = system:clone()
     while not exit_flag do
         xpcall(function()
+            count =  count + 1
+            Linfo(string.format("Step times %d", count))
             local r = sys:step()
             if type(r) == "string" then
-                print(r)
+                Lwarn(r)
             end
         end, print)
         coroutine.yield()
@@ -54,7 +57,7 @@ local viewer_thread = coroutine.create(function()
         if viewer:has_changed() then
             local output = viewer:get_and_update()
             time = output.time
-            print(time)
+            Linfo(time)
             if time >= 10 then
                 exit_flag = true
             end

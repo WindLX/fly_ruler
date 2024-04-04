@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use crate::ControlWrapper;
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TrimTargetWrapper {
     #[pyo3(get, set)]
     pub altitude: f64,
@@ -43,7 +43,7 @@ impl TrimTargetWrapper {
 }
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TrimInitWrapper {
     #[pyo3(get, set)]
     pub control: ControlWrapper,
@@ -78,7 +78,7 @@ impl TrimInitWrapper {
 }
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NelderMeadOptionsWrapper {
     #[pyo3(get, set)]
     pub max_fun_evals: usize,
@@ -126,7 +126,7 @@ impl NelderMeadOptionsWrapper {
 }
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum FlightConditionWrapper {
     WingsLevel,
     Turning,
@@ -191,7 +191,7 @@ impl FlightConditionWrapper {
 }
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PlaneInitCfgWrapper {
     pub deflection: Option<[f64; 3]>,
     pub trim_target: TrimTargetWrapper,

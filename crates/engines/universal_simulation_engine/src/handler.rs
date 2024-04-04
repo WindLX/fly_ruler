@@ -10,17 +10,16 @@ use fly_ruler_codec::{
 use fly_ruler_core::core::PlaneInitCfg;
 use fly_ruler_utils::{InputSender, OutputReceiver};
 use futures_util::{SinkExt, StreamExt};
-use log::{debug, info, trace, warn};
 use std::{collections::HashMap, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 use tokio::{
     net::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpListener,
     },
-    sync::{broadcast, mpsc, Mutex},
-    time,
+    sync::{broadcast, mpsc, Mutex, Notify},
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
+use tracing::{event, instrument, Level};
 use uuid::Uuid;
 
 pub async fn system_step_handler(
@@ -37,9 +36,9 @@ pub async fn system_step_handler(
         if c >= 1 && run_signal.available() {
             let r = system.lock().await.step(is_block).await?;
             if let Err(e) = r {
-                warn!("System step: {}", e);
+                event!(Level::WARN, "System step: {}", e);
             }
-            debug!("System step one");
+            event!(Level::TRACE, "System step one");
         } else {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -47,6 +46,7 @@ pub async fn system_step_handler(
     }
 }
 
+#[instrument(skip(system, run_signal, cancellation_token, init_cfg),level = Level::INFO)]
 pub async fn server_handler(
     server_addr: &str,
     tick_timeout: u64,
@@ -58,7 +58,7 @@ pub async fn server_handler(
 ) {
     let listener = TcpListener::bind(server_addr).await.unwrap();
     let (broadcast_channel_sender, _) = broadcast::channel::<ServiceCallResponse>(1024);
-    info!("Server started on {}", server_addr);
+    event!(Level::INFO, "Server started on {}", server_addr);
 
     loop {
         let cancellation_token = cancellation_token.clone();
@@ -67,7 +67,7 @@ pub async fn server_handler(
         }
 
         let (client, client_addr) = listener.accept().await.unwrap();
-        info!("Accepted connection from {}", client_addr);
+        event!(Level::INFO, "Accepted connection from {}", client_addr);
 
         let (reader, writer) = client.into_split();
         let reader = FramedRead::new(reader, RequestFrame);
@@ -76,6 +76,7 @@ pub async fn server_handler(
         let grct = CancellationToken::new();
         let (private_channel_sender, private_channel_receiver) =
             mpsc::channel::<ServiceCallResponse>(1024);
+        let tick_notify = Arc::new(Notify::new());
 
         let _rpc_task = tokio::spawn({
             let controller1 = controllers.clone();
@@ -87,6 +88,7 @@ pub async fn server_handler(
             let broadcast_channel_sender1 = broadcast_channel_sender.clone();
             let broadcast_channel_sender2 = broadcast_channel_sender.clone();
             let run_signal1 = run_signal.clone();
+            let tick_notify1 = tick_notify.clone();
             async move {
                 let r = rpc_handler(
                     client_addr,
@@ -99,19 +101,26 @@ pub async fn server_handler(
                     private_channel_sender,
                     controller1,
                     run_signal1,
+                    tick_notify1,
                     gct1,
                     grct1,
                 )
                 .await;
                 if let Err(e) = r {
                     grct2.cancel();
-                    warn!("RPC Client: {} dropped, due to {}", client_addr, e);
+                    event!(
+                        Level::WARN,
+                        "RPC Client: {} dropped, due to {}",
+                        client_addr,
+                        e
+                    );
                     for (id, _sender) in controller2.lock().await.deref().iter() {
                         let _ = broadcast_channel_sender2.send(ServiceCallResponse {
                             name: "LostPlane".to_string(),
                             response: Some(Response::LostPlane(id.to_string())),
                         });
                     }
+                    controller2.lock().await.clear();
                 }
             }
         });
@@ -135,13 +144,56 @@ pub async fn server_handler(
                 .await;
                 if let Err(e) = r {
                     grct2.cancel();
-                    warn!("RPC Client: {} dropped, due to {}", client_addr, e);
+                    event!(
+                        Level::WARN,
+                        "RPC Client: {} dropped, due to {}",
+                        client_addr,
+                        e
+                    );
                     for (id, _sender) in controller1.lock().await.deref().iter() {
                         let _ = broadcast_channel_sender1.send(ServiceCallResponse {
                             name: "LostPlane".to_string(),
                             response: Some(Response::LostPlane(id.to_string())),
                         });
                     }
+                    controller1.lock().await.clear();
+                }
+            }
+        });
+
+        let _tick_task = tokio::spawn({
+            let controller1 = controllers.clone();
+            let broadcast_channel_sender1 = broadcast_channel_sender.clone();
+            let gct1 = cancellation_token.clone();
+            let grct1 = grct.clone();
+            let grct2 = grct.clone();
+            let tick_notify1 = tick_notify.clone();
+            let run_signal1 = run_signal.clone();
+            async move {
+                let r = tick_handler(
+                    client_addr,
+                    tick_timeout,
+                    tick_notify1,
+                    run_signal1,
+                    gct1,
+                    grct1,
+                )
+                .await;
+                if let Err(e) = r {
+                    grct2.cancel();
+                    event!(
+                        Level::WARN,
+                        "RPC Client: {} dropped, due to {}",
+                        client_addr,
+                        e
+                    );
+                    for (id, _sender) in controller1.lock().await.deref().iter() {
+                        let _ = broadcast_channel_sender1.send(ServiceCallResponse {
+                            name: "LostPlane".to_string(),
+                            response: Some(Response::LostPlane(id.to_string())),
+                        });
+                    }
+                    controller1.lock().await.clear();
                 }
             }
         });
@@ -151,6 +203,12 @@ pub async fn server_handler(
     }
 }
 
+#[instrument(skip(
+    broadcast_channel_sender,
+    viewer,
+    global_cancellation_token,
+    group_cancellation_token
+),level = Level::INFO)]
 async fn viewer_handler(
     id: Uuid,
     broadcast_channel_sender: broadcast::Sender<ServiceCallResponse>,
@@ -175,13 +233,19 @@ async fn viewer_handler(
             })),
         };
         sender.send(output)?;
-        trace!("Received output from viewer: {}", id);
+        event!(Level::TRACE, "Received output from viewer: {}", id);
 
         tokio::task::yield_now().await;
     }
     Ok(())
 }
 
+#[tracing::instrument(skip(
+    client_writer,
+    private_channel_receiver,
+    global_cancellation_token,
+    group_cancellation_token
+),level = Level::INFO)]
 async fn client_write_handler(
     ip: SocketAddr,
     mut broadcast_channel_receiver: broadcast::Receiver<ServiceCallResponse>,
@@ -198,13 +262,13 @@ async fn client_write_handler(
         // Try receiving from broadcast channel
         if let Ok(msg) = broadcast_channel_receiver.try_recv() {
             client_writer.send(msg).await?;
-            debug!("Broadcast client: {} send successfully", ip);
+            event!(Level::DEBUG, "Broadcast client: {} send successfully", ip);
         }
 
         // Try receiving from private channel
         if let Ok(msg) = private_channel_receiver.try_recv() {
             client_writer.send(msg).await?;
-            debug!("Private client: {} send successfully", ip);
+            event!(Level::DEBUG, "Private client: {} send successfully", ip);
         }
 
         tokio::task::yield_now().await;
@@ -212,6 +276,18 @@ async fn client_write_handler(
     Ok(())
 }
 
+#[instrument(skip(
+    system,
+    broadcast_channel_sender,
+    client_reader,
+    private_channel_sender,
+    controllers,
+    run_signal,
+    tick_notify,
+    group_cancellation_token,
+    global_cancellation_token,
+    init_cfg
+),level = Level::INFO)]
 async fn rpc_handler(
     ip: SocketAddr,
     tick_timeout: u64,
@@ -223,18 +299,13 @@ async fn rpc_handler(
     private_channel_sender: mpsc::Sender<ServiceCallResponse>,
     controllers: Arc<Mutex<HashMap<String, InputSender>>>,
     run_signal: Signal,
+    tick_notify: Arc<Notify>,
     global_cancellation_token: CancellationToken,
     group_cancellation_token: CancellationToken,
 ) -> Result<()> {
-    let mut last_tick = time::Instant::now();
     loop {
         if global_cancellation_token.is_cancelled() || group_cancellation_token.is_cancelled() {
             break;
-        }
-
-        let delta_time = time::Instant::now().duration_since(last_tick);
-        if delta_time > Duration::from_millis(tick_timeout) {
-            return Err(anyhow!("Client {} tick timeout", ip));
         }
 
         let mut count = 0;
@@ -244,9 +315,14 @@ async fn rpc_handler(
             match request {
                 Some(call) => {
                     let call = call?;
+                    event!(
+                        Level::INFO,
+                        "Client: {ip} request `{request}`",
+                        ip = ip,
+                        request = call.name.as_str()
+                    );
                     match call.name.as_str() {
                         "GetModelInfos" => {
-                            info!("Client: {} request `GetModelInfo`", ip);
                             let model_infos: Vec<_> = system
                                 .lock()
                                 .await
@@ -266,10 +342,8 @@ async fn rpc_handler(
                             };
 
                             private_channel_sender.send(response).await?;
-                            info!("Client: {} request `GetModelInfo` reply", ip)
                         }
                         "PushPlane" => {
-                            info!("Client: {} request `PushPlane`", ip);
                             run_signal.red();
 
                             let args = match call.args {
@@ -282,7 +356,6 @@ async fn rpc_handler(
                                         )),
                                     };
                                     private_channel_sender.send(err).await?;
-                                    warn!("Invalid RPC args from client: {}", ip);
                                     continue;
                                 }
                             };
@@ -317,7 +390,12 @@ async fn rpc_handler(
                                     .await;
                                     if let Err(e) = rr {
                                         grct2.cancel();
-                                        warn!("RPC Client: {} dropped, due to {}", ip, e);
+                                        event!(
+                                            Level::WARN,
+                                            "RPC Client: {} dropped, due to {}",
+                                            ip,
+                                            e
+                                        );
                                         let response = ServiceCallResponse {
                                             name: "LostPlane".to_string(),
                                             response: Some(Response::LostPlane(r.0.to_string())),
@@ -343,7 +421,6 @@ async fn rpc_handler(
                             broadcast_channel_sender.send(response)?;
 
                             run_signal.green();
-                            info!("Client: {} request `PushPlane` reply", ip)
                         }
                         "SendControl" => {
                             let control = match call.args {
@@ -356,7 +433,7 @@ async fn rpc_handler(
                                         )),
                                     };
                                     private_channel_sender.send(err).await?;
-                                    warn!("Invalid RPC args from client: {}", ip);
+                                    event!(Level::WARN, "Invalid RPC args from client: {}", ip);
                                     continue;
                                 }
                             };
@@ -367,11 +444,13 @@ async fn rpc_handler(
                                     .send(&control.control.unwrap_or_default())
                                     .await?;
                             }
-                            info!("Client: {} request `SendControl`", ip)
                         }
                         "Tick" => {
-                            last_tick = time::Instant::now();
-                            debug!("Client: {} request `Tick`", ip)
+                            tick_notify.notify_one();
+                        }
+                        "Disconnect" => {
+                            group_cancellation_token.cancel();
+                            return Err(anyhow!("Client {} request `Disconnect`", ip));
                         }
                         other => {
                             let err = ServiceCallResponse {
@@ -382,7 +461,7 @@ async fn rpc_handler(
                                 ))),
                             };
                             private_channel_sender.send(err).await?;
-                            warn!("Invalid RPC command from client: {}", ip);
+                            event!(Level::WARN, "Invalid RPC command from client: {}", ip);
                         }
                     }
                 }
@@ -390,7 +469,35 @@ async fn rpc_handler(
                     break;
                 }
             }
-            tokio::task::yield_now().await;
+        }
+        tokio::task::yield_now().await;
+    }
+    Ok(())
+}
+
+#[instrument(skip(
+    tick_notify,
+    run_signal,
+    group_cancellation_token,
+    global_cancellation_token,
+),level = Level::INFO)]
+async fn tick_handler(
+    ip: SocketAddr,
+    tick_timeout: u64,
+    tick_notify: Arc<Notify>,
+    run_signal: Signal,
+    global_cancellation_token: CancellationToken,
+    group_cancellation_token: CancellationToken,
+) -> Result<()> {
+    loop {
+        if global_cancellation_token.is_cancelled() || group_cancellation_token.is_cancelled() {
+            break;
+        }
+        let err = tokio::time::timeout(Duration::from_millis(tick_timeout), tick_notify.notified())
+            .await
+            .map_err(|_| anyhow!("Client {} tick timeout", ip));
+        if run_signal.available() {
+            return err;
         }
     }
     Ok(())

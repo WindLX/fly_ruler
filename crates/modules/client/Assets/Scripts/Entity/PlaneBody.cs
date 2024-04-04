@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 namespace FlyRuler.Entity
@@ -20,9 +21,33 @@ namespace FlyRuler.Entity
                     (float)value.Altitude / 3.048f,
                     (float)value.Npos / 3.048f);
 
-                transform.position = newPos;
-                transform.rotation = rotation;
+                StartCoroutine(Move(transform.position, newPos, 0.012f));
+                StartCoroutine(Rotate(transform.rotation, rotation, 0.012f));
                 lastUpdate = 0.0f;
+            }
+        }
+
+        IEnumerator Move(Vector3 start, Vector3 end, float duration)
+        {
+            float time = 0;
+            while (time < duration)
+            {
+                time += Time.deltaTime;
+                var pos = Vector3.Lerp(start, end, time / duration);
+                transform.position = pos;
+                yield return null;
+            }
+        }
+
+        IEnumerator Rotate(Quaternion start, Quaternion end, float duration)
+        {
+            float time = 0;
+            while (time < duration)
+            {
+                time += Time.deltaTime;
+                var angle = Quaternion.Lerp(start, end, time / duration);
+                transform.rotation = angle;
+                yield return null;
             }
         }
     }

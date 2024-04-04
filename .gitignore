@@ -4,6 +4,8 @@
 *.so
 *.dll
 *.lib
+*.log
+logs
 .venv
 
 .VSCodeCounter

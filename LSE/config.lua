@@ -1,7 +1,9 @@
 module = {
     logger_init_cfg = {
-        timestamp = nil,
-        target = "Stderr"
+        -- target[span{field=value}]=level site:https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
+        filter = "trace",
+        -- dir = "logs",
+        -- file = "app.log"
     },
 
     model_dir = "./models",

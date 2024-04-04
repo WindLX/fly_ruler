@@ -1,12 +1,18 @@
 pub mod manager;
 pub mod system;
 
-use env_logger::{fmt, Target, TimestampPrecision};
 use lazy_static::lazy_static;
-use log::{debug, error, info, trace, warn};
 use lua_runtime::prelude::*;
 use lua_runtime::UuidWrapper;
 use system::SystemWrapper;
+use tracing::event;
+use tracing::span;
+use tracing::Level;
+use tracing_appender::{non_blocking, rolling};
+use tracing_error::ErrorLayer;
+use tracing_subscriber::{
+    filter::EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Registry,
+};
 
 lazy_static! {
     static ref RT: tokio::runtime::Runtime = {
@@ -35,43 +41,66 @@ fn light_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
     logger.set(
         "init",
         LuaFunction::wrap(|_lua: &Lua, value: Option<mlua::Table>| {
-            let target: Target;
-            let timestamp: Option<fmt::TimestampPrecision>;
-            target = match value {
+            let log_filter: String;
+            let log_dir: Option<String>;
+            let log_file: Option<String>;
+            log_filter = match value {
                 Some(ref value) => {
-                    let target: Option<String> = value.get("target")?;
-                    match target {
-                        Some(target) => match target.as_str() {
-                            "Stdout" => Target::Stdout,
-                            _ => Target::Stderr,
-                        },
-                        _ => Target::Stderr,
+                    let filter: Option<String> = value.get("filter")?;
+                    match filter {
+                        Some(filter) => filter,
+                        _ => String::new(),
                     }
                 }
-                None => Target::Stderr,
+                None => String::new(),
             };
-            timestamp = match value {
-                Some(value) => {
-                    let timestamp: Option<String> = value.get("timestamp")?;
-                    match timestamp {
-                        Some(timestamp) => {
-                            let ts = match timestamp.as_str() {
-                                "Millis" => TimestampPrecision::Millis,
-                                "Nanos" => TimestampPrecision::Nanos,
-                                "Seconds" => TimestampPrecision::Seconds,
-                                _ => TimestampPrecision::Micros,
-                            };
-                            Some(ts)
-                        }
+            log_dir = match value {
+                Some(ref value) => {
+                    let dir: Option<String> = value.get("dir")?;
+                    match dir {
+                        Some(dir) => Some(dir),
                         _ => None,
                     }
                 }
                 None => None,
             };
-            env_logger::builder()
-                .target(target)
-                .format_timestamp(timestamp)
-                .init();
+            log_file = match value {
+                Some(ref value) => {
+                    let file: Option<String> = value.get("file")?;
+                    match file {
+                        Some(file) => Some(file),
+                        _ => None,
+                    }
+                }
+                None => None,
+            };
+
+            let env_filter = EnvFilter::new(log_filter);
+            let formatting_layer = fmt::layer().pretty().with_writer(std::io::stderr);
+
+            match (log_dir, log_file) {
+                (Some(log_dir), Some(log_file)) => {
+                    let file_appender = rolling::never(log_dir, log_file);
+                    let (non_blocking_appender, _guard) = non_blocking(file_appender);
+                    let file_layer = fmt::layer()
+                        .with_ansi(false)
+                        .with_writer(non_blocking_appender);
+                    Registry::default()
+                        .with(env_filter)
+                        .with(ErrorLayer::default())
+                        .with(formatting_layer)
+                        .with(file_layer)
+                        .init();
+                }
+                _ => {
+                    Registry::default()
+                        .with(env_filter)
+                        .with(ErrorLayer::default())
+                        .with(formatting_layer)
+                        .init();
+                }
+            }
+
             Ok(())
         }),
     )?;
@@ -79,35 +108,45 @@ fn light_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
     logger.set(
         "trace",
         LuaFunction::wrap(|_: &Lua, msg: mlua::String| {
-            trace!("{}", msg.to_str()?);
+            let s = span!(Level::TRACE, "lua");
+            let _enter = s.enter();
+            event!(Level::TRACE, "{}", msg.to_str()?);
             Ok(())
         }),
     )?;
     logger.set(
         "debug",
         LuaFunction::wrap(|_: &Lua, msg: mlua::String| {
-            debug!("{}", msg.to_str()?);
+            let s = span!(Level::DEBUG, "lua");
+            let _enter = s.enter();
+            event!(Level::DEBUG, "{}", msg.to_str()?);
             Ok(())
         }),
     )?;
     logger.set(
         "info",
         LuaFunction::wrap(|_: &Lua, msg: mlua::String| {
-            info!("{}", msg.to_str()?);
+            let s = span!(Level::INFO, "lua");
+            let _enter = s.enter();
+            event!(Level::INFO, "{}", msg.to_str()?);
             Ok(())
         }),
     )?;
     logger.set(
         "warn",
         LuaFunction::wrap(|_: &Lua, msg: mlua::String| {
-            warn!("{}", msg.to_str()?);
+            let s = span!(Level::WARN, "lua");
+            let _enter = s.enter();
+            event!(Level::WARN, "{}", msg.to_str()?);
             Ok(())
         }),
     )?;
     logger.set(
         "error",
         LuaFunction::wrap(|_: &Lua, msg: mlua::String| {
-            error!("{}", msg.to_str()?);
+            let s = span!(Level::ERROR, "lua");
+            let _enter = s.enter();
+            event!(Level::ERROR, "{}", msg.to_str()?);
             Ok(())
         }),
     )?;

@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ControlWrapper {
     #[pyo3(get, set)]
     pub thrust: f64,

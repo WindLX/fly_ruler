@@ -12,6 +12,7 @@ use std::{
     rc::Rc,
     sync::{Arc, Mutex},
 };
+use tracing::{span, Level};
 
 /// alpha is radians
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -112,6 +113,14 @@ pub fn trim(
     flight_condition: Option<FlightCondition>,
     optim_options: Option<NelderMeadOptions>,
 ) -> Result<TrimOutput, FatalCoreError> {
+    let s = span!(
+        Level::TRACE,
+        "trim",
+        trim_target = %trim_target,
+        trim_init = %trim_init.unwrap_or_default()
+    );
+    let _ = s.enter();
+
     // Initial Guess for free parameters
     // free parameters: two control values & angle of attack
     let x_0: Vec<f64> = trim_init.unwrap_or_default().into();
@@ -213,14 +222,6 @@ fn trim_func(
         ctrl_limit.alpha_limit_top.to_radians(),
     );
 
-    // Calculating qbar, ps and steady state leading edge flap deflection:
-    // (see pg. 43 NASA report)
-    // let (_mach, qbar, ps) = Atmos::atmos(altitude, velocity).into();
-    // let mut lef = 1.38 * alpha.to_degrees() - 9.05 * qbar / ps + 1.45;
-
-    // Verify that the calculated leading edge flap have not been violated.
-    // lef = lef.clamp(0.0, 25.0);
-
     let state = [
         0.0,              // npos (ft)
         0.0,              // epos (ft)
@@ -281,8 +282,10 @@ mod core_trim_tests {
         },
     };
     use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
-    use fly_ruler_utils::{logger::test_logger_init, plane_model::ControlLimit};
-    use log::debug;
+    use fly_ruler_utils::{
+        logger::{debug, test_logger_init},
+        plane_model::ControlLimit,
+    };
     use std::sync::Arc;
 
     const CL: ControlLimit = ControlLimit {

@@ -95,7 +95,7 @@ void lef_new(LeadingEdgeFlapBlock *lef, const State *state)
 int lef_update(LeadingEdgeFlapBlock *lef, const State *state, double t, double *result)
 {
   int r = 0;
-  trace("[t: %f.2] LEFBlock: alpha: %f.2, altitude: %f.2, velocity: %f.2", t, state->alpha, state->altitude, state->velocity);
+  trace("[t: %f] LEFBlock: alpha: %f, altitude: %f, velocity: %f", t, state->alpha, state->altitude, state->velocity);
   Atmos atmos = frplugin_atmos(state->altitude, state->velocity);
   double r_1 = atmos.qbar / atmos.ps * 9.05;
   double alpha = state->alpha * r2d();
@@ -105,7 +105,7 @@ int lef_update(LeadingEdgeFlapBlock *lef, const State *state, double t, double *
 
   if (r < 0)
   {
-    debug("[t: %f.2] LEFBlock: integrator error", t);
+    debug("[t: %f] LEFBlock: integrator error", t);
     return r;
   }
 
@@ -114,14 +114,13 @@ int lef_update(LeadingEdgeFlapBlock *lef, const State *state, double t, double *
   double r_5 = r_4 * 1.38;
   double r_6 = 0.0;
   r = frplugin_actuator_update(lef->lef_actuator, (1.45 + r_5 - r_1), t, &r_6);
-
   if (r < 0)
   {
-    debug("[t: %f.2] LEFBlock: actuator error", t);
+    debug("[t: %f] LEFBlock: actuator error", t);
     return r;
   }
 
-  trace("[t: %f.2] LEFBlock: lef: %f.4", t, r_6);
+  trace("[t: %f] LEFBlock: lef: %f", t, r_6);
   *result = r_6;
   return r;
 }

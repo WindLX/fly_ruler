@@ -453,6 +453,7 @@ impl From<Args> for ArgsGen {
             Args::PushPlane(req) => ArgsGen::PushPlane(req.into()),
             Args::SendControl(req) => ArgsGen::SendControl(req.into()),
             Args::Tick => ArgsGen::Tick(()),
+            Args::Disconnect => ArgsGen::Disconnect(()),
         }
     }
 }
@@ -464,6 +465,7 @@ impl From<ArgsGen> for Args {
             ArgsGen::PushPlane(req) => Args::PushPlane(req.into()),
             ArgsGen::SendControl(req) => Args::SendControl(req.into()),
             ArgsGen::Tick(()) => Args::Tick,
+            ArgsGen::Disconnect(()) => Args::Disconnect,
         }
     }
 }

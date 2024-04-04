@@ -22,7 +22,6 @@ impl tokio_util::codec::Encoder<ServiceCall> for RequestFrame {
     fn encode(&mut self, item: ServiceCall, dst: &mut BytesMut) -> FrResult<()> {
         let data = item.encode()?;
         let data = data.as_slice();
-
         let data_len = data.len();
         if data_len > Frame::MAX_SIZE {
             return Err(FrError::Io(std::io::ErrorKind::InvalidData.into()));

@@ -13,13 +13,13 @@ use fly_ruler_utils::{
     plane_model::{CoreOutput, FlightCondition},
     state_channel, InputReceiver, OutputReceiver, OutputSender,
 };
-use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::Mutex, task, time::timeout};
+use tracing::{event, instrument, span, Level};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 pub struct CoreInitCfg {
     pub sample_time: Option<u64>,
     pub time_scale: Option<f64>,
@@ -82,6 +82,9 @@ pub struct Core {
 
 impl Core {
     pub fn new(init_cfg: CoreInitCfg) -> Self {
+        let s = span!(Level::TRACE, "new", init_cfg = %init_cfg);
+        let _enter = s.enter();
+
         let planes = HashMap::new();
         let clock = Clock::new(
             init_cfg.sample_time.map(Duration::from_millis),
@@ -100,6 +103,7 @@ impl Core {
     }
 
     /// add a new plant
+    #[instrument(skip_all, level = Level::DEBUG)]
     pub async fn push_plane(
         &mut self,
         model: &AerodynamicModel,
@@ -125,7 +129,7 @@ impl Core {
             init_cfg.optim_options,
         )
         .map_err(|e| FrError::Core(e))?;
-        info!("model trim successfully");
+        event!(Level::DEBUG, "model trim successfully");
 
         let plane_block = Arc::new(std::sync::Mutex::new(
             PlaneBlock::new(
@@ -136,7 +140,7 @@ impl Core {
             )
             .map_err(|e| FrError::Core(e))?,
         ));
-        info!("model build successfully");
+        event!(Level::DEBUG, "model build successfully");
 
         let (tx, rx) = state_channel(&CoreOutput {
             state: trim_output.state,
@@ -147,56 +151,59 @@ impl Core {
         let id = plane_id.unwrap_or(Uuid::new_v4());
         self.planes.insert(id, (plane_block, tx));
         self.clock.lock().await.resume();
-        info!("plane {id} append successfully");
+        event!(Level::DEBUG, "plane {id} append successfully");
         Ok((id, rx))
     }
 
+    #[instrument(skip(self), level = Level::DEBUG)]
     pub fn subscribe_plane(&self, id: Uuid) -> Option<OutputReceiver> {
         match self.planes.get(&id) {
             Some((_, sender)) => {
-                info!("subscribe plane {id}");
+                event!(Level::DEBUG, "subscribe plane {id}");
                 Some(sender.subscribe())
             }
             None => {
-                warn!("failed to find target plane: {}", id);
+                event!(Level::WARN, "failed to find target plane: {}", id);
                 None
             }
         }
     }
 
+    #[instrument(skip(self), level = Level::DEBUG)]
     pub async fn remove_plane(&mut self, id: Uuid) {
         self.clock.lock().await.pause();
         self.clock.lock().await.unsubscribe();
         match self.planes.remove(&id) {
             Some((_, _)) => {
                 self.controllers.remove(&id);
-                info!("plane {id} removed successfully");
+                event!(Level::DEBUG, "plane {id} removed successfully");
             }
             None => {
-                warn!("failed to find target plane: {}", id);
+                event!(Level::WARN, "failed to find target plane: {}", id);
             }
         }
         self.clock.lock().await.resume();
     }
 
+    #[instrument(skip(self, controller), level = Level::DEBUG)]
     pub async fn set_controller(
         &mut self,
         id: Uuid,
         controller: InputReceiver,
     ) -> Option<InputReceiver> {
         self.clock.lock().await.pause();
-        info!("set controller for plane {id}");
         let r = self.controllers.insert(id, controller);
         self.clock.lock().await.resume();
         r
     }
 
     /// main loop step
+    #[instrument(skip(self), level = Level::DEBUG)]
     pub async fn step(&mut self, is_block: bool) -> Result<(), FrError> {
         if !self.is_start {
             self.clock.lock().await.start();
             self.is_start = true;
-            info!("core clock start");
+            event!(Level::INFO, "core clock start");
         }
         let clock = self.clock.clone();
         for (idx, (plane, state_sender)) in self.planes.clone() {
@@ -224,7 +231,8 @@ impl Core {
 
             match control {
                 Some(control) => {
-                    debug!(
+                    event!(
+                        Level::DEBUG,
                         "[t:{:.4}] Plane {idx} received Control: {}",
                         t.as_secs_f32(),
                         control
@@ -236,11 +244,15 @@ impl Core {
                         result
                     });
                     let result = plane_task.await.unwrap();
-                    clock.lock().await.pause();
+                    // clock.lock().await.pause();
 
                     match result {
                         Ok(output) => {
-                            info!("[t:{:.4}] Plane {idx} output:\n{output}", t.as_secs_f32());
+                            event!(
+                                Level::DEBUG,
+                                "[t:{:.4}] Plane {idx} output:\n{output}",
+                                t.as_secs_f32()
+                            );
                             state_sender.send(&(t.as_secs_f64(), output))?;
                         }
                         Err(e) => {
@@ -250,7 +262,7 @@ impl Core {
                             return Err(FrError::Core(e));
                         }
                     }
-                    clock.lock().await.resume();
+                    // clock.lock().await.resume();
                 }
                 None => {
                     self.planes.remove(&idx);
@@ -278,13 +290,15 @@ impl Core {
     }
 
     // reset
+    #[instrument(skip(self), level = Level::DEBUG)]
     pub async fn reset(&self, time_scale: Option<f64>, sample_time: Option<Duration>) {
         self.clock.lock().await.reset(time_scale, sample_time);
         let s = match sample_time {
             Some(s) => format!("{}", s.as_millis()),
             None => format!("-1"),
         };
-        info!(
+        event!(
+            Level::DEBUG,
             "core clock reset, time_scale: {:.1}, sample_time: {}",
             time_scale.unwrap_or(1.0),
             s
@@ -309,7 +323,11 @@ impl Core {
 mod core_tests {
     use super::*;
     use fly_ruler_plugin::AsPlugin;
-    use fly_ruler_utils::{input_channel, logger::test_logger_init, plane_model::Control};
+    use fly_ruler_utils::{
+        input_channel,
+        logger::{info, test_logger_init},
+        plane_model::Control,
+    };
     use tokio_util::sync::CancellationToken;
 
     fn test_core_init() -> (AerodynamicModel, Core, PlaneInitCfg) {

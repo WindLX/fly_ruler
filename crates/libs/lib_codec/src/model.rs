@@ -56,6 +56,7 @@ pub enum Args {
     PushPlane(PushPlaneRequest),
     SendControl(SendControlRequest),
     Tick,
+    Disconnect,
 }
 
 #[derive(Debug, Clone)]

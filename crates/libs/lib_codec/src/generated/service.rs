@@ -31,7 +31,7 @@ pub struct PushPlaneResponse {
 pub struct ServiceCall {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(oneof = "service_call::Args", tags = "3, 4, 5, 6")]
+    #[prost(oneof = "service_call::Args", tags = "3, 4, 5, 6, 7")]
     pub args: ::core::option::Option<service_call::Args>,
 }
 /// Nested message and enum types in `ServiceCall`.
@@ -47,6 +47,8 @@ pub mod service_call {
         SendControl(super::SendControlRequest),
         #[prost(message, tag = "6")]
         Tick(()),
+        #[prost(message, tag = "7")]
+        Disconnect(()),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

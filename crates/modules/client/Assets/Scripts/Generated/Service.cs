@@ -31,35 +31,36 @@ namespace Service {
             "Fy5wbHVnaW4uUGx1Z2luSW5mb1R1cGxlInoKEFB1c2hQbGFuZVJlcXVlc3QS",
             "GAoIbW9kZWxfaWQYASABKAsyBi5pZC5JZBI5Cg5wbGFuZV9pbml0X2NmZxgC",
             "IAEoCzIcLnBsYW5lX2luaXRfY2ZnLlBsYW5lSW5pdENmZ0gAiAEBQhEKD19w",
-            "bGFuZV9pbml0X2NmZyI3ChJTZW5kQ29udHJvbFJlcXVlc3QSIQoHY29udHJv",
-            "bBgBIAEoCzIQLmNvbnRyb2wuQ29udHJvbCItChFQdXNoUGxhbmVSZXNwb25z",
-            "ZRIYCghwbGFuZV9pZBgBIAEoCzIGLmlkLklkIuQBCgtTZXJ2aWNlQ2FsbBIM",
-            "CgRuYW1lGAEgASgJEjEKD2dldF9tb2RlbF9pbmZvcxgDIAEoCzIWLmdvb2ds",
-            "ZS5wcm90b2J1Zi5FbXB0eUgAEi8KCnB1c2hfcGxhbmUYBCABKAsyGS5zZXJ2",
-            "aWNlLlB1c2hQbGFuZVJlcXVlc3RIABIzCgxzZW5kX2NvbnRyb2wYBSABKAsy",
-            "Gy5zZXJ2aWNlLlNlbmRDb250cm9sUmVxdWVzdEgAEiYKBHRpY2sYBiABKAsy",
-            "Fi5nb29nbGUucHJvdG9idWYuRW1wdHlIAEIGCgRhcmdzIsUCChNTZXJ2aWNl",
-            "Q2FsbFJlc3BvbnNlEgwKBG5hbWUYASABKAkSOQoPZ2V0X21vZGVsX2luZm9z",
-            "GAMgASgLMh4uc2VydmljZS5HZXRNb2RlbEluZm9zUmVzcG9uc2VIABIwCgpw",
-            "dXNoX3BsYW5lGAQgASgLMhouc2VydmljZS5QdXNoUGxhbmVSZXNwb25zZUgA",
-            "Ei4KDHNlbmRfY29udHJvbBgFIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0",
-            "eUgAEisKBm91dHB1dBgGIAEoCzIZLmNvcmVfb3V0cHV0LlBsYW5lTWVzc2Fn",
-            "ZUgAEhwKCmxvc3RfcGxhbmUYByABKAsyBi5pZC5JZEgAEhsKCW5ld19wbGFu",
-            "ZRgIIAEoCzIGLmlkLklkSAASDwoFZXJyb3IYCSABKAlIAEIKCghyZXNwb25z",
-            "ZTLiAQoPRmx5UnVsZXJTZXJ2aWNlEkcKDUdldE1vZGVsSW5mb3MSFi5nb29n",
-            "bGUucHJvdG9idWYuRW1wdHkaHi5zZXJ2aWNlLkdldE1vZGVsSW5mb3NSZXNw",
-            "b25zZRJCCglQdXNoUGxhbmUSGS5zZXJ2aWNlLlB1c2hQbGFuZVJlcXVlc3Qa",
-            "Gi5zZXJ2aWNlLlB1c2hQbGFuZVJlc3BvbnNlEkIKC1NlbmRDb250cm9sEhsu",
-            "c2VydmljZS5TZW5kQ29udHJvbFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYu",
-            "RW1wdHliBnByb3RvMw=="));
+            "bGFuZV9pbml0X2NmZyJRChJTZW5kQ29udHJvbFJlcXVlc3QSGAoIcGxhbmVf",
+            "aWQYASABKAsyBi5pZC5JZBIhCgdjb250cm9sGAIgASgLMhAuY29udHJvbC5D",
+            "b250cm9sIi0KEVB1c2hQbGFuZVJlc3BvbnNlEhgKCHBsYW5lX2lkGAEgASgL",
+            "MgYuaWQuSWQikgIKC1NlcnZpY2VDYWxsEgwKBG5hbWUYASABKAkSMQoPZ2V0",
+            "X21vZGVsX2luZm9zGAMgASgLMhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5SAAS",
+            "LwoKcHVzaF9wbGFuZRgEIAEoCzIZLnNlcnZpY2UuUHVzaFBsYW5lUmVxdWVz",
+            "dEgAEjMKDHNlbmRfY29udHJvbBgFIAEoCzIbLnNlcnZpY2UuU2VuZENvbnRy",
+            "b2xSZXF1ZXN0SAASJgoEdGljaxgGIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5F",
+            "bXB0eUgAEiwKCmRpc2Nvbm5lY3QYByABKAsyFi5nb29nbGUucHJvdG9idWYu",
+            "RW1wdHlIAEIGCgRhcmdzIsUCChNTZXJ2aWNlQ2FsbFJlc3BvbnNlEgwKBG5h",
+            "bWUYASABKAkSOQoPZ2V0X21vZGVsX2luZm9zGAMgASgLMh4uc2VydmljZS5H",
+            "ZXRNb2RlbEluZm9zUmVzcG9uc2VIABIwCgpwdXNoX3BsYW5lGAQgASgLMhou",
+            "c2VydmljZS5QdXNoUGxhbmVSZXNwb25zZUgAEi4KDHNlbmRfY29udHJvbBgF",
+            "IAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUgAEisKBm91dHB1dBgGIAEo",
+            "CzIZLmNvcmVfb3V0cHV0LlBsYW5lTWVzc2FnZUgAEhwKCmxvc3RfcGxhbmUY",
+            "ByABKAsyBi5pZC5JZEgAEhsKCW5ld19wbGFuZRgIIAEoCzIGLmlkLklkSAAS",
+            "DwoFZXJyb3IYCSABKAlIAEIKCghyZXNwb25zZTLiAQoPRmx5UnVsZXJTZXJ2",
+            "aWNlEkcKDUdldE1vZGVsSW5mb3MSFi5nb29nbGUucHJvdG9idWYuRW1wdHka",
+            "Hi5zZXJ2aWNlLkdldE1vZGVsSW5mb3NSZXNwb25zZRJCCglQdXNoUGxhbmUS",
+            "GS5zZXJ2aWNlLlB1c2hQbGFuZVJlcXVlc3QaGi5zZXJ2aWNlLlB1c2hQbGFu",
+            "ZVJlc3BvbnNlEkIKC1NlbmRDb250cm9sEhsuc2VydmljZS5TZW5kQ29udHJv",
+            "bFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHliBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Google.Protobuf.WellKnownTypes.EmptyReflection.Descriptor, global::Control.ControlReflection.Descriptor, global::CoreOutput.CoreOutputReflection.Descriptor, global::Id.IdReflection.Descriptor, global::Plugin.PluginReflection.Descriptor, global::PlaneInitCfg.PlaneInitCfgReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Service.GetModelInfosResponse), global::Service.GetModelInfosResponse.Parser, new[]{ "ModelInfos" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Service.PushPlaneRequest), global::Service.PushPlaneRequest.Parser, new[]{ "ModelId", "PlaneInitCfg" }, new[]{ "PlaneInitCfg" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Service.SendControlRequest), global::Service.SendControlRequest.Parser, new[]{ "Control" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Service.SendControlRequest), global::Service.SendControlRequest.Parser, new[]{ "PlaneId", "Control" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Service.PushPlaneResponse), global::Service.PushPlaneResponse.Parser, new[]{ "PlaneId" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Service.ServiceCall), global::Service.ServiceCall.Parser, new[]{ "Name", "GetModelInfos", "PushPlane", "SendControl", "Tick" }, new[]{ "Args" }, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Service.ServiceCall), global::Service.ServiceCall.Parser, new[]{ "Name", "GetModelInfos", "PushPlane", "SendControl", "Tick", "Disconnect" }, new[]{ "Args" }, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Service.ServiceCallResponse), global::Service.ServiceCallResponse.Parser, new[]{ "Name", "GetModelInfos", "PushPlane", "SendControl", "Output", "LostPlane", "NewPlane", "Error" }, new[]{ "Response" }, null, null, null)
           }));
     }
@@ -526,6 +527,7 @@ namespace Service {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public SendControlRequest(SendControlRequest other) : this() {
+      planeId_ = other.planeId_ != null ? other.planeId_.Clone() : null;
       control_ = other.control_ != null ? other.control_.Clone() : null;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
@@ -536,8 +538,20 @@ namespace Service {
       return new SendControlRequest(this);
     }
 
+    /// <summary>Field number for the "plane_id" field.</summary>
+    public const int PlaneIdFieldNumber = 1;
+    private global::Id.Id planeId_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Id.Id PlaneId {
+      get { return planeId_; }
+      set {
+        planeId_ = value;
+      }
+    }
+
     /// <summary>Field number for the "control" field.</summary>
-    public const int ControlFieldNumber = 1;
+    public const int ControlFieldNumber = 2;
     private global::Control.Control control_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -563,6 +577,7 @@ namespace Service {
       if (ReferenceEquals(other, this)) {
         return true;
       }
+      if (!object.Equals(PlaneId, other.PlaneId)) return false;
       if (!object.Equals(Control, other.Control)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
@@ -571,6 +586,7 @@ namespace Service {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override int GetHashCode() {
       int hash = 1;
+      if (planeId_ != null) hash ^= PlaneId.GetHashCode();
       if (control_ != null) hash ^= Control.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
@@ -590,8 +606,12 @@ namespace Service {
     #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
       output.WriteRawMessage(this);
     #else
-      if (control_ != null) {
+      if (planeId_ != null) {
         output.WriteRawTag(10);
+        output.WriteMessage(PlaneId);
+      }
+      if (control_ != null) {
+        output.WriteRawTag(18);
         output.WriteMessage(Control);
       }
       if (_unknownFields != null) {
@@ -604,8 +624,12 @@ namespace Service {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
-      if (control_ != null) {
+      if (planeId_ != null) {
         output.WriteRawTag(10);
+        output.WriteMessage(PlaneId);
+      }
+      if (control_ != null) {
+        output.WriteRawTag(18);
         output.WriteMessage(Control);
       }
       if (_unknownFields != null) {
@@ -618,6 +642,9 @@ namespace Service {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public int CalculateSize() {
       int size = 0;
+      if (planeId_ != null) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(PlaneId);
+      }
       if (control_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(Control);
       }
@@ -632,6 +659,12 @@ namespace Service {
     public void MergeFrom(SendControlRequest other) {
       if (other == null) {
         return;
+      }
+      if (other.planeId_ != null) {
+        if (planeId_ == null) {
+          PlaneId = new global::Id.Id();
+        }
+        PlaneId.MergeFrom(other.PlaneId);
       }
       if (other.control_ != null) {
         if (control_ == null) {
@@ -655,6 +688,13 @@ namespace Service {
             _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
             break;
           case 10: {
+            if (planeId_ == null) {
+              PlaneId = new global::Id.Id();
+            }
+            input.ReadMessage(PlaneId);
+            break;
+          }
+          case 18: {
             if (control_ == null) {
               Control = new global::Control.Control();
             }
@@ -677,6 +717,13 @@ namespace Service {
             _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
             break;
           case 10: {
+            if (planeId_ == null) {
+              PlaneId = new global::Id.Id();
+            }
+            input.ReadMessage(PlaneId);
+            break;
+          }
+          case 18: {
             if (control_ == null) {
               Control = new global::Control.Control();
             }
@@ -938,6 +985,9 @@ namespace Service {
         case ArgsOneofCase.Tick:
           Tick = other.Tick.Clone();
           break;
+        case ArgsOneofCase.Disconnect:
+          Disconnect = other.Disconnect.Clone();
+          break;
       }
 
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
@@ -1009,6 +1059,18 @@ namespace Service {
       }
     }
 
+    /// <summary>Field number for the "disconnect" field.</summary>
+    public const int DisconnectFieldNumber = 7;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Google.Protobuf.WellKnownTypes.Empty Disconnect {
+      get { return argsCase_ == ArgsOneofCase.Disconnect ? (global::Google.Protobuf.WellKnownTypes.Empty) args_ : null; }
+      set {
+        args_ = value;
+        argsCase_ = value == null ? ArgsOneofCase.None : ArgsOneofCase.Disconnect;
+      }
+    }
+
     private object args_;
     /// <summary>Enum of possible cases for the "args" oneof.</summary>
     public enum ArgsOneofCase {
@@ -1017,6 +1079,7 @@ namespace Service {
       PushPlane = 4,
       SendControl = 5,
       Tick = 6,
+      Disconnect = 7,
     }
     private ArgsOneofCase argsCase_ = ArgsOneofCase.None;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -1052,6 +1115,7 @@ namespace Service {
       if (!object.Equals(PushPlane, other.PushPlane)) return false;
       if (!object.Equals(SendControl, other.SendControl)) return false;
       if (!object.Equals(Tick, other.Tick)) return false;
+      if (!object.Equals(Disconnect, other.Disconnect)) return false;
       if (ArgsCase != other.ArgsCase) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
@@ -1065,6 +1129,7 @@ namespace Service {
       if (argsCase_ == ArgsOneofCase.PushPlane) hash ^= PushPlane.GetHashCode();
       if (argsCase_ == ArgsOneofCase.SendControl) hash ^= SendControl.GetHashCode();
       if (argsCase_ == ArgsOneofCase.Tick) hash ^= Tick.GetHashCode();
+      if (argsCase_ == ArgsOneofCase.Disconnect) hash ^= Disconnect.GetHashCode();
       hash ^= (int) argsCase_;
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
@@ -1104,6 +1169,10 @@ namespace Service {
         output.WriteRawTag(50);
         output.WriteMessage(Tick);
       }
+      if (argsCase_ == ArgsOneofCase.Disconnect) {
+        output.WriteRawTag(58);
+        output.WriteMessage(Disconnect);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -1134,6 +1203,10 @@ namespace Service {
         output.WriteRawTag(50);
         output.WriteMessage(Tick);
       }
+      if (argsCase_ == ArgsOneofCase.Disconnect) {
+        output.WriteRawTag(58);
+        output.WriteMessage(Disconnect);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -1158,6 +1231,9 @@ namespace Service {
       }
       if (argsCase_ == ArgsOneofCase.Tick) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(Tick);
+      }
+      if (argsCase_ == ArgsOneofCase.Disconnect) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(Disconnect);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -1198,6 +1274,12 @@ namespace Service {
             Tick = new global::Google.Protobuf.WellKnownTypes.Empty();
           }
           Tick.MergeFrom(other.Tick);
+          break;
+        case ArgsOneofCase.Disconnect:
+          if (Disconnect == null) {
+            Disconnect = new global::Google.Protobuf.WellKnownTypes.Empty();
+          }
+          Disconnect.MergeFrom(other.Disconnect);
           break;
       }
 
@@ -1256,6 +1338,15 @@ namespace Service {
             Tick = subBuilder;
             break;
           }
+          case 58: {
+            global::Google.Protobuf.WellKnownTypes.Empty subBuilder = new global::Google.Protobuf.WellKnownTypes.Empty();
+            if (argsCase_ == ArgsOneofCase.Disconnect) {
+              subBuilder.MergeFrom(Disconnect);
+            }
+            input.ReadMessage(subBuilder);
+            Disconnect = subBuilder;
+            break;
+          }
         }
       }
     #endif
@@ -1309,6 +1400,15 @@ namespace Service {
             }
             input.ReadMessage(subBuilder);
             Tick = subBuilder;
+            break;
+          }
+          case 58: {
+            global::Google.Protobuf.WellKnownTypes.Empty subBuilder = new global::Google.Protobuf.WellKnownTypes.Empty();
+            if (argsCase_ == ArgsOneofCase.Disconnect) {
+              subBuilder.MergeFrom(Disconnect);
+            }
+            input.ReadMessage(subBuilder);
+            Disconnect = subBuilder;
             break;
           }
         }

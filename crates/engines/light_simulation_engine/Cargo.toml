@@ -9,8 +9,6 @@ name = "light_simulation_engine"
 crate-type = ["cdylib"]
 
 [dependencies]
-env_logger = "0.11.3"
-log = "0.4.20"
 tokio = { version = "1.35.1", features = ["sync", "rt", "rt-multi-thread"] }
 mlua = { version = "0.9.6", features = ["lua54", "module"] }
 futures = "0.3.30"
@@ -20,6 +18,10 @@ lua_runtime = { path = "../../runtime/lua_runtime" }
 fly_ruler_utils = { path = "../../libs/lib_utils" }
 fly_ruler_plugin = { path = "../../libs/lib_plugin" }
 fly_ruler_core = { path = "../../libs/lib_core" }
+tracing = "0.1.40"
+tracing-error = "0.2.0"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-appender = "0.2.3"
 
 [dependencies.uuid]
 version = "1.7.0"

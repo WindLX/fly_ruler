@@ -184,7 +184,7 @@ void warn(const char *format, ...)
     va_start(args, format);
     vsnprintf(msg, sizeof(msg), format, args);
     va_end(args);
-    frplugin_log(msg, ERROR);
+    frplugin_log(msg, WARN);
 }
 
 // log error

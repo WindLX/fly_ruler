@@ -13,6 +13,7 @@ namespace FlyRuler.Manager
         public ControlLimits controlLimits;
         public GameObject planePrefab;
         public CinemachineVirtualCamera cinemachineVirtualCamera;
+        public string SelfId { get => selfId; }
 
         private string selfId = null;
         private Entity.Plane selfObj = null;
@@ -20,10 +21,10 @@ namespace FlyRuler.Manager
 
         void Start()
         {
-            RPCClient.Instance.onLostPlane += LostPlaneHandler;
-            RPCClient.Instance.onNewPlane += NewPlaneHandler;
-            RPCClient.Instance.onPlaneMessageUpdate += PlaneMessageUpdateHandler;
-            RPCClient.Instance.onDisconnected += DisconnectHandler;
+            RPCClientAsync.Instance.onLostPlane += LostPlaneHandler;
+            RPCClientAsync.Instance.onNewPlane += NewPlaneHandler;
+            RPCClientAsync.Instance.onPlaneMessageUpdate += PlaneMessageUpdateHandler;
+            RPCClientAsync.Instance.onDisconnected += DisconnectHandler;
             ControllerManager.Instance.onRawControlUpdate += RawControlUpdateHandler;
             ControllerManager.Instance.onSetSelf += SetSelfHandler;
         }
@@ -90,11 +91,14 @@ namespace FlyRuler.Manager
 
         public void RawControlUpdateHandler(Control.Control control)
         {
-            control.Thrust = control.Thrust * (controlLimits.ThrustCmdLimitTop - controlLimits.ThrustCmdLimitBottom) + controlLimits.ThrustCmdLimitBottom;
-            control.Elevator = control.Elevator * (controlLimits.EleCmdLimitTop - controlLimits.EleCmdLimitBottom) / 2 + (controlLimits.EleCmdLimitTop + controlLimits.EleCmdLimitBottom) / 2;
-            control.Aileron = control.Aileron * (controlLimits.AilCmdLimitTop - controlLimits.AilCmdLimitBottom) / 2 + (controlLimits.AilCmdLimitTop + controlLimits.AilCmdLimitBottom) / 2;
-            control.Rudder = control.Rudder * (controlLimits.RudCmdLimitTop - controlLimits.RudCmdLimitBottom) / 2 + (controlLimits.RudCmdLimitTop + controlLimits.RudCmdLimitBottom) / 2;
-            RPCClient.Instance.SendControl(control);
+            if (selfId != null)
+            {
+                control.Thrust = control.Thrust * (controlLimits.ThrustCmdLimitTop - controlLimits.ThrustCmdLimitBottom) + controlLimits.ThrustCmdLimitBottom;
+                control.Elevator = control.Elevator * (controlLimits.EleCmdLimitTop - controlLimits.EleCmdLimitBottom) / 2 + (controlLimits.EleCmdLimitTop + controlLimits.EleCmdLimitBottom) / 2;
+                control.Aileron = control.Aileron * (controlLimits.AilCmdLimitTop - controlLimits.AilCmdLimitBottom) / 2 + (controlLimits.AilCmdLimitTop + controlLimits.AilCmdLimitBottom) / 2;
+                control.Rudder = control.Rudder * (controlLimits.RudCmdLimitTop - controlLimits.RudCmdLimitBottom) / 2 + (controlLimits.RudCmdLimitTop + controlLimits.RudCmdLimitBottom) / 2;
+                RPCClientAsync.Instance.SendControl(new Id.Id() { Id_ = selfId }, control);
+            }
         }
     }
 }

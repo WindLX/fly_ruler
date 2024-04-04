@@ -11,9 +11,9 @@ use super::ffi::{
 use fly_ruler_utils::error::FatalPluginError;
 use libc::{c_char, c_int};
 use libloading::Library;
-use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use std::{ffi::CString, fs::read_to_string, path::Path};
+use tracing::{event, instrument, span, Level};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PluginInfo {
@@ -61,8 +61,11 @@ pub struct Plugin {
 
 impl Plugin {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, PluginError> {
+        let s = span!(Level::TRACE, "new");
+        let _ = s.enter();
         let p = path.as_ref().to_path_buf();
         let info = PluginInfo::load(p.join("info.toml"))?;
+        event!(Level::TRACE, "plugin info loaded: {info:?}");
         let lib_path = if cfg!(target_os = "windows") {
             p.join(info.name.clone() + ".dll")
         } else if cfg!(target_os = "linux") {
@@ -72,6 +75,7 @@ impl Plugin {
         };
         unsafe {
             let lib = Library::new(&lib_path).map_err(|e| PluginError::Lib(e))?;
+            event!(Level::TRACE, "plugin lib loaded");
             Ok(Self {
                 info,
                 lib,
@@ -85,6 +89,7 @@ impl Plugin {
             let f: libloading::Symbol<'_, F> = self.lib.get(name.as_bytes()).map_err(|e| {
                 PluginError::Symbol(self.info.name.to_string(), name.to_string(), e)
             })?;
+            event!(Level::TRACE, "function [{name}] load successfully");
             Ok(f)
         }
     }
@@ -153,9 +158,11 @@ impl Plugin {
         unsafe {
             r(actuator_reset_callback);
         }
+
         Ok(())
     }
 
+    #[instrument(skip(self, args), level = Level::TRACE)]
     fn call_hook_function(
         &self,
         name: &str,
@@ -165,11 +172,10 @@ impl Plugin {
         match r {
             Ok(r) => {
                 let argc = args.len();
-                trace!("{}: trigger hook: {}", self.info.name, name);
                 let arg_string: Result<Vec<CString>, PluginError> = args
                     .iter()
                     .map(|s| {
-                        trace!("{}: hook_arg: {:?}", self.info.name, s.to_string());
+                        event!(Level::TRACE, hook_name = name, arg = s.to_string());
                         CString::new(s.to_string()).map_err(|_| {
                             PluginError::Args(self.info.name.to_string(), name.to_string())
                         })
@@ -200,17 +206,23 @@ impl Plugin {
         }
     }
 
+    #[instrument(level = Level::TRACE, skip_all)]
     pub fn install(
         &self,
         args: &[impl ToString],
     ) -> Result<Result<(), PluginError>, FatalPluginError> {
-        if let Err(e) = self.register_utils() {
-            warn!("{}", e)
-        };
-        trace!("{} logger is registered", self.info.name);
+        match self.register_utils() {
+            Ok(_) => {
+                event!(Level::TRACE, "registered all callbacks");
+            }
+            Err(e) => {
+                event!(Level::TRACE, %e);
+            }
+        }
         self.call_hook_function("frplugin_install_hook", args)
     }
 
+    #[instrument(level = Level::TRACE, skip_all)]
     pub fn uninstall(&self) -> Result<Result<(), PluginError>, FatalPluginError> {
         self.call_hook_function("frplugin_uninstall_hook", &Vec::<String>::new())
     }

@@ -239,7 +239,6 @@ fn velocity_derivation(
     let u_dot = r * v - q * w - G * stheta + qbar * s * c.c_x / m + thrust / m;
     let v_dot = p * w - r * u + G * ctheta * sphi + qbar * s * c.c_y / m;
     let w_dot = q * u - p * v + G * ctheta * cphi + qbar * s * c.c_z / m;
-
     (
         (u * u_dot + v * v_dot + w * w_dot) / velocity,
         Vector3::new(u_dot, v_dot, w_dot),

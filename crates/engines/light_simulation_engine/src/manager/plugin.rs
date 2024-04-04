@@ -1,9 +1,9 @@
 use fly_ruler_plugin::{AsPlugin, PluginError, PluginInfo, PluginState};
 use fly_ruler_utils::error::FrError;
-use log::{debug, warn};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use tracing::{event, Level};
 use uuid::Uuid;
 
 pub struct PluginManager<Pl: AsPlugin> {
@@ -21,14 +21,18 @@ impl<Pl: AsPlugin> PluginManager<Pl> {
             for (_idx, entry) in entries.into_iter().filter_map(|e| e.ok()).enumerate() {
                 if entry.file_type().is_ok_and(|f| f.is_dir()) {
                     let sub_dir = entry.path();
-                    debug!("found plugin directory: {}", sub_dir.display());
+                    event!(
+                        Level::DEBUG,
+                        "found plugin directory: {}",
+                        sub_dir.display()
+                    );
                     let plugin = builder(&sub_dir);
                     match plugin {
                         Ok(m) => {
                             plugins.insert(Uuid::new_v4(), m);
                         }
                         Err(e) => {
-                            warn!("not plugin directory: {}", e);
+                            event!(Level::WARN, "not plugin directory: {}", e);
                         }
                     }
                 }
@@ -98,7 +102,7 @@ pub trait AsPluginManager<Pl: AsPlugin> {
                         }
                         Ok(Err(e)) => {
                             pl.plugin_mut().set_state(PluginState::Failed);
-                            warn!("{}", e);
+                            event!(Level::WARN, "{}", e);
                             Ok(())
                         }
                         Err(e) => {
@@ -107,12 +111,12 @@ pub trait AsPluginManager<Pl: AsPlugin> {
                         }
                     }
                 } else {
-                    warn!("plugin {} already enabled", pl.info().name);
+                    event!(Level::WARN, "plugin {} already enabled", pl.info().name);
                     Ok(())
                 }
             }
             None => {
-                warn!("invalid plugin index");
+                event!(Level::WARN, "invalid plugin index");
                 Ok(())
             }
         }
@@ -130,7 +134,7 @@ pub trait AsPluginManager<Pl: AsPlugin> {
                         }
                         Ok(Err(e)) => {
                             pl.plugin_mut().set_state(PluginState::Failed);
-                            warn!("{}", e);
+                            event!(Level::WARN, "{}", e);
                             Ok(())
                         }
                         Err(e) => {
@@ -143,7 +147,7 @@ pub trait AsPluginManager<Pl: AsPlugin> {
                 }
             }
             None => {
-                warn!("model {} not found", plugin_id);
+                event!(Level::WARN, "model {} not found", plugin_id);
                 Ok(())
             }
         }

@@ -1,12 +1,21 @@
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{
+    fmt::Debug,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 use uuid::Uuid;
 
 #[pyclass]
 #[derive(Clone)]
 pub struct UuidWrapper(pub Uuid);
+
+impl Debug for UuidWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "UuidWrapper({})", self.0)
+    }
+}
 
 impl PartialEq<UuidWrapper> for UuidWrapper {
     fn eq(&self, other: &UuidWrapper) -> bool {

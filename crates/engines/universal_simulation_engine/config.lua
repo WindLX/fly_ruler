@@ -1,14 +1,24 @@
-server_addr = "127.0.0.1:2350"
+system = {
+    model_root_path = "./models",
+}
 
-model_root_path = "./models"
+log = {
+    -- target[span{field=value}]=level site:https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
+    filter = "tokio_util::codec::framed_impl=error,fly_ruler_plugin::plugin::ffi=warn,warn",
+    dir = "logs",
+    file = "app.log"
+}
 
-tick_timeout = 10000 -- ms
-read_rate = 1000
-is_block = true
+server = {
+    addr = "127.0.0.1:2350",
+    tick_timeout = 1500, -- ms
+    read_rate = 3,
+    is_block = true
+}
 
 core_init_cfg = {
     time_scale = 1.0, -- optional
-    sample_time = 100 -- ms optional
+    sample_time = 50 -- ms optional
 }
 
 model_install_args = { { "./models/f16_model/data" } }
@@ -17,7 +27,7 @@ plane_init_cfg = {
     deflection = { 0.0, 0.0, 0.0 }, -- ele(deg) ail(deg) rud(deg) | optional
 
     trim_target = {
-        altitude = 3000, -- ft
+        altitude = 5000, -- ft
         velocity = 500    -- ft/s
     },
 

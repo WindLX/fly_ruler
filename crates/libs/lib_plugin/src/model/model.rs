@@ -4,8 +4,8 @@ use super::ffi::{
 use crate::plugin::{AsPlugin, Plugin, PluginError};
 use fly_ruler_utils::error::FatalPluginError;
 use fly_ruler_utils::plane_model::{ControlLimit, MechanicalModelInput, PlaneConstants, C};
-use log::debug;
 use std::path::Path;
+use tracing::{event, instrument, span, Level};
 
 pub type AerodynamicModelTrimFn = dyn Fn(&MechanicalModelInput) -> Result<C, FatalPluginError>;
 pub type AerodynamicModelInitFn = dyn Fn(&MechanicalModelInput) -> Result<(), FatalPluginError>;
@@ -18,10 +18,13 @@ pub struct AerodynamicModel {
 
 impl AerodynamicModel {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, PluginError> {
+        let s = span!(Level::TRACE, "Model Create", path = %path.as_ref().display());
+        let _ = s.enter();
         let plugin = Plugin::new(path)?;
         Ok(AerodynamicModel { plugin })
     }
 
+    #[instrument(skip(self), level = Level::TRACE)]
     pub fn load_constants(&self) -> Result<PlaneConstants, FatalPluginError> {
         let load_constants = self
             .load_function::<FrModelLoadConstants>("frmodel_load_constants")
@@ -38,12 +41,13 @@ impl AerodynamicModel {
                 ));
             } else {
                 let constants = *constants_ptr;
-                debug!("Plane Constants:\n{}", constants);
+                event!(Level::DEBUG, "Plane Constants:\n{}", constants);
                 Ok(constants)
             }
         }
     }
 
+    #[instrument(skip(self), level = Level::TRACE)]
     pub fn load_ctrl_limits(&self) -> Result<ControlLimit, FatalPluginError> {
         let load_ctrl_limits = self
             .load_function::<FrModelLoadCtrlLimits>("frmodel_load_ctrl_limits")
@@ -60,7 +64,7 @@ impl AerodynamicModel {
                 ))
             } else {
                 let ctrl_limits = *ctrl_limits_ptr;
-                debug!("Ctrl Limits:\n{}", ctrl_limits);
+                event!(Level::DEBUG, "Ctrl Limits:\n{}", ctrl_limits);
                 Ok(ctrl_limits)
             }
         }
@@ -181,9 +185,8 @@ mod plugin_model_tests {
     use super::AerodynamicModel;
     use crate::model::step_handler_constructor;
     use crate::plugin::plugin::AsPlugin;
-    use fly_ruler_utils::logger::test_logger_init;
+    use fly_ruler_utils::logger::{debug, test_logger_init};
     use fly_ruler_utils::plane_model::{MechanicalModelInput, PlaneConstants};
-    use log::debug;
 
     #[test]
     fn test_model_info() {
