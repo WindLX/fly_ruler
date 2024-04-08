@@ -1,10 +1,11 @@
 system = {
     model_root_path = "./models",
+    controller_buffer = 10
 }
 
 log = {
     -- target[span{field=value}]=level site:https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
-    filter = "tokio_util::codec::framed_impl=error,fly_ruler_plugin::plugin::ffi=warn,warn",
+    filter = "tokio_util::codec::framed_impl=error,fly_ruler_plugin::plugin::ffi=warn,info",
     dir = "logs",
     file = "app.log"
 }
@@ -12,13 +13,15 @@ log = {
 server = {
     addr = "127.0.0.1:2350",
     tick_timeout = 1500, -- ms
-    read_rate = 3,
-    is_block = true
+    read_rate = 1,
 }
 
 core_init_cfg = {
-    time_scale = 1.0, -- optional
-    sample_time = 50 -- ms optional
+    clock_mode = {
+        Realtime = true,
+        -- time_scale = 1.0, -- optional
+        -- sample_time = 50 -- ms optional
+    },
 }
 
 model_install_args = { { "./models/f16_model/data" } }

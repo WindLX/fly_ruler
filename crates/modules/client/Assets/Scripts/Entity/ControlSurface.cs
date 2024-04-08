@@ -45,13 +45,13 @@ namespace FlyRuler.Entity
             switch (rotateAxis)
             {
                 case RotateAxis.X:
-                    currentCoroutine = Rotate(init, new Vector3(angle, 0, 0), 0.01f);
+                    currentCoroutine = Rotate(init, new Vector3(angle, 0, 0), Time.fixedDeltaTime);
                     break;
                 case RotateAxis.Y:
-                    currentCoroutine = Rotate(init, new Vector3(0, angle, 0), 0.01f);
+                    currentCoroutine = Rotate(init, new Vector3(0, angle, 0), Time.fixedDeltaTime);
                     break;
                 case RotateAxis.Z:
-                    currentCoroutine = Rotate(init, new Vector3(0, 0, angle), 0.01f);
+                    currentCoroutine = Rotate(init, new Vector3(0, 0, angle), Time.fixedDeltaTime);
                     break;
                 default: break;
             }

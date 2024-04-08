@@ -1,4 +1,4 @@
-use fly_ruler_utils::{plane_model::Control, InputSender, OutputReceiver};
+use fly_ruler_utils::{plane_model::Control, CancellationToken, InputSender, OutputReceiver};
 use mlua::prelude::*;
 use uuid::Uuid;
 
@@ -127,5 +127,29 @@ impl mlua::UserData for UuidWrapper {
                 Ok(this.inner() == other.inner())
             },
         )
+    }
+}
+
+#[derive(Clone)]
+pub struct CancellationTokenWrapper(CancellationToken);
+
+impl From<CancellationToken> for CancellationTokenWrapper {
+    fn from(value: CancellationToken) -> Self {
+        Self(value)
+    }
+}
+
+impl mlua::UserData for CancellationTokenWrapper {
+    fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("cancel", |_: &'lua mlua::Lua, this, ()| {
+            this.0.cancel();
+            Ok(())
+        });
+        methods.add_method("is_cancelled", |_: &'lua mlua::Lua, this, ()| {
+            Ok(this.0.is_cancelled())
+        });
+        methods.add_async_method("cancelled", |_: &'lua mlua::Lua, this, ()| async move {
+            Ok(this.0.cancelled().await)
+        });
     }
 }

@@ -25,6 +25,10 @@ namespace FlyRuler.Manager
                 var config = Toml.ToModel(configStr);
                 try
                 {
+                    var fixed_time = (double)((TomlTable)config["system"])["fixed_time"];
+                    Time.fixedDeltaTime = (float)fixed_time;
+                    Debug.Log(Time.fixedDeltaTime);
+
                     var preset = (string)((TomlTable)config["render"])["preset"];
                     var pipelineAsset = preset switch
                     {
@@ -36,8 +40,9 @@ namespace FlyRuler.Manager
                     };
                     GraphicsSettings.defaultRenderPipeline = pipelineAsset;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    Debug.Log(ex);
                     GraphicsSettings.defaultRenderPipeline = highfidelityRenderPipelineAsset;
                 }
             }

@@ -76,10 +76,6 @@ Initialize the core in the system.
 - `sample_time`: `Number` or `Nil`. `Option<u64>`;
 - `time_scale`: `Number` or `Nil`. `Option<f64>`.
 
-#### `async step(is_block: bool)`
-
-One step simulation.
-
 #### `stop()`
 
 Stop the system.
@@ -103,15 +99,7 @@ Get the state of the target model. return `Option<PluginState>`.
 
 `model_id`: Model id.
 
-#### `async set_controller(model_id: Userdata(UuidWrapper), plane_id: Userdata(UuidWrapper) | Nil, buffer: Number) -> Userdata(InputSenderWrapper)`
-
-Set a new controller for the target plane and get its sender.
-
-- `model_id`: Model id;
-- `plane_id`: Plane id;
-- `buffer`: Channel buffer length.
-
-#### `async push_plane(model_id: Userdata(UuidWrapper), init_cfg: Table) -> Table`
+#### `async push_plane(model_id: Userdata(UuidWrapper), controller_buffer: Number, init_cfg: Table) -> Table`
 
 Push a plane to the system and get its data receiver.
 
@@ -133,33 +121,7 @@ Push a plane to the system and get its data receiver.
     - `tol_fun`: `Number`, `f64`,
     - `tol_x`: `Number`, `f64`,
 
-Return `{ Userdata(UuidWrapper), Userdata(OutputReceiverWrapper) }`
-
-#### `async subscribe_plane(plane_id: Userdata(UuidWrapper)) -> Userdata(OutputReceiverWrapper)`
-
-Get a new data receiver to target plane.
-
-`plane_id`: Id of the model.
-
-#### `async remove_plane(plane_id: Userdata(UuidWrapper))`
-
-Remove the target plane from the system.
-
-#### `contains_plane(plane_id: Userdata(UuidWrapper)) -> Boolean`
-
-Check if the system contains the target plane.
-
-#### `async get_time() -> Number`
-
-Get current time of system.
-
-#### `async pause()`
-
-Pause the system.
-
-#### `async resume()`
-
-Resume the system.
+Return `{ Userdata(UuidWrapper), Userdata(OutputReceiverWrapper), Userdata(InputSenderWrapper), UserWrapper(CancellationToken) }`
 
 #### `clone() -> Userdata(SystemWrapper)`
 

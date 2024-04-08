@@ -5,5 +5,5 @@ pub mod parts;
 
 pub use model::{
     input_channel, matrix::Matrix, plane as plane_model, state_channel, vector::Vector,
-    InputReceiver, InputSender, OutputReceiver, OutputSender,
+    CancellationToken, Counter, InputReceiver, InputSender, OutputReceiver, OutputSender, Signal,
 };

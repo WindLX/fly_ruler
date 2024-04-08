@@ -109,6 +109,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.79"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a507401cad91ec6a857ed5513a2073c82a9b9048762b885bb98655b306964681"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -446,6 +457,7 @@ dependencies = [
 name = "fly_ruler_core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "criterion",
  "csv",
  "fly_ruler_plugin",
@@ -455,7 +467,6 @@ dependencies = [
  "serde",
  "tokio",
  "tokio-test",
- "tokio-util",
  "tracing",
  "uuid",
 ]

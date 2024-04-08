@@ -240,9 +240,10 @@ mod core_parts_tests {
     use fly_ruler_utils::logger::{debug, test_logger_init, trace};
     use fly_ruler_utils::parts::step;
     use fly_ruler_utils::plane_model::ControlLimit;
+    use std::cell::RefCell;
     use std::fs::File;
     use std::path::Path;
-    use std::sync::Arc;
+    use std::rc::Rc;
     use std::time::{Duration, Instant, SystemTime};
 
     const CL: ControlLimit = ControlLimit {
@@ -275,7 +276,7 @@ mod core_parts_tests {
             .install(&["../../../LSE/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
-        let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
+        let plane = Rc::new(RefCell::new(MechanicalModel::new(&model).unwrap()));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
@@ -288,7 +289,7 @@ mod core_parts_tests {
 
         (
             model,
-            trim(plant.clone(), trim_target, trim_init, CL, None, nm_options).unwrap(),
+            trim(plane.clone(), trim_target, trim_init, CL, None, nm_options).unwrap(),
         )
     }
 

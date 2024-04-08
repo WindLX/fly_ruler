@@ -7,11 +7,7 @@ use fly_ruler_utils::{
     Vector,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, rc::Rc};
 use tracing::{span, Level};
 
 /// alpha is radians
@@ -106,7 +102,7 @@ impl TrimOutput {
 /// Trim aircraft to desired altitude and velocity
 /// fi_flag: true means hifi model
 pub fn trim(
-    plant: Arc<Mutex<MechanicalModel>>,
+    plane: Rc<RefCell<MechanicalModel>>,
     trim_target: TrimTarget,
     trim_init: Option<TrimInit>,
     ctrl_limit: ControlLimit,
@@ -161,7 +157,7 @@ pub fn trim(
     let output_ = output.clone();
 
     let trim_func = move |x: &Vector| -> Result<f64, FatalCoreError> {
-        trim_func(x, plant.clone(), ctrl_limit, output_.clone(), &globals)
+        trim_func(x, plane.clone(), ctrl_limit, output_.clone(), &globals)
     };
 
     let res = nelder_mead(Box::new(trim_func), Vector::from(x_0), optim_options)?;
@@ -178,7 +174,7 @@ pub fn trim(
 
 fn trim_func(
     x: &Vector,
-    plane: Arc<Mutex<MechanicalModel>>,
+    plane: Rc<RefCell<MechanicalModel>>,
     ctrl_limit: ControlLimit,
     output_vec: Rc<RefCell<Vec<f64>>>,
     globals: &Vec<f64>,
@@ -257,8 +253,7 @@ fn trim_func(
     ]);
 
     let output = plane
-        .lock()
-        .unwrap()
+        .borrow_mut()
         .trim(&MechanicalModelInput::new(state, control))?;
 
     let state_dot = Vector::from(Into::<Vec<f64>>::into(output.state_dot));
@@ -286,7 +281,7 @@ mod core_trim_tests {
         logger::{debug, test_logger_init},
         plane_model::ControlLimit,
     };
-    use std::sync::Arc;
+    use std::{cell::RefCell, rc::Rc};
 
     const CL: ControlLimit = ControlLimit {
         thrust_cmd_limit_top: 19000.0,
@@ -319,7 +314,7 @@ mod core_trim_tests {
             .install(&["../../../LSE/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
-        let plant = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
+        let plane = Rc::new(RefCell::new(MechanicalModel::new(&model).unwrap()));
 
         let trim_target = TrimTarget::new(15000.0, 500.0);
         let trim_init = None;
@@ -330,7 +325,7 @@ mod core_trim_tests {
             tol_x: 1e-10,
         });
 
-        let result = trim(plant.clone(), trim_target, trim_init, CL, None, nm_options).unwrap();
+        let result = trim(plane.clone(), trim_target, trim_init, CL, None, nm_options).unwrap();
 
         let nm_result = result.nelder_mead_result;
         debug!("{:#?} {:#?}", nm_result.x, nm_result.fval);

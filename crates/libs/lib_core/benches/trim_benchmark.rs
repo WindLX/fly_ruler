@@ -8,7 +8,7 @@ use fly_ruler_core::parts::{
 };
 use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
 use fly_ruler_utils::plane_model::ControlLimit;
-use std::{sync::Arc, time::Duration};
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 const CL: ControlLimit = ControlLimit {
     thrust_cmd_limit_top: 19000.0,
@@ -29,7 +29,7 @@ const CL: ControlLimit = ControlLimit {
     beta_limit_bottom: -30.0,
 };
 
-fn tr(plane: Arc<std::sync::Mutex<MechanicalModel>>) {
+fn tr(plane: Rc<RefCell<MechanicalModel>>) {
     let trim_target = TrimTarget::new(15000.0, 500.0);
     let _result = trim(plane, trim_target, None, CL, None, None);
 }
@@ -37,12 +37,12 @@ fn tr(plane: Arc<std::sync::Mutex<MechanicalModel>>) {
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("core");
     group.measurement_time(Duration::from_secs(30));
-    let model = AerodynamicModel::new("../../../lua_system/model/f16_model");
+    let model = AerodynamicModel::new("../../../LSE/models/f16_model");
     let model = model.unwrap();
     let _res = model
         .plugin()
-        .install(&["../../../lua_system/model/f16_model/data"]);
-    let plane = Arc::new(std::sync::Mutex::new(MechanicalModel::new(&model).unwrap()));
+        .install(&["../../../LSE/models/f16_model/data"]);
+    let plane = Rc::new(RefCell::new(MechanicalModel::new(&model).unwrap()));
     group.bench_function("trim", |b| b.iter(|| tr(black_box(plane.clone()))));
     let _res = model.plugin().uninstall();
     group.finish();

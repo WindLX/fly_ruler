@@ -10,8 +10,6 @@ namespace FlyRuler.Manager
 {
     public class ControllerManager : SingletonMono<ControllerManager>
     {
-        public float updateTimeout = 4f;
-
         public Action<Control.Control> onRawControlUpdate;
         public Action<Id.Id> onSetSelf;
 

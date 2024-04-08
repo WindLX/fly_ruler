@@ -1,6 +1,6 @@
 use crate::{
     algorithm::nelder_mead::NelderMeadOptions,
-    clock::Clock,
+    clock::{AsClock, Clock, FixedClock},
     parts::{
         block::PlaneBlock,
         flight::MechanicalModel,
@@ -9,32 +9,26 @@ use crate::{
 };
 use fly_ruler_plugin::AerodynamicModel;
 use fly_ruler_utils::{
-    error::{FatalCoreError, FrError},
+    error::{FatalCoreError, FrError, FrResult},
+    input_channel,
     plane_model::{CoreOutput, FlightCondition},
-    state_channel, InputReceiver, OutputReceiver, OutputSender,
+    state_channel, CancellationToken, InputReceiver, InputSender, OutputReceiver, OutputSender,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::{sync::Mutex, task, time::timeout};
+use std::{cell::RefCell, rc::Rc, time::Duration};
+use tokio::task::JoinHandle;
 use tracing::{event, instrument, span, Level};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 pub struct CoreInitCfg {
-    pub sample_time: Option<u64>,
-    pub time_scale: Option<f64>,
+    pub clock_mode: ClockMode,
 }
 
-impl std::fmt::Display for CoreInitCfg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "Sample Time: {}",
-            self.sample_time
-                .map_or_else(|| "-1".to_string(), |s| format!("{s}"))
-        )?;
-        writeln!(f, "Time Scale: {:.1}", self.time_scale.unwrap_or(1.0))
-    }
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+pub enum ClockMode {
+    Fixed(u64, Option<f64>),
+    Realtime(bool),
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -70,53 +64,33 @@ impl std::fmt::Display for PlaneInitCfg {
 }
 
 pub struct Core {
-    // clock
-    clock: Arc<Mutex<Clock>>,
-    // planes collection
-    planes: HashMap<Uuid, (Arc<std::sync::Mutex<PlaneBlock>>, OutputSender)>,
     // controllers
-    controllers: HashMap<Uuid, InputReceiver>,
-    is_start: bool,
-    sample_time: Duration,
+    clock_mode: ClockMode,
 }
 
 impl Core {
     pub fn new(init_cfg: CoreInitCfg) -> Self {
-        let s = span!(Level::TRACE, "new", init_cfg = %init_cfg);
+        let s = span!(Level::TRACE, "new", init_cfg = ?init_cfg);
         let _enter = s.enter();
 
-        let planes = HashMap::new();
-        let clock = Clock::new(
-            init_cfg.sample_time.map(Duration::from_millis),
-            init_cfg.time_scale,
-        );
         Core {
-            planes,
-            controllers: HashMap::new(),
-            clock: Arc::new(Mutex::new(clock)),
-            is_start: false,
-            sample_time: init_cfg
-                .sample_time
-                .map(Duration::from_millis)
-                .unwrap_or(Duration::from_millis(1)),
+            clock_mode: init_cfg.clock_mode,
         }
     }
 
     /// add a new plant
-    #[instrument(skip_all, level = Level::DEBUG)]
-    pub async fn push_plane(
+    #[instrument(skip(self, model, cancellation_token, init_cfg), level = Level::DEBUG)]
+    pub fn push_plane(
         &mut self,
         model: &AerodynamicModel,
-        plane_id: Option<Uuid>,
+        controller_buffer: usize,
         init_cfg: PlaneInitCfg,
-    ) -> Result<(Uuid, OutputReceiver), FrError> {
-        self.clock.lock().await.subscribe();
-        self.clock.lock().await.pause();
-
+        cancellation_token: CancellationToken,
+    ) -> Result<(Uuid, OutputReceiver, InputSender, JoinHandle<FrResult<()>>), FrError> {
         let ctrl_limits = model
             .load_ctrl_limits()
             .map_err(|e| FrError::Core(FatalCoreError::from(e)))?;
-        let plane = Arc::new(std::sync::Mutex::new(
+        let plane = Rc::new(RefCell::new(
             MechanicalModel::new(model).map_err(|e| FrError::Core(e))?,
         ));
 
@@ -131,15 +105,13 @@ impl Core {
         .map_err(|e| FrError::Core(e))?;
         event!(Level::DEBUG, "model trim successfully");
 
-        let plane_block = Arc::new(std::sync::Mutex::new(
-            PlaneBlock::new(
-                model,
-                &trim_output,
-                &init_cfg.deflection.unwrap_or([0.0, 0.0, 0.0]),
-                ctrl_limits,
-            )
-            .map_err(|e| FrError::Core(e))?,
-        ));
+        let plane_block = PlaneBlock::new(
+            model,
+            &trim_output,
+            &init_cfg.deflection.unwrap_or([0.0, 0.0, 0.0]),
+            ctrl_limits,
+        )
+        .map_err(|e| FrError::Core(e))?;
         event!(Level::DEBUG, "model build successfully");
 
         let (tx, rx) = state_channel(&CoreOutput {
@@ -147,175 +119,94 @@ impl Core {
             control: trim_output.control,
             state_extend: trim_output.state_extend,
         });
+        let (tx1, rx1) = input_channel(controller_buffer);
 
-        let id = plane_id.unwrap_or(Uuid::new_v4());
-        self.planes.insert(id, (plane_block, tx));
-        self.clock.lock().await.resume();
+        let id = Uuid::new_v4();
+
+        let handler = match self.clock_mode {
+            ClockMode::Realtime(_) => {
+                self.build_task(id, Clock::new(), plane_block, tx, rx1, cancellation_token)
+            }
+            ClockMode::Fixed(sample_time, time_scale) => self.build_task(
+                id,
+                FixedClock::new(Duration::from_millis(sample_time), time_scale),
+                plane_block,
+                tx,
+                rx1,
+                cancellation_token,
+            ),
+        };
+
         event!(Level::DEBUG, "plane {id} append successfully");
-        Ok((id, rx))
-    }
-
-    #[instrument(skip(self), level = Level::DEBUG)]
-    pub fn subscribe_plane(&self, id: Uuid) -> Option<OutputReceiver> {
-        match self.planes.get(&id) {
-            Some((_, sender)) => {
-                event!(Level::DEBUG, "subscribe plane {id}");
-                Some(sender.subscribe())
-            }
-            None => {
-                event!(Level::WARN, "failed to find target plane: {}", id);
-                None
-            }
-        }
-    }
-
-    #[instrument(skip(self), level = Level::DEBUG)]
-    pub async fn remove_plane(&mut self, id: Uuid) {
-        self.clock.lock().await.pause();
-        self.clock.lock().await.unsubscribe();
-        match self.planes.remove(&id) {
-            Some((_, _)) => {
-                self.controllers.remove(&id);
-                event!(Level::DEBUG, "plane {id} removed successfully");
-            }
-            None => {
-                event!(Level::WARN, "failed to find target plane: {}", id);
-            }
-        }
-        self.clock.lock().await.resume();
-    }
-
-    #[instrument(skip(self, controller), level = Level::DEBUG)]
-    pub async fn set_controller(
-        &mut self,
-        id: Uuid,
-        controller: InputReceiver,
-    ) -> Option<InputReceiver> {
-        self.clock.lock().await.pause();
-        let r = self.controllers.insert(id, controller);
-        self.clock.lock().await.resume();
-        r
+        Ok((id, rx, tx1, handler))
     }
 
     /// main loop step
-    #[instrument(skip(self), level = Level::DEBUG)]
-    pub async fn step(&mut self, is_block: bool) -> Result<(), FrError> {
-        if !self.is_start {
-            self.clock.lock().await.start();
-            self.is_start = true;
-            event!(Level::INFO, "core clock start");
-        }
-        let clock = self.clock.clone();
-        for (idx, (plane, state_sender)) in self.planes.clone() {
-            let t = clock.lock().await.now().await;
-            clock.lock().await.pause();
-            let plane = plane.clone();
-
-            let controller = self.controllers.get_mut(&idx);
-            if let None = controller {
-                self.planes.remove(&idx);
-                self.clock.lock().await.unsubscribe();
-                return Err(FrError::Core(FatalCoreError::Controller(idx.to_string())));
-            };
-
-            let controller = controller.unwrap();
-            let control = if !is_block {
-                timeout(self.sample_time, controller.recv())
-                    .await
-                    .unwrap_or(Some(controller.last()))
-            } else {
-                controller.recv().await
-            };
-
-            clock.lock().await.resume();
-
-            match control {
-                Some(control) => {
-                    event!(
-                        Level::DEBUG,
-                        "[t:{:.4}] Plane {idx} received Control: {}",
-                        t.as_secs_f32(),
-                        control
-                    );
-
-                    let plane = plane.clone();
-                    let plane_task = task::spawn_blocking(move || {
-                        let result = plane.lock().unwrap().update(control, t.as_secs_f64());
-                        result
-                    });
-                    let result = plane_task.await.unwrap();
-                    // clock.lock().await.pause();
-
-                    match result {
-                        Ok(output) => {
-                            event!(
-                                Level::DEBUG,
-                                "[t:{:.4}] Plane {idx} output:\n{output}",
-                                t.as_secs_f32()
-                            );
-                            state_sender.send(&(t.as_secs_f64(), output))?;
+    #[instrument(skip(self, plane, cancellation_token, clock, state_sender, controller), level = Level::DEBUG)]
+    fn build_task(
+        &self,
+        plane_id: Uuid,
+        mut clock: impl AsClock + 'static,
+        mut plane: PlaneBlock,
+        state_sender: OutputSender,
+        mut controller: InputReceiver,
+        cancellation_token: CancellationToken,
+    ) -> JoinHandle<FrResult<()>> {
+        let handler: JoinHandle<FrResult<()>> = tokio::spawn({
+            clock.start();
+            event!(Level::INFO, "clock {plane_id} start", plane_id = plane_id);
+            async move {
+                let ctk = cancellation_token.clone();
+                let h: JoinHandle<FrResult<()>> = tokio::spawn(async move {
+                    loop {
+                        if cancellation_token.is_cancelled() {
+                            break;
                         }
-                        Err(e) => {
-                            self.planes.remove(&idx);
-                            self.clock.lock().await.unsubscribe();
-                            self.controllers.remove(&idx);
-                            return Err(FrError::Core(e));
-                        }
+                        let t = clock.now().await;
+                        let control = controller.recv().await;
+                        match control {
+                            Some(control) => {
+                                event!(
+                                    Level::DEBUG,
+                                    "[t:{:.4}] Plane {plane_id} received Control: {}",
+                                    t.as_secs_f32(),
+                                    control
+                                );
+
+                                let result = plane
+                                    .update(control, t.as_secs_f64())
+                                    .map_err(|e| FrError::Core(e))?;
+
+                                event!(
+                                    Level::DEBUG,
+                                    "[t:{:.4}] Plane {plane_id} output:\n{result}",
+                                    t.as_secs_f32()
+                                );
+
+                                state_sender.send(&(t.as_secs_f64(), result))?;
+                            }
+                            None => {
+                                return Err(FrError::Core(FatalCoreError::Controller(
+                                    plane_id.to_string(),
+                                )));
+                            }
+                        };
                     }
-                    // clock.lock().await.resume();
+                    Ok(())
+                });
+                tokio::select! {
+                    _ = ctk.cancelled() => {
+                        event!(Level::DEBUG, "clock {plane_id} cancelled", plane_id = plane_id);
+                    }
+                    _ = h => {
+                        event!(Level::DEBUG, "clock {plane_id} finished", plane_id = plane_id);
+                    }
                 }
-                None => {
-                    self.planes.remove(&idx);
-                    self.clock.lock().await.unsubscribe();
-                    self.controllers.remove(&idx);
-                    return Err(FrError::Core(FatalCoreError::Controller(idx.to_string())));
-                }
-            };
-        }
+                Ok(())
+            }
+        });
 
-        Ok(())
-    }
-
-    /// get current plane count
-    pub fn plane_count(&self) -> usize {
-        self.planes.len()
-    }
-
-    pub fn contains_plane(&self, idx: Uuid) -> bool {
-        self.planes.contains_key(&idx)
-    }
-
-    pub fn planes(&self) -> Vec<Uuid> {
-        self.planes.keys().cloned().collect()
-    }
-
-    // reset
-    #[instrument(skip(self), level = Level::DEBUG)]
-    pub async fn reset(&self, time_scale: Option<f64>, sample_time: Option<Duration>) {
-        self.clock.lock().await.reset(time_scale, sample_time);
-        let s = match sample_time {
-            Some(s) => format!("{}", s.as_millis()),
-            None => format!("-1"),
-        };
-        event!(
-            Level::DEBUG,
-            "core clock reset, time_scale: {:.1}, sample_time: {}",
-            time_scale.unwrap_or(1.0),
-            s
-        )
-    }
-
-    pub async fn pause(&self) {
-        self.clock.lock().await.pause();
-    }
-
-    pub async fn resume(&self) {
-        self.clock.lock().await.resume();
-    }
-
-    // get time
-    pub async fn get_time(&self) -> Duration {
-        self.clock.lock().await.now().await
+        handler
     }
 }
 
@@ -324,11 +215,10 @@ mod core_tests {
     use super::*;
     use fly_ruler_plugin::AsPlugin;
     use fly_ruler_utils::{
-        input_channel,
         logger::{info, test_logger_init},
         plane_model::Control,
     };
-    use tokio_util::sync::CancellationToken;
+    use tokio::task;
 
     fn test_core_init() -> (AerodynamicModel, Core, PlaneInitCfg) {
         test_logger_init();
@@ -350,8 +240,7 @@ mod core_tests {
         });
 
         let core_init = CoreInitCfg {
-            sample_time: None,
-            time_scale: None,
+            clock_mode: ClockMode::Realtime(true),
         };
 
         let plane_init = PlaneInitCfg {
@@ -369,16 +258,10 @@ mod core_tests {
     async fn test_core() {
         let (model, mut core, plane_init) = test_core_init();
 
-        let rx_1 = core.push_plane(&model, None, plane_init).await;
-        assert!(matches!(rx_1, Ok(_)));
-        let mut rx_1 = rx_1.unwrap();
-
-        let (tx, rx) = input_channel(10);
-
-        assert!(matches!(
-            core.set_controller(Uuid::new_v4(), rx).await,
-            None
-        ));
+        let ctk = CancellationToken::new();
+        let res = core.push_plane(&model, 10, plane_init, ctk.clone());
+        assert!(matches!(res, Ok(_)));
+        let (_id, mut viewer, controller, handler) = res.unwrap();
 
         let h = std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -386,27 +269,25 @@ mod core_tests {
                 .build()
                 .unwrap();
             let _h = rt.block_on(async move {
-                let tx = tx.clone();
                 let mut i = 0;
                 loop {
-                    let _ = tx.send(&Control::from([0.0, 0.0, 0.0, 0.0])).await;
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    let _ = controller.send(&Control::from([0.0, 0.0, 0.0, 0.0])).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
 
-                    let _ = rx_1.1.changed().await;
-                    let o = rx_1.1.get();
+                    let _ = viewer.changed().await;
+                    let o = viewer.get();
                     info!("Plane 0 State: \n{}", o.1);
 
                     i += 1;
                     if i == 5 {
+                        ctk.cancel();
                         break;
                     }
                 }
             });
         });
 
-        while core.plane_count() != 0 {
-            let _ = core.step(false).await;
-        }
+        let _ = handler.await;
         let _ = h.join();
 
         let res = model.plugin().uninstall();
@@ -417,29 +298,19 @@ mod core_tests {
     async fn test_core_multi() {
         let (model, mut core, plane_init) = test_core_init();
 
-        let rx_1 = core.push_plane(&model, None, plane_init).await;
-        let rx_2 = core.push_plane(&model, None, plane_init).await;
-        assert!(matches!(rx_1, Ok(_)));
-        assert!(matches!(rx_2, Ok(_)));
-        let mut rx_1 = rx_1.unwrap();
-        let mut rx_2 = rx_2.unwrap();
-
-        let (tx, rx) = input_channel(10);
-        let (ctx, crx) = input_channel(10);
-
-        assert!(matches!(
-            core.set_controller(Uuid::new_v4(), rx).await,
-            None
-        ));
-        assert!(matches!(
-            core.set_controller(Uuid::new_v4(), crx).await,
-            None
-        ));
-
-        let cancellation_token1 = Arc::new(CancellationToken::new());
-        let cancellation_token2 = Arc::new(CancellationToken::new());
+        let cancellation_token1 = CancellationToken::new();
+        let cancellation_token2 = CancellationToken::new();
         let cancellation_token11 = cancellation_token1.clone();
         let cancellation_token21 = cancellation_token2.clone();
+        let cancellation_token12 = cancellation_token1.clone();
+        let cancellation_token22 = cancellation_token2.clone();
+
+        let r1 = core.push_plane(&model, 10, plane_init, cancellation_token1);
+        let r2 = core.push_plane(&model, 10, plane_init, cancellation_token2);
+        assert!(matches!(r1, Ok(_)));
+        assert!(matches!(r2, Ok(_)));
+        let (_, viewer1, controller1, handler1) = r1.unwrap();
+        let (_, viewer2, controller2, handler2) = r2.unwrap();
 
         let h1 = std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -448,13 +319,20 @@ mod core_tests {
                 .unwrap();
             let _r_h1 = rt.block_on(async move {
                 loop {
-                    if cancellation_token1.is_cancelled() {
+                    if cancellation_token11.is_cancelled() {
                         break;
                     }
-
-                    let _ = rx_1.1.changed().await;
-                    let o = rx_1.1.get();
+                    let o = viewer1.get();
                     info!("Plane 0 State: \n{}", o.1);
+                }
+            });
+            let _r_h2 = rt.block_on(async move {
+                loop {
+                    if cancellation_token21.is_cancelled() {
+                        break;
+                    }
+                    let o = viewer2.get();
+                    info!("Plane 1 State: \n{}", o.1);
                 }
             });
         });
@@ -464,55 +342,38 @@ mod core_tests {
                 .enable_all()
                 .build()
                 .unwrap();
-            let _r_h2 = rt.block_on(async move {
-                loop {
-                    if cancellation_token2.is_cancelled() {
-                        break;
-                    }
-                    let _ = rx_2.1.changed().await;
-                    let o = rx_2.1.get();
-                    info!("Plane 1 State: \n{}", o.1);
-                }
-            });
-        });
-
-        let h = std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
 
             let guard = rt.enter();
             let task_1 = task::spawn(async move {
-                let tx = tx.clone();
-
                 let mut i = 0;
 
                 loop {
-                    let _ = tx.send(&Control::from([3000.0, 0.0, 0.0, 0.0])).await;
+                    let _ = controller1
+                        .send(&Control::from([3000.0, 0.0, 0.0, 0.0]))
+                        .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
 
                     i += 1;
                     if i == 3 {
-                        cancellation_token11.cancel();
+                        cancellation_token12.cancel();
                         break;
                     }
                 }
             });
 
             let task_2 = task::spawn(async move {
-                let ctx = ctx.clone();
-
                 let mut i = 0;
 
                 loop {
-                    let _ = ctx.send(&Control::from([6000.0, 0.0, 0.0, 0.0])).await;
+                    let _ = controller2
+                        .send(&Control::from([6000.0, 0.0, 0.0, 0.0]))
+                        .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
 
                     i += 1;
 
                     if i == 10 {
-                        cancellation_token21.cancel();
+                        cancellation_token22.cancel();
                         break;
                     }
                 }
@@ -526,12 +387,10 @@ mod core_tests {
             drop(guard);
         });
 
-        while core.plane_count() != 0 {
-            let _ = core.step(false).await;
-        }
-        let _ = h.join();
-        h1.join().unwrap();
-        h2.join().unwrap();
+        let _ = h1.join();
+        let _ = h2.join();
+        let _ = handler1.await;
+        let _ = handler2.await;
 
         let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));

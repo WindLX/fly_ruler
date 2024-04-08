@@ -1,101 +1,63 @@
-use tokio::time::{sleep, Duration, Instant};
+use tokio::time::{Duration, Instant};
+
+#[async_trait::async_trait]
+pub trait AsClock
+where
+    Self: Send,
+{
+    fn start(&mut self);
+    async fn now(&mut self) -> Duration;
+    fn pause(&mut self);
+    fn resume(&mut self);
+}
 
 pub struct Clock {
     actual_start_time: Instant,
     pause_time: Instant,
     last_call: Instant,
     is_pause: bool,
-    time_scale: f64,
-    sample_time: Option<Duration>,
-    listener_count: usize,
-    listener_get_count: usize,
     now_virtual_time: Duration,
 }
 
 impl Clock {
-    pub fn new(sample_time: Option<Duration>, time_scale: Option<f64>) -> Self {
+    pub fn new() -> Self {
         let actual_start_time = Instant::now();
         Self {
             actual_start_time,
             pause_time: actual_start_time,
             last_call: actual_start_time,
             is_pause: false,
-            time_scale: time_scale.unwrap_or(1.0),
-            sample_time,
-            listener_count: 0,
-            listener_get_count: 0,
             now_virtual_time: Duration::from_secs(0),
         }
     }
+}
 
+#[async_trait::async_trait]
+impl AsClock for Clock {
     /// start clock
-    pub fn start(&mut self) {
+    fn start(&mut self) {
         self.actual_start_time = Instant::now();
         self.pause_time = self.actual_start_time;
         self.last_call = self.actual_start_time;
         self.is_pause = false;
         self.now_virtual_time = Duration::from_secs(0);
-    }
-
-    /// reset clock
-    pub fn reset(&mut self, time_scale: Option<f64>, sample_time: Option<Duration>) {
-        self.actual_start_time = Instant::now();
-        self.pause_time = self.actual_start_time;
-        self.last_call = self.actual_start_time;
-        self.is_pause = false;
-        self.time_scale = time_scale.unwrap_or(1.0);
-        self.sample_time = sample_time;
-        self.now_virtual_time = Duration::from_secs(0);
-    }
-
-    pub fn subscribe(&mut self) {
-        self.listener_count += 1;
-    }
-
-    pub fn unsubscribe(&mut self) {
-        self.listener_count -= 1;
     }
 
     /// virtual current time
-    pub async fn now(&mut self) -> Duration {
-        if self.listener_count <= self.listener_get_count {
-            self.listener_get_count = 0;
-        }
-        self.listener_get_count += 1;
+    async fn now(&mut self) -> Duration {
         if self.is_pause {
-            return (self.pause_time - self.actual_start_time).mul_f64(self.time_scale);
+            return self.pause_time - self.actual_start_time;
         }
-        if self.listener_get_count == 1 {
-            let time_scale = self.time_scale;
-            let now = Instant::now();
-            let virtual_delta_time = (now - self.actual_start_time).mul_f64(self.time_scale);
+        let now = Instant::now();
+        let virtual_delta_time = now - self.actual_start_time;
 
-            if let Some(sample_time) = self.sample_time {
-                let time_since_last_call = now - self.last_call;
-                if time_since_last_call < sample_time {
-                    let remaining_time = sample_time - time_since_last_call;
-                    let remaining_time_f64 = remaining_time.as_secs_f64();
-
-                    sleep(Duration::from_secs_f64(remaining_time_f64)).await;
-                    let now = Instant::now();
-                    let delta_time = now - self.actual_start_time;
-                    self.last_call = now;
-                    let v = delta_time.mul_f64(time_scale);
-                    self.now_virtual_time = v;
-                    return v;
-                }
-            }
-
-            self.last_call = now;
-            self.now_virtual_time = virtual_delta_time;
-            return virtual_delta_time;
-        } else {
-            return self.now_virtual_time;
-        }
+        self.last_call = now;
+        self.now_virtual_time = virtual_delta_time;
+        return virtual_delta_time;
     }
 
     // pause
-    pub fn pause(&mut self) {
+    fn pause(&mut self) {
         if !self.is_pause {
             self.pause_time = Instant::now();
             self.is_pause = true;
@@ -103,7 +65,7 @@ impl Clock {
     }
 
     // resume
-    pub fn resume(&mut self) {
+    fn resume(&mut self) {
         if self.is_pause {
             let pause_duration = Instant::now() - self.pause_time;
             self.actual_start_time += pause_duration;
@@ -116,15 +78,69 @@ impl Clock {
 
 unsafe impl Send for Clock {}
 
+pub struct FixedClock {
+    actual_start_time: Instant,
+    last_call: Instant,
+    is_pause: bool,
+    time_scale: f64,
+    sample_time: Duration,
+}
+
+impl FixedClock {
+    pub fn new(sample_time: Duration, time_scale: Option<f64>) -> Self {
+        let actual_start_time = Instant::now();
+        Self {
+            actual_start_time,
+            last_call: actual_start_time,
+            is_pause: false,
+            time_scale: time_scale.unwrap_or(1.0),
+            sample_time,
+        }
+    }
+}
+
+unsafe impl Send for FixedClock {}
+
+#[async_trait::async_trait]
+impl AsClock for FixedClock {
+    /// start clock
+    fn start(&mut self) {
+        self.actual_start_time = Instant::now();
+        self.last_call = self.actual_start_time;
+        self.is_pause = false;
+    }
+
+    /// virtual current time
+    async fn now(&mut self) -> Duration {
+        if !self.is_pause {
+            self.last_call += self.sample_time;
+        }
+        return (self.last_call - self.actual_start_time).mul_f64(self.time_scale);
+    }
+
+    // pause
+    fn pause(&mut self) {
+        if !self.is_pause {
+            self.is_pause = true;
+        }
+    }
+
+    // resume
+    fn resume(&mut self) {
+        if self.is_pause {
+            self.is_pause = false;
+        }
+    }
+}
+
 #[cfg(test)]
 mod core_clock_tests {
-    use super::Clock;
+    use super::*;
     use tokio::time::Duration;
 
     #[tokio::test]
     async fn test_now() {
-        let mut clock = Clock::new(Some(Duration::from_millis(1000)), None);
-        clock.subscribe();
+        let mut clock = FixedClock::new(Duration::from_millis(1000), None);
         clock.start();
         let r = clock.now().await;
         assert!(r.as_millis() - 1000 < 100);
@@ -134,8 +150,7 @@ mod core_clock_tests {
 
     #[tokio::test]
     async fn test_pause() {
-        let mut clock = Clock::new(None, None);
-        clock.subscribe();
+        let mut clock = FixedClock::new(Duration::from_millis(1000), None);
         clock.start();
         clock.pause();
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -149,24 +164,10 @@ mod core_clock_tests {
 
     #[tokio::test]
     async fn test_scale() {
-        let mut clock = Clock::new(None, Some(5.0));
-        clock.subscribe();
+        let mut clock = FixedClock::new(Duration::from_millis(1000), None);
         clock.start();
         tokio::time::sleep(Duration::from_secs(1)).await;
         let r = clock.now().await;
         assert_eq!(r.as_secs(), 5)
-    }
-
-    #[tokio::test]
-    async fn test_listener() {
-        let mut clock = Clock::new(Some(Duration::from_millis(1000)), None);
-        clock.subscribe();
-        clock.subscribe();
-        clock.start();
-        let r = clock.now().await;
-        let r_2 = clock.now().await;
-        let r_3 = clock.now().await;
-        assert_eq!(r.as_secs(), r_2.as_secs());
-        assert!(r_3.as_millis() - r.as_millis() < 1100);
     }
 }

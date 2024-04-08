@@ -265,39 +265,48 @@ namespace FlyRuler.Service
                 }
                 try
                 {
-                    var serviceCallResponse = await ReadServiceCallResponseAsync(stream, cts.Token);
-                    if (serviceCallResponse != null)
+                    while (true)
                     {
-                        if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.GetModelInfos)
+                        var serviceCallResponse = await ReadServiceCallResponseAsync(stream, cts.Token);
+                        if (serviceCallResponse != null)
                         {
-                            await getModelInfosChannel.WriteAsync(serviceCallResponse.GetModelInfos, cts.Token);
+                            if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.GetModelInfos)
+                            {
+                                await getModelInfosChannel.WriteAsync(serviceCallResponse.GetModelInfos, cts.Token);
+                            }
+                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.PushPlane)
+                            {
+                                await pushPlaneChannel.WriteAsync(serviceCallResponse.PushPlane, cts.Token);
+                            }
+                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Output)
+                            {
+                                onPlaneMessageUpdate?.Invoke(serviceCallResponse.Output);
+                            }
+                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Error)
+                            {
+                                Logger.Instance.Log(serviceCallResponse.Error);
+                            }
+                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.LostPlane)
+                            {
+                                onLostPlane?.Invoke(serviceCallResponse.LostPlane);
+                            }
+                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.NewPlane)
+                            {
+                                onNewPlane?.Invoke(serviceCallResponse.NewPlane);
+                            }
                         }
-                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.PushPlane)
+                        else
                         {
-                            await pushPlaneChannel.WriteAsync(serviceCallResponse.PushPlane, cts.Token);
-                        }
-                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Output)
-                        {
-                            onPlaneMessageUpdate?.Invoke(serviceCallResponse.Output);
-                        }
-                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Error)
-                        {
-                            Logger.Instance.Log(serviceCallResponse.Error);
-                        }
-                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.LostPlane)
-                        {
-                            onLostPlane?.Invoke(serviceCallResponse.LostPlane);
-                        }
-                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.NewPlane)
-                        {
-                            onNewPlane?.Invoke(serviceCallResponse.NewPlane);
+                            break;
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Debug.Log(ex);
+                    client.GetStream().Close();
                     client.Close();
+                    client.Dispose();
+                    client = null;
                     break;
                 }
                 await UniTask.Yield();
@@ -320,8 +329,10 @@ namespace FlyRuler.Service
                 }
                 catch (Exception ex)
                 {
-                    Debug.Log(ex);
+                    client.GetStream().Close();
                     client.Close();
+                    client.Dispose();
+                    client = null;
                     break;
                 }
                 await UniTask.Yield();
@@ -337,7 +348,6 @@ namespace FlyRuler.Service
             };
 
             await channel.WriteAsync(SeriveCallToBytes(serviceCall), cts.Token);
-
             var res = await getModelInfosChannel.ReadAsync(cancellationToken: cts.Token);
             var models = res.ModelInfos;
             return models.ToList();

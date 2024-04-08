@@ -1,14 +1,11 @@
-use crate::{
-    system::System,
-    utils::{CancellationToken, Signal},
-};
+use crate::system::System;
 use anyhow::{anyhow, Result};
 use fly_ruler_codec::{
     Args, GetModelInfosResponse, PlaneMessage, PluginInfoTuple, PushPlaneResponse, RequestFrame,
     Response, ResponseFrame, ServiceCallResponse,
 };
 use fly_ruler_core::core::PlaneInitCfg;
-use fly_ruler_utils::{InputSender, OutputReceiver};
+use fly_ruler_utils::{CancellationToken, InputSender, OutputReceiver, Signal};
 use futures_util::{SinkExt, StreamExt};
 use std::{collections::HashMap, net::SocketAddr, ops::Deref, sync::Arc, time::Duration};
 use tokio::{
@@ -22,38 +19,14 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{event, instrument, Level};
 use uuid::Uuid;
 
-pub async fn system_step_handler(
-    system: Arc<Mutex<System>>,
-    is_block: bool,
-    run_signal: Signal,
-    cancellation_token: CancellationToken,
-) -> Result<()> {
-    loop {
-        if cancellation_token.is_cancelled() {
-            break Ok(());
-        }
-        let c = system.lock().await.plane_count()?;
-        if c >= 1 && run_signal.available() {
-            let r = system.lock().await.step(is_block).await?;
-            if let Err(e) = r {
-                event!(Level::WARN, "System step: {}", e);
-            }
-            event!(Level::TRACE, "System step one");
-        } else {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        tokio::task::yield_now().await;
-    }
-}
-
-#[instrument(skip(system, run_signal, cancellation_token, init_cfg),level = Level::INFO)]
+#[instrument(skip(system, cancellation_token, init_cfg),level = Level::INFO)]
 pub async fn server_handler(
     server_addr: &str,
     tick_timeout: u64,
     read_rate: u64,
     init_cfg: PlaneInitCfg,
     system: Arc<Mutex<System>>,
-    run_signal: Signal,
+    controller_buffer: usize,
     cancellation_token: CancellationToken,
 ) {
     let listener = TcpListener::bind(server_addr).await.unwrap();
@@ -77,6 +50,7 @@ pub async fn server_handler(
         let (private_channel_sender, private_channel_receiver) =
             mpsc::channel::<ServiceCallResponse>(1024);
         let tick_notify = Arc::new(Notify::new());
+        let run_signal = Signal::new();
 
         let _rpc_task = tokio::spawn({
             let controller1 = controllers.clone();
@@ -87,8 +61,8 @@ pub async fn server_handler(
             let system1 = system.clone();
             let broadcast_channel_sender1 = broadcast_channel_sender.clone();
             let broadcast_channel_sender2 = broadcast_channel_sender.clone();
-            let run_signal1 = run_signal.clone();
             let tick_notify1 = tick_notify.clone();
+            let run_signal1 = run_signal.clone();
             async move {
                 let r = rpc_handler(
                     client_addr,
@@ -97,6 +71,7 @@ pub async fn server_handler(
                     reader,
                     system1,
                     init_cfg,
+                    controller_buffer,
                     broadcast_channel_sender1,
                     private_channel_sender,
                     controller1,
@@ -173,8 +148,8 @@ pub async fn server_handler(
                 let r = tick_handler(
                     client_addr,
                     tick_timeout,
-                    tick_notify1,
                     run_signal1,
+                    tick_notify1,
                     gct1,
                     grct1,
                 )
@@ -295,6 +270,7 @@ async fn rpc_handler(
     mut client_reader: FramedRead<OwnedReadHalf, RequestFrame>,
     system: Arc<Mutex<System>>,
     init_cfg: PlaneInitCfg,
+    controller_buffer: usize,
     broadcast_channel_sender: broadcast::Sender<ServiceCallResponse>,
     private_channel_sender: mpsc::Sender<ServiceCallResponse>,
     controllers: Arc<Mutex<HashMap<String, InputSender>>>,
@@ -359,17 +335,14 @@ async fn rpc_handler(
                                     continue;
                                 }
                             };
-                            let r = system
-                                .lock()
-                                .await
-                                .push_plane(
+                            let (id, viewer, controller, _handler) =
+                                system.lock().await.push_plane(
                                     Uuid::parse_str(&args.model_id)?,
-                                    None,
+                                    controller_buffer,
                                     args.plane_init_cfg.map_or_else(|| init_cfg, |c| c.into()),
-                                )
-                                .await?;
-                            let id = r.0;
-                            let controller = system.lock().await.set_controller(id, 30).await?;
+                                    group_cancellation_token.clone(),
+                                )?;
+
                             controllers.lock().await.insert(id.to_string(), controller);
 
                             tokio::task::spawn({
@@ -381,9 +354,9 @@ async fn rpc_handler(
                                 let controllers = controllers.clone();
                                 async move {
                                     let rr = viewer_handler(
-                                        r.0,
+                                        id,
                                         broadcast_channel_sender1,
-                                        r.1.clone(),
+                                        viewer.clone(),
                                         gct1,
                                         grct1,
                                     )
@@ -398,7 +371,7 @@ async fn rpc_handler(
                                         );
                                         let response = ServiceCallResponse {
                                             name: "LostPlane".to_string(),
-                                            response: Some(Response::LostPlane(r.0.to_string())),
+                                            response: Some(Response::LostPlane(id.to_string())),
                                         };
                                         controllers.lock().await.remove(&id.to_string());
                                         let _ = broadcast_channel_sender2.send(response);
@@ -409,14 +382,15 @@ async fn rpc_handler(
                             let response = ServiceCallResponse {
                                 name: "PushPlane".to_string(),
                                 response: Some(Response::PushPlane(PushPlaneResponse {
-                                    plane_id: r.0.to_string(),
+                                    plane_id: id.to_string(),
                                 })),
                             };
                             private_channel_sender.send(response).await?;
+                            tokio::time::sleep(Duration::from_millis(10)).await;
 
                             let response = ServiceCallResponse {
                                 name: "NewPlane".to_string(),
-                                response: Some(Response::NewPlane(r.0.to_string())),
+                                response: Some(Response::NewPlane(id.to_string())),
                             };
                             broadcast_channel_sender.send(response)?;
 
@@ -484,8 +458,8 @@ async fn rpc_handler(
 async fn tick_handler(
     ip: SocketAddr,
     tick_timeout: u64,
-    tick_notify: Arc<Notify>,
     run_signal: Signal,
+    tick_notify: Arc<Notify>,
     global_cancellation_token: CancellationToken,
     group_cancellation_token: CancellationToken,
 ) -> Result<()> {

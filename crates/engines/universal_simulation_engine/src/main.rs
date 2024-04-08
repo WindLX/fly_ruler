@@ -1,4 +1,5 @@
 use clap::Parser;
+use fly_ruler_utils::CancellationToken;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -9,11 +10,7 @@ use tracing_subscriber::{
     filter::EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, Registry,
 };
 use universal_simulation_engine::{
-    args::Args,
-    handler::{server_handler, system_step_handler},
-    lua::LuaManager,
-    system::System,
-    utils::{CancellationToken, Signal},
+    args::Args, handler::server_handler, lua::LuaManager, system::System,
 };
 use uuid::Uuid;
 
@@ -25,8 +22,8 @@ fn main() {
     let server_addr = lua.server_addr();
     let tick_timeout = lua.tick_timeout();
     let read_rate = lua.read_rate();
-    let is_block = lua.is_block();
     let model_root_path = lua.model_root_path();
+    let controller_buffer = lua.controller_buffer();
     let core_init_cfg = lua.core_init_cfg();
     let model_install_args = lua.model_install_args();
     let plane_init_cfg = lua.plane_init_cfg();
@@ -59,42 +56,52 @@ fn main() {
         system.set_dir(model_root_path);
         system.init(core_init_cfg);
 
-        let keys: Vec<Uuid> = system.get_models().map_or_else(|e|{
-            event!(Level::ERROR,"{}",e);
-            std::process::exit(1);
-        }, |f|f).keys().cloned().collect();
-        let models = system.get_models().map_or_else(|e|{
-            event!(Level::ERROR,"{}",e);
-            std::process::exit(1);
-        }, |f|f);
+        let keys: Vec<Uuid> = system
+            .get_models()
+            .map_or_else(
+                |e| {
+                    event!(Level::ERROR, "{}", e);
+                    std::process::exit(1);
+                },
+                |f| f,
+            )
+            .keys()
+            .cloned()
+            .collect();
+        let models = system.get_models().map_or_else(
+            |e| {
+                event!(Level::ERROR, "{}", e);
+                std::process::exit(1);
+            },
+            |f| f,
+        );
         for (index, k) in keys.iter().enumerate() {
-            event!(Level::INFO,
+            event!(
+                Level::INFO,
                 "Id: {}, Model: {}",
                 k.to_string(),
                 models.get(k).unwrap().0.name,
             );
-            if let Err(e) = system.enable_model(*k, &model_install_args[index]){
-                event!(Level::ERROR,"{}",e);
+            if let Err(e) = system.enable_model(*k, &model_install_args[index]) {
+                event!(Level::ERROR, "{}", e);
                 std::process::exit(1);
             }
         }
 
         let system = Arc::new(Mutex::new(system));
-        let run_signal = Signal::new();
         let global_cancellation_token = CancellationToken::new();
-        let gct = global_cancellation_token.clone();
 
-        tokio::select! {
-            Err(e) = system_step_handler(system.clone(), is_block, run_signal.clone(), global_cancellation_token.clone()) => {
-                gct.cancel();
-                event!(Level::ERROR,"{}", e);
-            },
-            _ = server_handler(&server_addr, tick_timeout, read_rate, plane_init_cfg, system.clone(), run_signal, global_cancellation_token) =>{
-                gct.cancel();
-                event!(Level::ERROR,"Server task finished");
-            }
-        }
+        server_handler(
+            &server_addr,
+            tick_timeout,
+            read_rate,
+            plane_init_cfg,
+            system.clone(),
+            controller_buffer,
+            global_cancellation_token,
+        )
+        .await;
 
-        system.lock().await.err_stop();
+        system.lock().await.stop();
     });
 }

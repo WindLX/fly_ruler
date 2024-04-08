@@ -21,8 +21,8 @@ namespace FlyRuler.Entity
                     (float)value.Altitude / 3.048f,
                     (float)value.Npos / 3.048f);
 
-                StartCoroutine(Move(transform.position, newPos, 0.012f));
-                StartCoroutine(Rotate(transform.rotation, rotation, 0.012f));
+                StartCoroutine(Move(transform.position, newPos, Time.fixedDeltaTime));
+                StartCoroutine(Rotate(transform.rotation, rotation, Time.fixedDeltaTime));
                 lastUpdate = 0.0f;
             }
         }

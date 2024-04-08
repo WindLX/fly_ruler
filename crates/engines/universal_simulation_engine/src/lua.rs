@@ -83,11 +83,6 @@ impl LuaManager {
         read_rate
     }
 
-    pub fn is_block(&self) -> bool {
-        let is_block: bool = self.load_table_data("server", "is_block");
-        is_block
-    }
-
     pub fn core_init_cfg(&self) -> CoreInitCfg {
         let cfg: CoreInitCfg = self.load_ser_data("core_init_cfg");
         cfg
@@ -96,6 +91,11 @@ impl LuaManager {
     pub fn model_root_path(&self) -> String {
         let model_root_path: String = self.load_table_data("system", "model_root_path");
         model_root_path
+    }
+
+    pub fn controller_buffer(&self) -> usize {
+        let controller_buffer: usize = self.load_table_data("system", "controller_buffer");
+        controller_buffer
     }
 
     pub fn model_install_args(&self) -> Vec<Vec<String>> {
