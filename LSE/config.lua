@@ -1,7 +1,7 @@
 module = {
     logger_init_cfg = {
         -- target[span{field=value}]=level site:https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
-        filter = "trace",
+        filter = "tokio_util::codec::framed_impl=error,fly_ruler_plugin::plugin::ffi=warn,info",
         -- dir = "logs",
         -- file = "app.log"
     },
@@ -9,8 +9,11 @@ module = {
     model_dir = "./models",
 
     system_init_cfg = {
-        time_scale = 1.0, -- optional
-        sample_time = 10 -- ms optional
+        clock_mode = {
+            Realtime = true,
+            -- time_scale = 1.0, -- optional
+            -- sample_time = 50 -- ms optional
+        },
     },
 
     F16_install_args = { "./models/f16_model/data" },
@@ -20,7 +23,9 @@ module = {
 
         trim_target = {
             altitude = 15000, -- ft
-            velocity = 500    -- ft/s
+            velocity = 500,    -- ft/s
+            npos = 0.0,
+            epos = 0.0,
         },
 
         -- optional

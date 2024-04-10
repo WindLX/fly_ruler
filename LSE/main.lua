@@ -30,27 +30,11 @@ end
 
 local init_control = Control:new(config.plane_init_cfg.trim_init.control)
 
-local id, viewer = table.unpack(system:push_plane(keys[1], nil, config.plane_init_cfg))
-local controller = system:set_controller(id, 10)
+local id, viewer, controller, ctk = table.unpack(system:push_plane(keys[1], 10, config.plane_init_cfg))
 
 local time = 0
 local exit_flag = false
 local count = 0
-
-local system_thread = coroutine.create(function()
-    local sys = system:clone()
-    while not exit_flag do
-        xpcall(function()
-            count =  count + 1
-            Linfo(string.format("Step times %d", count))
-            local r = sys:step()
-            if type(r) == "string" then
-                Lwarn(r)
-            end
-        end, print)
-        coroutine.yield()
-    end
-end)
 
 local viewer_thread = coroutine.create(function()
     while not exit_flag do
@@ -58,8 +42,9 @@ local viewer_thread = coroutine.create(function()
             local output = viewer:get_and_update()
             time = output.time
             Linfo(time)
-            if time >= 10 then
+            if time >= 2 then
                 exit_flag = true
+                ctk.cancel()
             end
         end
         coroutine.yield()
@@ -70,12 +55,12 @@ local controller_thread = coroutine.create(function()
     while not exit_flag do
         local last_control = init_control
         xpcall(function() controller:send(last_control) end, print)
+        LSE.sleep(10)
         coroutine.yield()
     end
 end)
 
 while not exit_flag do
-    coroutine.resume(system_thread, system)
     coroutine.resume(viewer_thread)
     coroutine.resume(controller_thread)
 end

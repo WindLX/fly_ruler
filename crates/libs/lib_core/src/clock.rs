@@ -1,12 +1,11 @@
 use tokio::time::{Duration, Instant};
 
-#[async_trait::async_trait]
 pub trait AsClock
 where
     Self: Send,
 {
     fn start(&mut self);
-    async fn now(&mut self) -> Duration;
+    fn now(&mut self) -> Duration;
     fn pause(&mut self);
     fn resume(&mut self);
 }
@@ -32,7 +31,6 @@ impl Clock {
     }
 }
 
-#[async_trait::async_trait]
 impl AsClock for Clock {
     /// start clock
     fn start(&mut self) {
@@ -44,7 +42,7 @@ impl AsClock for Clock {
     }
 
     /// virtual current time
-    async fn now(&mut self) -> Duration {
+    fn now(&mut self) -> Duration {
         if self.is_pause {
             return self.pause_time - self.actual_start_time;
         }
@@ -101,7 +99,6 @@ impl FixedClock {
 
 unsafe impl Send for FixedClock {}
 
-#[async_trait::async_trait]
 impl AsClock for FixedClock {
     /// start clock
     fn start(&mut self) {
@@ -111,7 +108,7 @@ impl AsClock for FixedClock {
     }
 
     /// virtual current time
-    async fn now(&mut self) -> Duration {
+    fn now(&mut self) -> Duration {
         if !self.is_pause {
             self.last_call += self.sample_time;
         }
@@ -142,9 +139,9 @@ mod core_clock_tests {
     async fn test_now() {
         let mut clock = FixedClock::new(Duration::from_millis(1000), None);
         clock.start();
-        let r = clock.now().await;
+        let r = clock.now();
         assert!(r.as_millis() - 1000 < 100);
-        let r = clock.now().await;
+        let r = clock.now();
         assert!(r.as_millis() - 2000 < 100);
     }
 
@@ -155,10 +152,10 @@ mod core_clock_tests {
         clock.pause();
         tokio::time::sleep(Duration::from_secs(1)).await;
         clock.resume();
-        let r = clock.now().await;
+        let r = clock.now();
         assert_eq!(r.as_secs(), 0);
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let r = clock.now().await;
+        let r = clock.now();
         assert_eq!(r.as_secs(), 1)
     }
 
@@ -167,7 +164,7 @@ mod core_clock_tests {
         let mut clock = FixedClock::new(Duration::from_millis(1000), None);
         clock.start();
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let r = clock.now().await;
+        let r = clock.now();
         assert_eq!(r.as_secs(), 5)
     }
 }

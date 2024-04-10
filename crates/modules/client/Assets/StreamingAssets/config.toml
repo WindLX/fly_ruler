@@ -6,4 +6,4 @@ port = 2350
 preset = "Highfidelity" # "Performant" "Balanced" "Highfidelity" "Ultra"
 
 [system]
-fixed_time = 0.03
+fixed_time = 0.02

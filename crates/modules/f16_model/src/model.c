@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include "hashmap.h"
 #include "utils.h"
 #include "lofi_F16_AeroData.h"
 #include "hifi_F16_AeroData.h"
@@ -30,10 +31,7 @@ static PlantConstants consts = {
     .j_z = 63100.0,
     .j_x = 9496.0};
 
-static LeadingEdgeFlapBlock lef_block = {
-    .feedback = 0.0,
-    .lef_actuator = NULL,
-    .integrator = NULL};
+static HashMap *LEFMap = NULL;
 
 static int fi_flag = 1;
 Logger frplugin_log = NULL;
@@ -101,6 +99,8 @@ int frplugin_install_hook(int argc, char **argv)
 
    r = init_axis_data();
 
+   LEFMap = create_hashmap(1);
+
    return r;
 }
 
@@ -112,8 +112,7 @@ int frplugin_uninstall_hook(int argc, char **argv)
    free_axis_data();
    trace("free axis data successfully");
 
-   LeadingEdgeFlapBlock *ptr = &lef_block;
-   lef_drop(ptr);
+   free_hashmap(LEFMap);
 
    return 0;
 }
@@ -461,37 +460,66 @@ int frmodel_trim(
 }
 
 int frmodel_init(
-    const State *state, const Control *control)
+    const char *id, const State *state, const Control *control)
 {
-   trace("f16 init start");
+   trace("f16 %s init start", id);
    int r = 0;
 
-   LeadingEdgeFlapBlock *lef_block_ptr = &lef_block;
+   LeadingEdgeFlapBlock *lef_block_ptr = malloc(sizeof(LeadingEdgeFlapBlock));
    lef_new(lef_block_ptr, state);
+   hashmap_insert(LEFMap, id, lef_block_ptr);
 
-   trace("f16 init finished");
+   trace("f16 %s init finished", id);
    return r;
 }
 
 int frmodel_step(
-    const State *state, const Control *control, double t,
+    const char *id, const State *state, const Control *control, double t,
     C *c)
 {
    trace("[t: %f] f16 step start", t);
 
    int r = 0;
    double lef = 0.0;
-   LeadingEdgeFlapBlock *lef_block_ptr = &lef_block;
+   LeadingEdgeFlapBlock *lef_block_ptr = hashmap_get(LEFMap, id);
+   if (lef_block_ptr == NULL)
+   {
+      error_("[t: %f] f16 %s step failed to get lef", t, id);
+      return -1;
+   }
 
    r = lef_update(lef_block_ptr, state, t, &lef);
    if (r < 0)
    {
-      error_("[t: %f] f16 step failed to update lef", t);
+      error_("[t: %f] f16 %s step failed to update lef", t, id);
       return r;
    }
 
    r = frmodel_step_helper(state, control, lef, c);
 
-   trace("[t: %f] f16 step finished", t);
+   trace("[t: %f] f16 %s step finished", t, id);
+   return r;
+}
+
+int frmodel_delete(
+    const char *id)
+{
+   trace("f16 %s delete start", id);
+   int r = 0;
+
+   LeadingEdgeFlapBlock *lef_block_ptr = hashmap_remove(LEFMap, id);
+
+   if (lef_block_ptr != NULL)
+   {
+      lef_drop(lef_block_ptr);
+      free(lef_block_ptr);
+   }
+   else
+   {
+      error_("failed to find lef %s", id);
+      return -1;
+   }
+
+   trace("f16 %s delete finished", id);
    return r;
 }

@@ -100,7 +100,7 @@ int lef_update(LeadingEdgeFlapBlock *lef, const State *state, double t, double *
   double r_1 = atmos.qbar / atmos.ps * 9.05;
   double alpha = state->alpha * r2d();
   double r_2 = (alpha - lef->feedback) * 7.25;
-  double r_3 = 0;
+  double r_3 = 0.0;
   r = frplugin_integrator_update(lef->integrator, r_2, t, &r_3);
 
   if (r < 0)
@@ -114,6 +114,7 @@ int lef_update(LeadingEdgeFlapBlock *lef, const State *state, double t, double *
   double r_5 = r_4 * 1.38;
   double r_6 = 0.0;
   r = frplugin_actuator_update(lef->lef_actuator, (1.45 + r_5 - r_1), t, &r_6);
+
   if (r < 0)
   {
     debug("[t: %f] LEFBlock: actuator error", t);

@@ -92,20 +92,28 @@ int frmodel_trim(
     C *c);
 
 /// @brief init model, it will be called when create a new model
+/// @param id       model id
 /// @param state    the state vector of current model
 /// @param control  the control vector
 /// @return <0 represent occur some err
 int frmodel_init(
-    const State *state, const Control *control);
+    const char *id, const State *state, const Control *control);
 
 /// @brief get the air data coeff of the plant
+/// @param id       model id
 /// @param state    the state vector of current model
 /// @param control  the control vector
 /// @param t        time
 /// @param c        the air data under this condition
 /// @return <0 represent occur some err
 int frmodel_step(
-    const State *state, const Control *control, double t,
+    const char *id, const State *state, const Control *control, double t,
     C *c);
+
+/// @brief delete model, it will be called when create a new model
+/// @param id       model id
+/// @return <0 represent occur some err
+int frmodel_delete(
+    const char *id);
 
 #endif // FR_MODEL_H

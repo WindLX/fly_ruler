@@ -30,7 +30,7 @@ const CL: ControlLimit = ControlLimit {
 };
 
 fn tr(plane: Rc<RefCell<MechanicalModel>>) {
-    let trim_target = TrimTarget::new(15000.0, 500.0);
+    let trim_target = TrimTarget::new(15000.0, 500.0, None, None);
     let _result = trim(plane, trim_target, None, CL, None, None);
 }
 

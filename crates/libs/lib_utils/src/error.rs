@@ -82,6 +82,7 @@ impl std::fmt::Display for PluginInner {
 /// Model: error occured in extern model
 #[derive(Debug)]
 pub enum FatalCoreError {
+    NotInit(String),
     Controller(String),
     Plugin(FatalPluginError),
     Nan,
@@ -92,6 +93,7 @@ impl FatalCoreError {}
 impl std::error::Error for FatalCoreError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::NotInit(_) => None,
             Self::Controller(_) => None,
             Self::Plugin(e) => Some(e),
             Self::Nan => None,
@@ -102,6 +104,7 @@ impl std::error::Error for FatalCoreError {
 impl std::fmt::Display for FatalCoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::NotInit(s) => write!(f, "{s} not init"),
             Self::Controller(e) => write!(f, "controller for plane {} not found", e),
             Self::Plugin(_) => write!(f, "{}", self.source().unwrap()),
             Self::Nan => write!(f, "NaN value"),

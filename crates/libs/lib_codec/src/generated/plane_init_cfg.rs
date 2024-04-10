@@ -29,6 +29,10 @@ pub struct TrimTarget {
     pub altitude: f64,
     #[prost(double, tag = "2")]
     pub velocity: f64,
+    #[prost(double, tag = "3")]
+    pub npos: f64,
+    #[prost(double, tag = "4")]
+    pub epos: f64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

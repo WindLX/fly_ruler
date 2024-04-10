@@ -1,8 +1,7 @@
 use clap::Parser;
 use fly_ruler_utils::CancellationToken;
 use once_cell::sync::Lazy;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tracing::{event, Level};
 use tracing_appender::{non_blocking, rolling};
 use tracing_error::ErrorLayer;
@@ -48,6 +47,7 @@ fn main() {
         .init();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(32)
         .enable_all()
         .build()
         .unwrap();
@@ -102,6 +102,6 @@ fn main() {
         )
         .await;
 
-        system.lock().await.stop();
+        system.lock().unwrap().stop();
     });
 }

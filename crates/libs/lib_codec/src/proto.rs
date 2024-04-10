@@ -336,6 +336,8 @@ impl From<PlaneInitCfg> for PlaneInitCfgGen {
             trim_target: Some(TrimTargetGen {
                 altitude: value.trim_target.altitude,
                 velocity: value.trim_target.velocity,
+                npos: value.trim_target.npos,
+                epos: value.trim_target.epos,
             }),
             trim_init,
             flight_condition,
@@ -378,10 +380,14 @@ impl From<PlaneInitCfgGen> for PlaneInitCfg {
             || TrimTarget {
                 altitude: 1000.0,
                 velocity: 500.0,
+                npos: 0.0,
+                epos: 0.0,
             },
             |trim_target| TrimTarget {
                 altitude: trim_target.altitude,
                 velocity: trim_target.velocity,
+                npos: trim_target.npos,
+                epos: trim_target.epos,
             },
         );
         PlaneInitCfg {

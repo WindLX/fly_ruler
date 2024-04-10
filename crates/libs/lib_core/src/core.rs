@@ -27,7 +27,10 @@ pub struct CoreInitCfg {
 
 #[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum ClockMode {
-    Fixed(u64, Option<f64>),
+    Fixed {
+        sample_time: u64,
+        time_scale: Option<f64>,
+    },
     Realtime(bool),
 }
 
@@ -105,7 +108,10 @@ impl Core {
         .map_err(|e| FrError::Core(e))?;
         event!(Level::DEBUG, "model trim successfully");
 
+        let id = Uuid::new_v4();
+
         let plane_block = PlaneBlock::new(
+            &id.to_string(),
             model,
             &trim_output,
             &init_cfg.deflection.unwrap_or([0.0, 0.0, 0.0]),
@@ -121,13 +127,14 @@ impl Core {
         });
         let (tx1, rx1) = input_channel(controller_buffer);
 
-        let id = Uuid::new_v4();
-
         let handler = match self.clock_mode {
             ClockMode::Realtime(_) => {
                 self.build_task(id, Clock::new(), plane_block, tx, rx1, cancellation_token)
             }
-            ClockMode::Fixed(sample_time, time_scale) => self.build_task(
+            ClockMode::Fixed {
+                sample_time,
+                time_scale,
+            } => self.build_task(
                 id,
                 FixedClock::new(Duration::from_millis(sample_time), time_scale),
                 plane_block,
@@ -153,16 +160,16 @@ impl Core {
         cancellation_token: CancellationToken,
     ) -> JoinHandle<FrResult<()>> {
         let handler: JoinHandle<FrResult<()>> = tokio::spawn({
-            clock.start();
             event!(Level::INFO, "clock {plane_id} start", plane_id = plane_id);
             async move {
                 let ctk = cancellation_token.clone();
                 let h: JoinHandle<FrResult<()>> = tokio::spawn(async move {
+                    clock.start();
                     loop {
                         if cancellation_token.is_cancelled() {
                             break;
                         }
-                        let t = clock.now().await;
+                        let t = clock.now();
                         let control = controller.recv().await;
                         match control {
                             Some(control) => {
@@ -231,7 +238,7 @@ mod core_tests {
             .install(&["../../../LSE/models/f16_model/data"]);
         assert!(matches!(res, Ok(Ok(_))));
 
-        let trim_target = TrimTarget::new(15000.0, 500.0);
+        let trim_target = TrimTarget::new(15000.0, 500.0, None, None);
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
             max_iter: 10000,

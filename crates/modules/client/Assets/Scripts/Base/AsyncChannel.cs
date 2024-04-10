@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 // using UnityEngine;
@@ -48,14 +47,20 @@ namespace FlyRuler.Base
         {
             T value = default;
             var isGet = false;
+            var count = 0;
             while (!isGet)
             {
+                count++;
                 if (cancellationToken.IsCancellationRequested)
                 {
                     throw new OperationCanceledException();
                 }
                 isGet = values.TryTake(out value);
-                await UniTask.Yield();
+                if (count == 20)
+                {
+                    count = 0;
+                    await UniTask.Yield();
+                }
             }
             return value;
         }

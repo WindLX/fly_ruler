@@ -5,11 +5,13 @@ using System.Collections.Generic;
 using CoreOutput;
 using FlyRuler.Service;
 using Cinemachine;
+using System;
 
 namespace FlyRuler.Manager
 {
     public class PlaneManager : SingletonMono<PlaneManager>
     {
+        public Action<PlaneMessage> onSelfPlaneMessageUpdate;
         public ControlLimits controlLimits;
         public GameObject planePrefab;
         public CinemachineVirtualCamera cinemachineVirtualCamera;
@@ -78,6 +80,7 @@ namespace FlyRuler.Manager
             {
                 selfObj.UpdateState(planeMessage);
                 PanelManager.Instance.UpdateState(planeMessage);
+                onSelfPlaneMessageUpdate?.Invoke(planeMessage);
             }
             else if (planeObjs.ContainsKey(planeMessage.Id.Id_))
             {

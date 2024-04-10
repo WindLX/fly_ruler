@@ -126,3 +126,7 @@ Return `{ Userdata(UuidWrapper), Userdata(OutputReceiverWrapper), Userdata(Input
 #### `clone() -> Userdata(SystemWrapper)`
 
 Clone the system.
+
+#### `sleep(duration: Number)`
+
+Sleep for a duration.

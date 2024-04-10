@@ -25,6 +25,12 @@ lazy_static! {
     static ref GUARD: tokio::runtime::EnterGuard<'static> = RT.enter();
 }
 
+async fn sleep(_lua: &Lua, duration: LuaNumber) -> LuaResult<()> {
+    let duration = duration as u64;
+    tokio::time::sleep(std::time::Duration::from_millis(duration)).await;
+    Ok(())
+}
+
 #[mlua::lua_module]
 fn light_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
     let _guard = &*GUARD;
@@ -170,6 +176,7 @@ fn light_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
     exports.set("system", system)?;
     exports.set("logger", logger)?;
     exports.set("uuid", uuid)?;
+    exports.set("sleep", lua.create_async_function(sleep)?)?;
 
     Ok(exports)
 }

@@ -31,12 +31,9 @@ namespace FlyRuler.Service
 
         private TcpClient client = new();
         private CancellationTokenSource cts = new();
-        private AsyncChannel<byte[]> channel = new();
+        private Channel<byte[]> channel = Channel.CreateSingleConsumerUnbounded<byte[]>();
         private AsyncChannel<GetModelInfosResponse> getModelInfosChannel = new();
         private AsyncChannel<PushPlaneResponse> pushPlaneChannel = new();
-        private UniTask recvHandler = new();
-        private UniTask sendHandler = new();
-        private UniTask tickHandler = new();
 
         protected override void Awake()
         {
@@ -108,19 +105,19 @@ namespace FlyRuler.Service
 
             Logger.Instance.Log($"Connected to {host}:{port}");
 
-            channel = new();
+            channel = Channel.CreateSingleConsumerUnbounded<byte[]>();
             getModelInfosChannel = new();
             pushPlaneChannel = new();
 
-            recvHandler = UniTask.RunOnThreadPool(async () =>
+            var recvHandler = UniTask.RunOnThreadPool(async () =>
             {
                 await ReceiveMsgHandler();
             });
-            sendHandler = UniTask.RunOnThreadPool(async () =>
+            var sendHandler = UniTask.RunOnThreadPool(async () =>
             {
                 await WriteMsgHandler();
             });
-            tickHandler = UniTask.RunOnThreadPool(async () =>
+            var tickHandler = UniTask.RunOnThreadPool(async () =>
             {
                 while (true)
                 {
@@ -128,7 +125,7 @@ namespace FlyRuler.Service
                     {
                         break;
                     }
-                    await Tick();
+                    Tick();
                     await UniTask.Delay(TimeSpan.FromMilliseconds(1000), ignoreTimeScale: false, cancellationToken: cts.Token);
                 }
             });
@@ -149,7 +146,6 @@ namespace FlyRuler.Service
                 client.Client.Blocking = false;
                 client.Client.Send(tick, tick.Length, 0);
 
-                channel.Close();
                 channel = null;
                 getModelInfosChannel.Close();
                 getModelInfosChannel = null;
@@ -265,43 +261,38 @@ namespace FlyRuler.Service
                 }
                 try
                 {
-                    while (true)
+
+                    var serviceCallResponse = await ReadServiceCallResponseAsync(stream, cts.Token);
+                    if (serviceCallResponse != null)
                     {
-                        var serviceCallResponse = await ReadServiceCallResponseAsync(stream, cts.Token);
-                        if (serviceCallResponse != null)
+                        if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.GetModelInfos)
                         {
-                            if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.GetModelInfos)
-                            {
-                                await getModelInfosChannel.WriteAsync(serviceCallResponse.GetModelInfos, cts.Token);
-                            }
-                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.PushPlane)
-                            {
-                                await pushPlaneChannel.WriteAsync(serviceCallResponse.PushPlane, cts.Token);
-                            }
-                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Output)
-                            {
-                                onPlaneMessageUpdate?.Invoke(serviceCallResponse.Output);
-                            }
-                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Error)
-                            {
-                                Logger.Instance.Log(serviceCallResponse.Error);
-                            }
-                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.LostPlane)
-                            {
-                                onLostPlane?.Invoke(serviceCallResponse.LostPlane);
-                            }
-                            else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.NewPlane)
-                            {
-                                onNewPlane?.Invoke(serviceCallResponse.NewPlane);
-                            }
+                            await getModelInfosChannel.WriteAsync(serviceCallResponse.GetModelInfos, cts.Token);
                         }
-                        else
+                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.PushPlane)
                         {
-                            break;
+                            await pushPlaneChannel.WriteAsync(serviceCallResponse.PushPlane, cts.Token);
+                        }
+                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Output)
+                        {
+                            onPlaneMessageUpdate?.Invoke(serviceCallResponse.Output);
+                        }
+                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.Error)
+                        {
+                            Logger.Instance.Log(serviceCallResponse.Error);
+                        }
+                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.LostPlane)
+                        {
+                            onLostPlane?.Invoke(serviceCallResponse.LostPlane);
+                        }
+                        else if (serviceCallResponse.ResponseCase == ServiceCallResponse.ResponseOneofCase.NewPlane)
+                        {
+                            onNewPlane?.Invoke(serviceCallResponse.NewPlane);
                         }
                     }
+
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     client.GetStream().Close();
                     client.Close();
@@ -324,10 +315,10 @@ namespace FlyRuler.Service
                 }
                 try
                 {
-                    var data = await channel.ReadAsync(cts.Token);
+                    var data = await channel.Reader.ReadAsync(cts.Token);
                     stream.Write(data, 0, data.Length);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     client.GetStream().Close();
                     client.Close();
@@ -347,7 +338,7 @@ namespace FlyRuler.Service
                 GetModelInfos = new Google.Protobuf.WellKnownTypes.Empty()
             };
 
-            await channel.WriteAsync(SeriveCallToBytes(serviceCall), cts.Token);
+            channel.Writer.TryWrite(SeriveCallToBytes(serviceCall));
             var res = await getModelInfosChannel.ReadAsync(cancellationToken: cts.Token);
             var models = res.ModelInfos;
             return models.ToList();
@@ -365,12 +356,12 @@ namespace FlyRuler.Service
                 }
             };
 
-            await channel.WriteAsync(SeriveCallToBytes(serviceCall), cts.Token);
+            channel.Writer.TryWrite(SeriveCallToBytes(serviceCall));
             var res = await pushPlaneChannel.ReadAsync(cts.Token);
             return res.PlaneId;
         }
 
-        public async void SendControl(Id.Id planeId, Control.Control control)
+        public void SendControl(Id.Id planeId, Control.Control control)
         {
             var serviceCall = new ServiceCall
             {
@@ -382,10 +373,10 @@ namespace FlyRuler.Service
                 }
             };
 
-            await channel.WriteAsync(SeriveCallToBytes(serviceCall), cts.Token);
+            channel.Writer.TryWrite(SeriveCallToBytes(serviceCall));
         }
 
-        private async UniTask Tick()
+        private void Tick()
         {
             var serviceCall = new ServiceCall
             {
@@ -393,7 +384,7 @@ namespace FlyRuler.Service
                 Tick = new Google.Protobuf.WellKnownTypes.Empty()
             };
 
-            await channel.WriteAsync(SeriveCallToBytes(serviceCall), cts.Token);
+            channel.Writer.TryWrite(SeriveCallToBytes(serviceCall));
         }
 
         private static byte[] SeriveCallToBytes(ServiceCall serviceCall)

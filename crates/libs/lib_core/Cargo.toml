@@ -11,13 +11,13 @@ tokio = { version = "1.35.1", features = [
     "rt",
     "time",
     "rt-multi-thread",
+    "macros",
 ] }
 rayon = "1.8.0"
 fly_ruler_utils = { path = "../lib_utils" }
 fly_ruler_plugin = { path = "../lib_plugin" }
 serde = { version = "1.0.193", features = ["derive"] }
 tracing = "0.1.40"
-async-trait = "0.1.79"
 
 [dependencies.uuid]
 version = "1.7.0"

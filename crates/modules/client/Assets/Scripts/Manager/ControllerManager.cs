@@ -12,6 +12,7 @@ namespace FlyRuler.Manager
     {
         public Action<Control.Control> onRawControlUpdate;
         public Action<Id.Id> onSetSelf;
+        public Action<int> onScriptControlUpdate;
 
 
         [Box("Controller Curve")]
@@ -26,10 +27,27 @@ namespace FlyRuler.Manager
 
         private bool firstConfirm = true;
         private bool firstCancel = true;
+        private int scriptControl = 0;
+        public int ScriptControl
+        {
+            get => scriptControl;
+            set
+            {
+                if (scriptControl <= 5 && scriptControl >= 1)
+                {
+                    scriptControl = value;
+                    onScriptControlUpdate?.Invoke(scriptControl);
+                    Logger.Instance.Log($"ScriptControl: {scriptControl}");
+                }
+            }
+        }
 
         void FixedUpdate()
         {
-            onRawControlUpdate?.Invoke(control.Clone());
+            if (scriptControl == 0)
+            {
+                onRawControlUpdate?.Invoke(control.Clone());
+            }
         }
 
         public void Thrust(InputAction.CallbackContext context)
@@ -115,11 +133,13 @@ namespace FlyRuler.Manager
 
         public void Up(InputAction.CallbackContext context)
         {
+            ScriptControl += 1;
             Debug.Log("Up");
         }
 
         public void Down(InputAction.CallbackContext context)
         {
+            ScriptControl -= 1;
             Debug.Log("Down");
         }
 

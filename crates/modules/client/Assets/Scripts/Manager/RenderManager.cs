@@ -27,7 +27,6 @@ namespace FlyRuler.Manager
                 {
                     var fixed_time = (double)((TomlTable)config["system"])["fixed_time"];
                     Time.fixedDeltaTime = (float)fixed_time;
-                    Debug.Log(Time.fixedDeltaTime);
 
                     var preset = (string)((TomlTable)config["render"])["preset"];
                     var pipelineAsset = preset switch

@@ -25,7 +25,7 @@ pub async fn server_handler(
     tick_timeout: u64,
     read_rate: u64,
     init_cfg: PlaneInitCfg,
-    system: Arc<Mutex<System>>,
+    system: Arc<std::sync::Mutex<System>>,
     controller_buffer: usize,
     cancellation_token: CancellationToken,
 ) {
@@ -268,7 +268,7 @@ async fn rpc_handler(
     tick_timeout: u64,
     read_rate: u64,
     mut client_reader: FramedRead<OwnedReadHalf, RequestFrame>,
-    system: Arc<Mutex<System>>,
+    system: Arc<std::sync::Mutex<System>>,
     init_cfg: PlaneInitCfg,
     controller_buffer: usize,
     broadcast_channel_sender: broadcast::Sender<ServiceCallResponse>,
@@ -301,7 +301,7 @@ async fn rpc_handler(
                         "GetModelInfos" => {
                             let model_infos: Vec<_> = system
                                 .lock()
-                                .await
+                                .unwrap()
                                 .get_models()?
                                 .into_iter()
                                 .map(|m| PluginInfoTuple {
@@ -335,13 +335,20 @@ async fn rpc_handler(
                                     continue;
                                 }
                             };
-                            let (id, viewer, controller, _handler) =
-                                system.lock().await.push_plane(
-                                    Uuid::parse_str(&args.model_id)?,
-                                    controller_buffer,
-                                    args.plane_init_cfg.map_or_else(|| init_cfg, |c| c.into()),
-                                    group_cancellation_token.clone(),
-                                )?;
+
+                            let (id, viewer, controller, _handler) = tokio::task::spawn_blocking({
+                                let system = system.clone();
+                                let group_cancellation_token = group_cancellation_token.clone();
+                                move || {
+                                    system.lock().unwrap().push_plane(
+                                        Uuid::parse_str(&args.model_id).unwrap(),
+                                        controller_buffer,
+                                        args.plane_init_cfg.map_or_else(|| init_cfg, |c| c.into()),
+                                        group_cancellation_token,
+                                    )
+                                }
+                            })
+                            .await??;
 
                             controllers.lock().await.insert(id.to_string(), controller);
 

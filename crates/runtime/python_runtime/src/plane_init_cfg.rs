@@ -14,6 +14,10 @@ pub struct TrimTargetWrapper {
     pub altitude: f64,
     #[pyo3(get, set)]
     pub velocity: f64,
+    #[pyo3(get, set)]
+    pub npos: f64,
+    #[pyo3(get, set)]
+    pub epos: f64,
 }
 
 impl From<TrimTarget> for TrimTargetWrapper {
@@ -21,6 +25,8 @@ impl From<TrimTarget> for TrimTargetWrapper {
         TrimTargetWrapper {
             altitude: value.altitude,
             velocity: value.velocity,
+            npos: value.npos,
+            epos: value.epos,
         }
     }
 }
@@ -30,6 +36,8 @@ impl Into<TrimTarget> for TrimTargetWrapper {
         TrimTarget {
             altitude: self.altitude,
             velocity: self.velocity,
+            npos: self.npos,
+            epos: self.epos,
         }
     }
 }
@@ -37,8 +45,13 @@ impl Into<TrimTarget> for TrimTargetWrapper {
 #[pymethods]
 impl TrimTargetWrapper {
     #[new]
-    pub fn new(altitude: f64, velocity: f64) -> Self {
-        TrimTargetWrapper { altitude, velocity }
+    pub fn new(altitude: f64, velocity: f64, npos: Option<f64>, epos: Option<f64>) -> Self {
+        TrimTargetWrapper {
+            altitude,
+            velocity,
+            npos: npos.unwrap_or_default(),
+            epos: epos.unwrap_or_default(),
+        }
     }
 }
 

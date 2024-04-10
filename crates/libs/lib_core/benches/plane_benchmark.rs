@@ -54,10 +54,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         .plugin()
         .install(&["../../../LSE/models/f16_model/data"]);
     let plane = Rc::new(RefCell::new(MechanicalModel::new(&model).unwrap()));
-    let trim_target = TrimTarget::new(15000.0, 500.0);
+    let trim_target = TrimTarget::new(15000.0, 500.0, None, None);
     let trim_output = trim(plane, trim_target, None, CL, None, None).unwrap();
     let plane_block = Rc::new(RefCell::new(
-        PlaneBlock::new(&model, &trim_output, &[0.0, 0.0, 0.0], CL).unwrap(),
+        PlaneBlock::new("123", &model, &trim_output, &[0.0, 0.0, 0.0], CL).unwrap(),
     ));
 
     group.bench_function("plane", |b| {

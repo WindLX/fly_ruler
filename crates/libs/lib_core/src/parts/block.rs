@@ -119,6 +119,7 @@ pub struct PlaneBlock {
 
 impl PlaneBlock {
     pub fn new(
+        id: &str,
         model: &AerodynamicModel,
         init: &TrimOutput,
         deflection: &[f64; 3],
@@ -129,11 +130,14 @@ impl PlaneBlock {
         let _ = s.enter();
         let control = ControllerBlock::new(init.control, deflection, ctrl_limit);
         let integrator = VectorIntegrator::new(Into::<Vector>::into(init.state));
-        let plane = MechanicalModel::new(model)?;
-        plane.init(&MechanicalModelInput {
-            state: init.state,
-            control: init.control,
-        })?;
+        let mut plane = MechanicalModel::new(model)?;
+        plane.init(
+            id,
+            &MechanicalModelInput {
+                state: init.state,
+                control: init.control,
+            },
+        )?;
         Ok(PlaneBlock {
             control,
             integrator,
@@ -278,7 +282,7 @@ mod core_parts_tests {
 
         let plane = Rc::new(RefCell::new(MechanicalModel::new(&model).unwrap()));
 
-        let trim_target = TrimTarget::new(15000.0, 500.0);
+        let trim_target = TrimTarget::new(15000.0, 500.0, None, None);
         let trim_init = None;
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
@@ -359,7 +363,7 @@ mod core_parts_tests {
         // set_time_scale(5.0).unwrap();
 
         let control: [f64; 4] = result.control.into();
-        let f16_block = PlaneBlock::new(&model, &result, &[0.0, 0.0, 0.0], CL);
+        let f16_block = PlaneBlock::new("123", &model, &result, &[0.0, 0.0, 0.0], CL);
         let mut f16_block = f16_block.unwrap();
 
         let path = Path::new("output.csv");

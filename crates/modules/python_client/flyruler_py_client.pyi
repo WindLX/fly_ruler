@@ -107,7 +107,7 @@ class TrimInitWrapper:
     def __init__(self, control: ControlWrapper, alpha: float): ...
 
 
-class NelderMeadOptionWrapper:
+class NelderMeadOptionsWrapper:
     max_fun_evals: int
     max_iter: int
     tol_fun: float
@@ -139,13 +139,13 @@ class PlaneInitCfgWrapper:
     trim_target: TrimTargetWrapper
     trim_init: TrimInitWrapper | None
     flight_condition: FlightConditionWrapper | None
-    optim_options: NelderMeadOptionWrapper | None
+    optim_options: NelderMeadOptionsWrapper | None
 
     def __init__(self, trim_target: TrimTargetWrapper,
                  deflection: list[float] | None,
                  trim_init: TrimInitWrapper | None,
                  flight_condition: FlightConditionWrapper | None,
-                 optim_options: NelderMeadOptionWrapper | None): ...
+                 optim_options: NelderMeadOptionsWrapper | None): ...
 
 
 class PyClient:
@@ -172,4 +172,4 @@ class PyClient:
     async def error(self) -> str: ...
 
 
-def register_logger(filter: str, dir: str, file: str): ...
+def register_logger(filter: str, dir: str | None, file: str | None): ...

@@ -19,8 +19,10 @@ server = {
 core_init_cfg = {
     clock_mode = {
         Realtime = true,
-        -- time_scale = 1.0, -- optional
-        -- sample_time = 50 -- ms optional
+        -- Fixed = {
+        --     time_scale = 1.0, -- optional
+        --     sample_time = 50 -- ms optional     
+        -- }
     },
 }
 
@@ -31,7 +33,9 @@ plane_init_cfg = {
 
     trim_target = {
         altitude = 5000, -- ft
-        velocity = 500    -- ft/s
+        velocity = 500,    -- ft/s
+        npos = 0.0,
+        epos = 0.0,
     },
 
     -- optional
@@ -39,7 +43,7 @@ plane_init_cfg = {
         alpha = 8.49, -- deg
         -- thrust(lbs) ele(deg) ail(deg) rud(deg)
         control = {
-            thrust = 1000.0,
+            thrust = 5000.0,
             elevator = -0.09,
             aileron = 0.01,
             rudder = -0.01

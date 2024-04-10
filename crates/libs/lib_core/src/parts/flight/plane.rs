@@ -1,7 +1,8 @@
 use super::basic::{AirAngles, AngleRates, Orientation, Vector3, G};
 use fly_ruler_plugin::{
-    init_handler_constructor, step_handler_constructor, trim_handler_constructor, AerodynamicModel,
-    AerodynamicModelInitFn, AerodynamicModelStepFn, AerodynamicModelTrimFn, AsPlugin,
+    delete_handler_constructor, init_handler_constructor, step_handler_constructor,
+    trim_handler_constructor, AerodynamicModel, AerodynamicModelDeleteFn, AerodynamicModelInitFn,
+    AerodynamicModelStepFn, AerodynamicModelTrimFn, AsPlugin,
 };
 use fly_ruler_utils::{
     error::FatalCoreError,
@@ -10,12 +11,15 @@ use fly_ruler_utils::{
         MechanicalModelInput, MechanicalModelOutput, PlaneConstants, State, StateExtend, C,
     },
 };
+use tracing::warn;
 
 pub struct MechanicalModel {
+    id: Option<String>,
     constants: PlaneConstants,
     model_trim_func: Box<AerodynamicModelTrimFn>,
     model_init_func: Box<AerodynamicModelInitFn>,
     model_step_func: Box<AerodynamicModelStepFn>,
+    model_delete_func: Box<AerodynamicModelDeleteFn>,
 }
 
 impl MechanicalModel {
@@ -32,19 +36,31 @@ impl MechanicalModel {
         let step_handler = model
             .get_step_handler()
             .map_err(|e| FatalCoreError::from(e))?;
+        let delete_handler = model
+            .get_delete_handler()
+            .map_err(|e| FatalCoreError::from(e))?;
         let model_trim_func = trim_handler_constructor(trim_handler, model.info().name.clone());
         let model_init_func = init_handler_constructor(init_handler, model.info().name.clone());
         let model_step_func = step_handler_constructor(step_handler, model.info().name.clone());
+        let model_delete_func =
+            delete_handler_constructor(delete_handler, model.info().name.clone());
         Ok(Self {
+            id: None,
             constants,
             model_trim_func,
             model_init_func,
             model_step_func,
+            model_delete_func,
         })
     }
 
-    pub fn init(&self, model_input: &MechanicalModelInput) -> Result<(), FatalCoreError> {
-        (self.model_init_func)(model_input).map_err(|e| FatalCoreError::from(e))
+    pub fn init(
+        &mut self,
+        id: &str,
+        model_input: &MechanicalModelInput,
+    ) -> Result<(), FatalCoreError> {
+        self.id = Some(id.to_string());
+        (self.model_init_func)(id, model_input).map_err(|e| FatalCoreError::from(e))
     }
 
     pub fn trim(
@@ -106,6 +122,11 @@ impl MechanicalModel {
         model_input: &MechanicalModelInput,
         t: f64,
     ) -> Result<MechanicalModelOutput, FatalCoreError> {
+        let id = self.id.as_ref();
+        if id.is_none() {
+            return Err(FatalCoreError::NotInit("MechanicalModel".to_string()));
+        }
+
         let state = &model_input.state;
         let control = &model_input.control;
 
@@ -119,7 +140,8 @@ impl MechanicalModel {
         let (position_dot, sub_velocity) = navgation(velocity, &orientation, &air_angles);
         let orientation_dot = kinematics(&orientation, &angle_rates);
 
-        let c = (self.model_step_func)(model_input, t).map_err(|e| FatalCoreError::from(e))?;
+        let c = (self.model_step_func)(id.unwrap(), model_input, t)
+            .map_err(|e| FatalCoreError::from(e))?;
 
         let (velocity_dot, sub_velocity_dot) = velocity_derivation(
             &c,
@@ -154,6 +176,18 @@ impl MechanicalModel {
         let state_extend = StateExtend::from([n.x, n.y, n.z, mach, qbar, ps]);
 
         Ok(MechanicalModelOutput::new(state_dot, state_extend))
+    }
+}
+
+impl Drop for MechanicalModel {
+    fn drop(&mut self) {
+        let id = self.id.as_ref();
+        if let Some(id) = id {
+            let e = (self.model_delete_func)(id);
+            if let Err(e) = e {
+                warn!("{}", e)
+            }
+        }
     }
 }
 

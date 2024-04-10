@@ -48,6 +48,8 @@ impl Default for TrimInit {
 pub struct TrimTarget {
     pub altitude: f64,
     pub velocity: f64,
+    pub npos: f64,
+    pub epos: f64,
 }
 
 impl std::fmt::Display for TrimTarget {
@@ -61,8 +63,13 @@ impl std::fmt::Display for TrimTarget {
 }
 
 impl TrimTarget {
-    pub fn new(altitude: f64, velocity: f64) -> Self {
-        Self { altitude, velocity }
+    pub fn new(altitude: f64, velocity: f64, npos: Option<f64>, epos: Option<f64>) -> Self {
+        Self {
+            altitude,
+            velocity,
+            npos: npos.unwrap_or_default(),
+            epos: epos.unwrap_or_default(),
+        }
     }
 }
 
@@ -164,8 +171,12 @@ pub fn trim(
 
     let o = Rc::into_inner(output).unwrap().into_inner();
 
+    let mut state = State::from(&o[..12]);
+    state.npos = trim_target.npos;
+    state.epos = trim_target.epos;
+
     Ok(TrimOutput::new(
-        State::from(&o[..12]),
+        state,
         Control::from(&res.x[..4]),
         StateExtend::from(&o[12..18]),
         res,
@@ -316,7 +327,7 @@ mod core_trim_tests {
 
         let plane = Rc::new(RefCell::new(MechanicalModel::new(&model).unwrap()));
 
-        let trim_target = TrimTarget::new(15000.0, 500.0);
+        let trim_target = TrimTarget::new(15000.0, 500.0, None, None);
         let trim_init = None;
         let nm_options = Some(NelderMeadOptions {
             max_fun_evals: 50000,
