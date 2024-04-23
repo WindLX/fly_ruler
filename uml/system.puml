@@ -1,0 +1,51 @@
+@startuml system
+
+class Core {}
+class ModelManager {}
+
+class System {
+    -model_root: PathBuf,
+    -model_manager: Option<ModelManager>,
+    -core: Option<Core>,
+}
+
+System *-- Core
+System *-- ModelManager
+
+class System {
+    +new() -> Self
+    +set_dir<P: AsRef<Path>>(&mut self, model_root_path: P)
+    +get_models(&self) -> Result<HashMap<Uuid, (PluginInfo, PluginState)>, SysError>
+    +enable_model(&mut self, model_id: Uuid, args: &[impl ToString]) -> Result<(), SysError>
+    +disable_model(&mut self, model_id: Uuid) -> Result<(), SysError>
+    +get_model_state(&self, model_id: Uuid) -> Result<Option<PluginState>, SysError>
+    +init(&mut self, init_cfg: CoreInitCfg)
+    +push_plane(&mut self, model_id: Uuid, controller_buffer: usize, init_cfg: PlaneInitCfg, cancellation_token: CancellationToken) -> Result<(Uuid, OutputReceiver, InputSender, JoinHandle<FrResult<()>>), SysError>
+    +err_stop(&mut self)
+    +stop(&mut self)
+}
+
+enum PluginState
+
+System ..> Uuid
+System ..> PluginInfo
+System ..> PluginState
+System ..> SysError
+System ..> CoreInitCfg
+System ..> PlaneInitCfg
+System ..> CancellationToken
+System ..> OutputReceiver
+System ..> InputSender
+
+enum SysError {
+    {field}ManagerNotInit
+    {field}CoreNotInit
+    {field}Fr(#[from] FrError)
+    {field}ModelNotAvailable
+}
+
+enum FrError {}
+
+SysError o-- FrError
+
+@enduml

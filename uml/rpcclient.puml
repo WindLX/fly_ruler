@@ -1,0 +1,53 @@
+@startuml rpc_client
+
+abstract class SingletonMono << T >>
+
+RPCClientAsync --|> SingletonMono
+RPCClientAsync ..> PlaneMessage
+RPCClientAsync ..> GetModelInfosResponse
+RPCClientAsync ..> UniTask
+RPCClientAsync ..> PushPlaneResponse
+RPCClientAsync ..> PlaneInitCfg
+RPCClientAsync ..> ServiceCallResponse
+RPCClientAsync ..> ServiceCall
+RPCClientAsync ..> Control
+RPCClientAsync ..> PluginInfoTuple
+RPCClientAsync *-- Channel
+RPCClientAsync *-- AsyncChannel
+RPCClientAsync *-- CancellationTokenSource
+RPCClientAsync *-- TcpClient
+
+class RPCClientAsync
+{
+    +Action<PlaneMessage> onPlaneMessageUpdate
+    +Action<Id.Id> onLostPlane
+    +Action<Id.Id> onNewPlane
+    +Action onDisconnected
+    +string host
+    +int port
+    -const int MaxBufferSize
+    -byte[] buffer
+    -int bufferLength
+    -TcpClient client
+    -CancellationTokenSource cts
+    -Channel<byte[]> channel
+    -AsyncChannel<GetModelInfosResponse> getModelInfosChannel
+    -AsyncChannel<PushPlaneResponse> pushPlaneChannel
+    
+    #override void Awake()
+    void Start()
+    +async UniTask<bool> Connect()
+    +void Disconnect()
+    -{static} bool IsSocketConnect(TcpClient client)
+    -async UniTask<ServiceCallResponse> ReadServiceCallResponseAsync(Stream stream, CancellationToken cancellationToken)
+    -ServiceCallResponse TryParseServiceCallResponse()
+    -async UniTask ReceiveMsgHandler()
+    -async UniTask WriteMsgHandler()
+    +async UniTask<List<PluginInfoTuple>> GetModelInfos()
+    +async UniTask<Id.Id> PushPlane(Id.Id modelId, PlaneInitCfg.PlaneInitCfg planeInitCfg)
+    +void SendControl(Id.Id planeId, Control.Control control)
+    -void Tick()
+    -{static} byte[] SeriveCallToBytes(ServiceCall serviceCall)
+}
+
+@enduml

@@ -1,0 +1,27 @@
+@startuml panel
+
+interface SingletonMono << T >>
+
+PanelManager ..|> SingletonMono
+
+class PanelManager
+{
+    -ControlLimits controlLimits
+    .. Getter && Setter ..
+    +ControlLimits ControlLimits
+    .. Panel ..
+    +...
+    .. Methods ..
+    +void UpdateState(PlaneMessage planeMessage)
+}
+
+PanelManager ..> PlaneMessage
+PanelManager o-- ControlLimits
+PanelManager o-- Bar
+PanelManager o-- AnglePanel
+PanelManager o-- DirectionPanel
+PanelManager o-- PlanePointer
+PanelManager o-- Trace
+PanelManager o-- TMP_Text
+
+@enduml

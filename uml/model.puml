@@ -1,0 +1,38 @@
+@startuml model
+
+' type AerodynamicModelTrimFn = dyn Fn(&MechanicalModelInput) -> Result<C, FatalPluginError>;
+' type AerodynamicModelInitFn =
+'     dyn Fn(&str, &MechanicalModelInput) -> Result<(), FatalPluginError>;
+' type AerodynamicModelStepFn =
+'     dyn Fn(&str, &MechanicalModelInput, f64) -> Result<C, FatalPluginError>;
+' type AerodynamicModelDeleteFn = dyn Fn(&str) -> Result<(), FatalPluginError>;
+
+class AerodynamicModel {
+    -plugin: Plugin
+}
+
+class AerodynamicModel {
+    +new<P: AsRef<Path>>(path: P) -> Result<Self, PluginError>
+    +load_constants(&self) -> Result<PlaneConstants, FatalPluginError>
+    +load_ctrl_limits(&self) -> Result<ControlLimit, FatalPluginError>
+    +get_trim_handler(&self) -> Result<FrModelTrim, FatalPluginError>
+    +get_init_handler(&self) -> Result<FrModelInit, FatalPluginError>
+    +get_step_handler(&self) -> Result<FrModelStep, FatalPluginError>
+    +get_delete_handler(&self) -> Result<FrModelDelete, FatalPluginError>
+}
+
+enum FatalPluginError
+interface AsPlugin
+
+AsPlugin <|.. AerodynamicModel
+AsPlugin <|..> Plugin
+Plugin ..* AerodynamicModel
+
+FatalPluginError <.. Plugin
+FatalPluginError <.. AerodynamicModel
+AerodynamicModel ..> State
+AerodynamicModel ..> Control
+AerodynamicModel ..> PlaneConstants
+AerodynamicModel ..> ControlLimit
+
+@enduml

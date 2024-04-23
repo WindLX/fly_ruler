@@ -1,0 +1,12 @@
+@startuml server_state
+
+[*] --> Bind
+Bind --> Listen: After binding
+Listen --> Listen: After a new connection is complete
+Listen --> [*]: Error
+Bind --> [*]: Error
+
+Bind: Create a TcpListener
+Listen: Listen for client connection requests
+
+@enduml

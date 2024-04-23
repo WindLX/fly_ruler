@@ -1,0 +1,171 @@
+@startuml block
+
+class Atmos {
+    +mach: f64
+    +qbar: f64
+    +ps: f64
+}
+
+class Atmos {
+    +new(mach: f64, qbar: f64, ps: f64) -> Self
+    +atmos(altitude: f64, velocity: f64) -> Self
+}
+
+class Integrator {
+    -init: f64
+    -last_time: f64
+    -last_value: f64
+    -past: f64
+}
+
+class Integrator {
+    +new(init: f64) -> Self
+    +integrate(&mut self, value: f64, t: f64) -> f64
+    +past(&self) -> f64
+    +reset(&mut self)
+}
+
+class Vector {}
+
+class VectorIntegrator {
+    -init: Vector
+    -last_time: f64
+    -last_value: Vector
+    -past: Vector
+}
+
+VectorIntegrator *-- Vector
+
+class VectorIntegrator {
+    +new(init: impl Into<Vector>) -> Self
+    +integrate(&mut self, value: impl Into<Vector>, t: f64) -> Vector
+    +derivative_add(&mut self, derivative: impl Into<Vector>, t: f64) -> Vector
+    +past(&self) -> Vector
+    +reset(&mut self)
+}
+
+class Actuator {
+    -integrator: Integrator
+    -feedback: f64
+    -command_saturation_top: f64
+    -command_saturation_bottom: f64
+    -rate_saturation: f64
+    -gain: f64
+    -last: f64
+}
+
+Actuator *-- Integrator
+
+class Actuator {
+    +new(init: f64, command_saturation_top: f64, command_saturation_bottom: f64, rate_saturation: f64, gain: f64) -> Self
+    +update(&mut self, value: f64, t: f64) -> f64
+    +past(&self) -> f64
+    +reset(&mut self)
+    +last(&self) -> f64
+}
+
+class PlaneConstants {}
+class FatalCoreError {}
+class AerodynamicModel {}
+class MechanicalModelInput {}
+class MechanicalModelInput {}
+
+class MechanicalModel {
+    -id: Option<String>
+    -constants: PlaneConstants
+    -model_trim_func: Box<AerodynamicModelTrimFn>
+    -model_init_func: Box<AerodynamicModelInitFn>
+    -model_step_func: Box<AerodynamicModelStepFn>
+    -model_delete_func: Box<AerodynamicModelDeleteFn>
+}
+
+MechanicalModel *-- PlaneConstants
+MechanicalModel ..> FatalCoreError
+MechanicalModel ..> AerodynamicModel
+MechanicalModel ..> MechanicalModelInput
+MechanicalModel ..> MechanicalModelOutput
+
+class MechanicalModel {
+    +new(model: &AerodynamicModel) -> Result<Self, FatalCoreError>
+    +init(&mut self, id: &str, model_input: &MechanicalModelInput) -> Result<(), FatalCoreError>
+    +trim(&self, model_input: &MechanicalModelInput) -> Result<MechanicalModelOutput, FatalCoreError>
+    +step(&self, model_input: &MechanicalModelInput, t: f64) -> Result<MechanicalModelOutput, FatalCoreError>
+}
+
+class ControllerBlock {
+    -actuators: Vec<Actuator>
+    -deflection: Vec<f64>
+}
+
+class ControlLimit {}
+class Control {}
+
+ControllerBlock *-- Actuator
+ControllerBlock ..> ControlLimit
+ControllerBlock ..> Control
+
+class ControllerBlock {
+    +new(control_init: impl Into<Control>, deflection: &[f64; 3], control_limit: ControlLimit) -> Self
+    +update(&mut self, control_input: impl Into<Control>, t: f64) -> Control
+    +past(&self) -> Control
+    +reset(&mut self)
+}
+
+class PlaneBlock {
+    -start_time: Option<f64>
+    -control: ControllerBlock
+    -integrator: VectorIntegrator
+    -plane: MechanicalModel
+    -extend: Option<StateExtend>
+    -alpha_limit_top: f64
+    -alpha_limit_bottom: f64
+    -beta_limit_top: f64
+    -beta_limit_bottom: f64
+}
+
+class StateExtend {}
+
+PlaneBlock *-- StateExtend
+PlaneBlock *-- ControllerBlock
+PlaneBlock *-- VectorIntegrator
+PlaneBlock *-- MechanicalModel
+
+class PlaneBlock {
+    +new(id: &str, model: &AerodynamicModel, init: &TrimOutput, deflection: &[f64; 3], ctrl_limit: ControlLimit) -> Result<Self, FatalCoreError>
+    +update(&mut self, control: impl Into<Control>, t: f64) -> Result<CoreOutput, FatalCoreError>
+    +reset(&mut self)
+    +state(&self) -> Result<CoreOutput, FatalCoreError>
+}
+
+class TrimOutput {}
+class CoreOutput {}
+
+PlaneBlock ..> AerodynamicModel
+PlaneBlock ..> TrimOutput
+PlaneBlock ..> CoreOutput
+PlaneBlock ..> Control
+PlaneBlock ..> ControlLimit
+PlaneBlock ..> FatalCoreError
+
+CoreOutput *-- State
+CoreOutput *-- Control
+CoreOutput *-- StateExtend
+
+Atmos <.. MechanicalModel
+Atmos <.. AerodynamicModel
+
+AerodynamicModel ..> PlaneConstants
+AerodynamicModel ..> ControlLimit
+
+MechanicalModelInput *-- Control
+MechanicalModelInput *-- State
+MechanicalModelOutput *-- State
+MechanicalModelOutput *-- StateExtend
+TrimOutput *-- State
+TrimOutput *-- StateExtend
+
+Vector <-- Control
+Vector <-- State
+Vector <-- StateExtend
+
+@enduml

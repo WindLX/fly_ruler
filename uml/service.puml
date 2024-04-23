@@ -1,0 +1,91 @@
+@startuml serive
+
+class ServiceCall {
+    +name: String
+    +args: Option<Args>
+}
+
+enum Args {
+    {field}GetModelInfos
+    {field}PushPlane(PushPlaneRequest)
+    {field}SendControl(SendControlRequest)
+    {field}Tick
+    {field}Disconnect
+}
+
+class ServiceCallResponse {
+    +name: String
+    +response: Option<Response>
+}
+
+enum Response {
+    {field}GetModelInfos(GetModelInfosResponse)
+    {field}PushPlane(PushPlaneResponse)
+    {field}SendControl
+    {field}Output(PlaneMessage)
+    {field}LostPlane(String)
+    {field}NewPlane(String)
+    {field}Error(String)
+}
+
+class PlaneInitCfg {}
+
+class PushPlaneRequest {
+    +model_id: String
+    +plane_init_cfg: Option<PlaneInitCfg>
+}
+
+PushPlaneRequest *-- PlaneInitCfg
+
+class Control {}
+
+class SendControlRequest {
+    +plane_id: String
+    +control: Option<Control>
+}
+
+SendControlRequest *-- Control
+
+class PluginInfo {}
+enum PluginState {}
+
+class PluginInfoTuple {
+    +id: String
+    +info: Option<PluginInfo>
+    +state: PluginState
+}
+
+PluginInfoTuple *-- PluginInfo
+PluginInfoTuple *-- PluginState
+
+class GetModelInfosResponse {
+    +model_infos: Vec<PluginInfoTuple>
+}
+
+GetModelInfosResponse *-- PluginInfoTuple
+
+class PushPlaneResponse {
+    +plane_id: String
+}
+
+class CoreOutput {}
+
+class PlaneMessage {
+    +id: String
+    +time: f64
+    +output: Option<CoreOutput>
+}
+
+PlaneMessage *-- CoreOutput
+
+Args o-- PushPlaneRequest
+Args o-- SendControlRequest
+
+Response o-- GetModelInfosResponse
+Response o-- PushPlaneResponse
+Response o-- PlaneMessage
+
+ServiceCall *-- Args
+ServiceCallResponse *-- Response
+
+@enduml

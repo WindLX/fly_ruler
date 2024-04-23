@@ -1,0 +1,68 @@
+@startuml plugin
+
+class PluginInfo {
+    +name: String
+    +author: String
+    +version: String
+    +description: String
+}
+
+class PluginInfo {
+    +load<P: AsRef<Path>>(path: P) -> Result<PluginInfo, PluginError>
+}
+
+enum PluginState {
+    Enable
+    Disable
+    Failed
+}
+
+class Plugin {
+    -info: PluginInfo
+    -lib: Library
+    -state: PluginState
+}
+
+class Plugin {
+    +new<P: AsRef<Path>>(path: P) -> Result<Self, PluginError>
+    +install(&self, args: &[impl ToString]) -> Result<Result<(), PluginError>, FatalPluginError>
+    +uninstall(&self) -> Result<Result<(), PluginError>, FatalPluginError>
+    -load_function<F>(&self, name: &str) -> Result<libloading::Symbol<'_, F>, PluginError>
+    -register_utils() -> Result<(), PluginError>
+    -call_hook_function(&self, name: &str, args: &[impl ToString]) -> Result<Result<(), PluginError>, FatalPluginError>
+}
+
+interface AsPlugin {
+    plugin(&self) -> &Plugin
+    plugin_mut(&mut self) -> &mut Plugin
+    info(&self) -> PluginInfo
+    state(&self) -> PluginState
+    set_state(&mut self, state: PluginState)
+    load_function<F>(&self, name: &str) -> Result<libloading::Symbol<'_, F>, PluginError>
+}
+
+enum PluginError {
+    {field}UnknownPlatform
+    {field}Io(std::io::Error)
+    {field}Info(String)
+    {field}Lib(libloading::Error)
+    {field}Symbol(String, String, libloading::Error)
+    {field}Args(String, String)
+}
+
+enum FatalPluginError {}
+
+AsPlugin <|..> Plugin
+AsPlugin ..> PluginInfo
+AsPlugin ..> PluginState
+
+Plugin *-- PluginInfo
+Plugin *-- Library
+Plugin *-- PluginState
+
+PluginError <.. Plugin
+PluginError <.. PluginInfo
+
+FatalPluginError <.. Plugin
+
+@enduml

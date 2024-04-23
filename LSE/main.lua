@@ -41,9 +41,11 @@ local viewer_thread = coroutine.create(function()
         if viewer:has_changed() then
             local output = viewer:get_and_update()
             time = output.time
-            Linfo(time)
+            count = count + 1
+            -- Linfo(string.format("Time: %f, Count: %d", time, count))
             if time >= 2 then
                 exit_flag = true
+                Linfo("Exit")
                 ctk.cancel()
             end
         end
@@ -55,7 +57,7 @@ local controller_thread = coroutine.create(function()
     while not exit_flag do
         local last_control = init_control
         xpcall(function() controller:send(last_control) end, print)
-        LSE.sleep(10)
+        LSE.sleep(1)
         coroutine.yield()
     end
 end)

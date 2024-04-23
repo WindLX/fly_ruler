@@ -1,0 +1,38 @@
+@startuml clock
+
+interface AsClock
+{
+    start(&mut self)
+    now(&mut self) -> Duration
+    pause(&mut self)
+    resume(&mut self)
+}
+
+class Clock {
+    -actual_start_time: Instant
+    -pause_time: Instant
+    -last_call: Instant
+    -is_pause: bool
+    -now_virtual_time: Duration
+}
+
+class Clock {
+    +new() -> Self
+}
+
+class FixedClock {
+    -actual_start_time: Instant
+    -last_call: Instant
+    -is_pause: bool
+    -time_scale: f64
+    -sample_time: Duration
+}
+
+class FixedClock {
+    +new(sample_time: Duration, time_scale: Option<f64>) -> Self
+}
+
+AsClock <|.. Clock
+AsClock <|.. FixedClock
+
+@enduml

@@ -339,8 +339,11 @@ mod core_trim_tests {
         let result = trim(plane.clone(), trim_target, trim_init, CL, None, nm_options).unwrap();
 
         let nm_result = result.nelder_mead_result;
-        debug!("{:#?} {:#?}", nm_result.x, nm_result.fval);
-        debug!("{:#?} {:#?}", nm_result.iter, nm_result.fun_evals);
+        println!("{:#?}", result.state);
+        println!("{:#?}", result.control);
+        println!("{:#?}", result.state_extend);
+        println!("{:#?} {:#?}", nm_result.x, nm_result.fval);
+        println!("{:#?} {:#?}", nm_result.iter, nm_result.fun_evals);
 
         let res = model.plugin().uninstall();
         assert!(matches!(res, Ok(Ok(_))));

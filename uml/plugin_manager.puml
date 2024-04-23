@@ -1,0 +1,60 @@
+@startuml plugin_manager
+
+class PluginManager <<Pl: AsPlugin>> {
+    +plugins: HashMap<Uuid, Pl>
+}
+
+class PluginManager <<Pl: AsPlugin>> {
+    +new<P: AsRef<Path>, F: Fn(&Path) -> Result<Pl, PluginError>>(path: P, builder: F) -> PluginManager<Pl>
+}
+
+interface AsPluginManager <<Pl: AsPlugin>> {
+    plugin_manager(&self) -> &PluginManager<Pl>
+    plugin_manager_mut(&mut self) -> &mut PluginManager<Pl>
+    infos(&self) -> HashMap<Uuid, PluginInfo>
+    info(&self, plugin_id: Uuid) -> Option<PluginInfo>
+    states(&self) -> HashMap<Uuid, PluginState> 
+    state(&self, plugin_id: Uuid) -> Option<PluginState>
+    plugin_count(&self) -> usize
+    plugin(&self, plugin_id: Uuid) -> Option<&Pl>
+    plugin_mut(&mut self, plugin_id: Uuid) -> Option<&mut Pl>
+    enable(&mut self, plugin_id: Uuid, args: &[impl ToString]) -> Result<(), FrError>
+    disable(&mut self, plugin_id: Uuid) -> Result<(), FrError> {
+    disable_all(&mut self) -> Result<(), FrError>
+}
+
+class ModelManager {
+    -inner: PluginManager<AerodynamicModel>
+}
+
+class ModelManager {
+    +fn new<P: AsRef<Path>>(path: P) -> Self
+    +get_model(&self, model_id: uuid::Uuid) -> Option<&AerodynamicModel>
+}
+
+interface AsPlugin
+
+AsPluginManager <|..> PluginManager
+AsPluginManager <|.. ModelManager
+Uuid <.. PluginManager
+
+class Uuid {}
+class AerodynamicModel {}
+enum FrError {}
+enum PluginState {}
+AsPlugin ..> PluginInfo
+AsPlugin ..> PluginState
+
+FrError <.. AsPluginManager
+Uuid <.. AsPluginManager
+PluginInfo <.. AsPluginManager
+PluginState <.. AsPluginManager
+AsPlugin <.. AsPluginManager
+
+AsPlugin <|.. AerodynamicModel
+
+ModelManager *-- PluginManager
+ModelManager ..> AerodynamicModel
+ModelManager ..> Uuid
+
+@enduml

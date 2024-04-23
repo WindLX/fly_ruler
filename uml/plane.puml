@@ -1,0 +1,40 @@
+@startuml plane
+
+class MonoBehaviour
+
+Plane ..|> MonoBehaviour
+
+class Fire
+class PlaneBody
+class ControlSurface
+
+Fire ..|> MonoBehaviour
+PlaneBody ..|> MonoBehaviour
+ControlSurface ..|> MonoBehaviour
+
+class Plane
+{
+    -ControlLimits controlLimits
+    .. Getter && Setter ..
+    +ControlLimits ControlLimits
+
+    .. Entity ..
+    +Fire fire;
+    +PlaneBody planeBody
+    +ControlSurface elevatorSurface
+    +ControlSurface aileronRightSurface
+    +ControlSurface aileronLeftSurface
+    +ControlSurface rudderSurface
+
+    .. Methods ..
+    +void UpdateState(PlaneMessage planeMessage)
+}
+
+Plane ..> PlaneMessage
+Plane o-- ControlLimits
+
+Plane *-- Fire
+Plane *-- PlaneBody
+Plane *-- ControlSurface
+
+@enduml

@@ -1,0 +1,37 @@
+@startuml rpc
+
+[*] --> FrameParsing
+
+state FrameParsing {
+    Read: Read data from TcpStream
+    [*] --> Read
+    Read --> HandleRequest: Frame parsing complete
+    Read --> Read: Frame incomplete
+    Read --> [*]: Error
+}
+
+HandleRequest --> GetModelInfos: Request GetModelInfos
+HandleRequest --> PushPlane: Request PushPlane
+HandleRequest --> SendControl: Request SendControl
+HandleRequest --> Tick: Request Tick
+HandleRequest --> Disconnected: Request Disconnected
+
+GetModelInfos: Send model infos to private channel
+GetModelInfos --> FrameParsing
+GetModelInfos --> [*]: Error
+
+PushPlane: Push plane and create viewer task
+PushPlane --> FrameParsing
+PushPlane --> [*]: Error
+
+SendControl: Send control to input channel
+SendControl --> FrameParsing
+SendControl --> [*]: Error
+
+Tick: Notify
+Tick --> FrameParsing
+
+Disconnected: Cancelling task group
+Disconnected --> [*]
+
+@enduml

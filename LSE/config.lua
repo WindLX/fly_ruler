@@ -10,9 +10,11 @@ module = {
 
     system_init_cfg = {
         clock_mode = {
-            Realtime = true,
-            -- time_scale = 1.0, -- optional
-            -- sample_time = 50 -- ms optional
+            -- Realtime = true,
+            Fixed = {
+                time_scale = 1.0, -- optional
+                sample_time = 10  -- ms optional
+            }
         },
     },
 
@@ -23,7 +25,7 @@ module = {
 
         trim_target = {
             altitude = 15000, -- ft
-            velocity = 500,    -- ft/s
+            velocity = 500,   -- ft/s
             npos = 0.0,
             epos = 0.0,
         },

@@ -96,8 +96,10 @@ class UuidWrapper:
 class TrimTargetWrapper:
     altitude: float
     velocity: float
+    npos: float
+    epos: float
 
-    def __init__(self, altitude: float, velocity: float) -> None: ...
+    def __init__(self, altitude: float, velocity: float, npos: float, epos: float)-> None: ...
 
 
 class TrimInitWrapper:

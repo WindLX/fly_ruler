@@ -1,0 +1,29 @@
+@startuml server
+
+autonumber
+
+participant server
+participant client
+
+server -> server: bind
+
+activate server
+
+client -> server: connect
+activate server
+
+server -> server: rpc
+activate server
+deactivate server
+
+server -> server: tick
+activate server
+deactivate server
+
+server -> server: write
+activate server
+deactivate server
+
+deactivate server
+
+@enduml
