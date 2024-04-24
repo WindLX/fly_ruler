@@ -229,6 +229,10 @@ impl PlaneBlock {
             self.extend.unwrap_or_default(),
         ))
     }
+
+    pub fn delete_model(&mut self) {
+        self.plane.delete()
+    }
 }
 
 #[cfg(test)]

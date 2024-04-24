@@ -9,7 +9,7 @@ name = "light_simulation_engine"
 crate-type = ["cdylib"]
 
 [dependencies]
-tokio = { version = "1.35.1", features = ["sync", "rt", "rt-multi-thread"] }
+tokio = { version = "1.35.1", features = ["sync", "rt"] }
 mlua = { version = "0.9.6", features = ["lua54", "module"] }
 futures = "0.3.30"
 lazy_static = "1.4.0"

@@ -4,7 +4,7 @@ use crate::{
     parts::{
         block::PlaneBlock,
         flight::MechanicalModel,
-        trim::{trim, TrimInit, TrimTarget},
+        trim::{trim, TrimInit, TrimOutput, TrimTarget},
     },
 };
 use fly_ruler_plugin::AerodynamicModel;
@@ -89,7 +89,16 @@ impl Core {
         controller_buffer: usize,
         init_cfg: PlaneInitCfg,
         cancellation_token: CancellationToken,
-    ) -> Result<(Uuid, OutputReceiver, InputSender, JoinHandle<FrResult<()>>), FrError> {
+    ) -> Result<
+        (
+            Uuid,
+            OutputReceiver,
+            InputSender,
+            JoinHandle<FrResult<()>>,
+            TrimOutput,
+        ),
+        FrError,
+    > {
         let ctrl_limits = model
             .load_ctrl_limits()
             .map_err(|e| FrError::Core(FatalCoreError::from(e)))?;
@@ -107,7 +116,6 @@ impl Core {
         )
         .map_err(|e| FrError::Core(e))?;
         event!(Level::DEBUG, "model trim successfully");
-
         let id = Uuid::new_v4();
 
         let plane_block = PlaneBlock::new(
@@ -145,7 +153,7 @@ impl Core {
         };
 
         event!(Level::DEBUG, "plane {id} append successfully");
-        Ok((id, rx, tx1, handler))
+        Ok((id, rx, tx1, handler, trim_output))
     }
 
     /// main loop step
@@ -199,6 +207,7 @@ impl Core {
                             }
                         };
                     }
+                    plane.delete_model();
                     Ok(())
                 });
                 tokio::select! {
@@ -268,7 +277,7 @@ mod core_tests {
         let ctk = CancellationToken::new();
         let res = core.push_plane(&model, 10, plane_init, ctk.clone());
         assert!(matches!(res, Ok(_)));
-        let (_id, mut viewer, controller, handler) = res.unwrap();
+        let (_id, mut viewer, controller, handler, _) = res.unwrap();
 
         let h = std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -316,8 +325,8 @@ mod core_tests {
         let r2 = core.push_plane(&model, 10, plane_init, cancellation_token2);
         assert!(matches!(r1, Ok(_)));
         assert!(matches!(r2, Ok(_)));
-        let (_, viewer1, controller1, handler1) = r1.unwrap();
-        let (_, viewer2, controller2, handler2) = r2.unwrap();
+        let (_, viewer1, controller1, handler1, _) = r1.unwrap();
+        let (_, viewer2, controller2, handler2, _) = r2.unwrap();
 
         let h1 = std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()

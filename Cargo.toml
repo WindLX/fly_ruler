@@ -18,6 +18,6 @@ members = [
 
     # Application runtime
     "crates/runtime/lua_runtime",
-    "crates/runtime/python_runtime",
+    "crates/runtime/python_runtime"
 ]
 resolver = "2"

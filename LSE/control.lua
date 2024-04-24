@@ -14,7 +14,7 @@ Control.__eq = function(self, other)
         self.rudder == other.rudder
 end
 
-function Control:new(thrust, elevator, aileron, rudder)
+function Control.new(thrust, elevator, aileron, rudder)
     local obj = {}
     setmetatable(obj, Control)
     if type(thrust) == "table" then
@@ -35,8 +35,8 @@ function Control:new(thrust, elevator, aileron, rudder)
     return obj
 end
 
-function Control:default()
-    return Control:new(0.0, 0.0, 0.0, 0.0)
+function Control.default()
+    return Control.new(0.0, 0.0, 0.0, 0.0)
 end
 
 module = Control

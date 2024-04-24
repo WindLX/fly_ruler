@@ -1,0 +1,38 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 90vh;
+  width: 90vw;
+}
+
+#chart {
+  width: 100%;
+  height: 100%;
+}
+
+#tab {
+  width: 80vw;
+  margin-bottom: 20px;
+}
+
+#tab .tab-item {
+  padding: 10px;
+  cursor: pointer;
+  float: left;
+}

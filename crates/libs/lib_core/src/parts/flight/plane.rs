@@ -177,11 +177,9 @@ impl MechanicalModel {
 
         Ok(MechanicalModelOutput::new(state_dot, state_extend))
     }
-}
 
-impl Drop for MechanicalModel {
-    fn drop(&mut self) {
-        let id = self.id.as_ref();
+    pub fn delete(&mut self) {
+        let id = self.id.take();
         if let Some(id) = id {
             let e = (self.model_delete_func)(id);
             if let Err(e) = e {

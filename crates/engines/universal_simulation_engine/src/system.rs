@@ -1,5 +1,8 @@
 use crate::manager::{AsPluginManager, ModelManager};
-use fly_ruler_core::core::{Core, CoreInitCfg, PlaneInitCfg};
+use fly_ruler_core::{
+    core::{Core, CoreInitCfg, PlaneInitCfg},
+    parts::trim::TrimOutput,
+};
 use fly_ruler_plugin::{PluginInfo, PluginState};
 use fly_ruler_utils::{
     error::{FrError, FrResult},
@@ -95,7 +98,16 @@ impl System {
         controller_buffer: usize,
         init_cfg: PlaneInitCfg,
         cancellation_token: CancellationToken,
-    ) -> Result<(Uuid, OutputReceiver, InputSender, JoinHandle<FrResult<()>>), SysError> {
+    ) -> Result<
+        (
+            Uuid,
+            OutputReceiver,
+            InputSender,
+            JoinHandle<FrResult<()>>,
+            TrimOutput,
+        ),
+        SysError,
+    > {
         let model = if let Some(manager) = &mut self.model_manager {
             manager.get_model(model_id)
         } else {

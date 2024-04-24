@@ -17,7 +17,7 @@ use tracing_subscriber::{
 lazy_static! {
     static ref RT: tokio::runtime::Runtime = {
         std::thread::spawn(|| RT.block_on(futures::future::pending::<()>()));
-        tokio::runtime::Builder::new_multi_thread()
+        tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap()
@@ -31,8 +31,17 @@ async fn sleep(_lua: &Lua, duration: LuaNumber) -> LuaResult<()> {
     Ok(())
 }
 
-#[mlua::lua_module]
-fn light_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
+fn to_radians(_lua: &Lua, angle: LuaNumber) -> LuaResult<f64> {
+    let angle = angle as f64;
+    Ok(angle.to_radians())
+}
+
+fn to_degrees(_lua: &Lua, angle: LuaNumber) -> LuaResult<f64> {
+    let angle = angle as f64;
+    Ok(angle.to_degrees())
+}
+
+fn light_simulation_engine_constructor(lua: &Lua) -> LuaResult<LuaTable> {
     let _guard = &*GUARD;
     let exports = lua.create_table()?;
 
@@ -177,6 +186,20 @@ fn light_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
     exports.set("logger", logger)?;
     exports.set("uuid", uuid)?;
     exports.set("sleep", lua.create_async_function(sleep)?)?;
+    exports.set("to_radians", lua.create_function(to_radians)?)?;
+    exports.set("to_degrees", lua.create_function(to_degrees)?)?;
 
     Ok(exports)
+}
+
+#[cfg(target_os = "windows")]
+#[mlua::lua_module]
+fn light_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
+    light_simulation_engine_constructor(lua)
+}
+
+#[cfg(target_os = "linux")]
+#[mlua::lua_module]
+fn liblight_simulation_engine(lua: &Lua) -> LuaResult<LuaTable> {
+    light_simulation_engine_constructor(lua)
 }

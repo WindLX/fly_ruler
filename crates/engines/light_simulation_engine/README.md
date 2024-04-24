@@ -121,7 +121,7 @@ Push a plane to the system and get its data receiver.
     - `tol_fun`: `Number`, `f64`,
     - `tol_x`: `Number`, `f64`,
 
-Return `{ Userdata(UuidWrapper), Userdata(OutputReceiverWrapper), Userdata(InputSenderWrapper), UserWrapper(CancellationToken) }`
+Return `{ Userdata(UuidWrapper), Userdata(OutputReceiverWrapper), Userdata(InputSenderWrapper), Userdata(JoinHandlerWrapper), Userdata(CancellationToken), Userdata(CoreOutput) }`
 
 #### `clone() -> Userdata(SystemWrapper)`
 

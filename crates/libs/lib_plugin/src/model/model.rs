@@ -14,7 +14,7 @@ pub type AerodynamicModelInitFn =
     dyn Fn(&str, &MechanicalModelInput) -> Result<(), FatalPluginError>;
 pub type AerodynamicModelStepFn =
     dyn Fn(&str, &MechanicalModelInput, f64) -> Result<C, FatalPluginError>;
-pub type AerodynamicModelDeleteFn = dyn Fn(&str) -> Result<(), FatalPluginError>;
+pub type AerodynamicModelDeleteFn = dyn Fn(String) -> Result<(), FatalPluginError>;
 
 #[derive(Debug)]
 pub struct AerodynamicModel {
@@ -132,9 +132,9 @@ pub fn init_handler_constructor(
 pub fn delete_handler_constructor(
     handler: FrModelDelete,
     name: String,
-) -> Box<dyn Fn(&str) -> Result<(), FatalPluginError>> {
+) -> Box<dyn Fn(String) -> Result<(), FatalPluginError>> {
     let name = name.clone();
-    let h = move |id: &str| {
+    let h = move |id: String| {
         let id = CString::new(id).unwrap();
         unsafe {
             let res = handler(id.as_ptr());

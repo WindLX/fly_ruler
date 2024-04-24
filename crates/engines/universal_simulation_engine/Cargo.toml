@@ -19,7 +19,7 @@ mlua = { version = "0.9.6", features = [
     "lua54",
     "async",
     "serialize",
-    "vendored",
+    # "vendored",
 ] }
 fly_ruler_core = { path = "../../libs/lib_core" }
 fly_ruler_plugin = { path = "../../libs/lib_plugin" }

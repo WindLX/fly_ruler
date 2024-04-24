@@ -1,3 +1,5 @@
+local LSE = require("lse")
+
 module = {
     logger_init_cfg = {
         -- target[span{field=value}]=level site:https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
@@ -32,7 +34,7 @@ module = {
 
         -- optional
         trim_init = {
-            alpha = 8.49, -- deg
+            alpha = LSE.to_radians(8.49), -- deg
             -- thrust(lbs) ele(deg) ail(deg) rud(deg)
             control = {
                 thrust = 5000.0,

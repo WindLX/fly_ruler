@@ -288,10 +288,7 @@ mod core_trim_tests {
         },
     };
     use fly_ruler_plugin::{AerodynamicModel, AsPlugin};
-    use fly_ruler_utils::{
-        logger::{debug, test_logger_init},
-        plane_model::ControlLimit,
-    };
+    use fly_ruler_utils::{logger::test_logger_init, plane_model::ControlLimit};
     use std::{cell::RefCell, rc::Rc};
 
     const CL: ControlLimit = ControlLimit {

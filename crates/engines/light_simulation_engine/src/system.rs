@@ -1,7 +1,9 @@
 use crate::manager::{AsPluginManager, ModelManager};
 use fly_ruler_core::core::{Core, CoreInitCfg, PlaneInitCfg};
+use fly_ruler_core::parts::trim::TrimOutput;
 use fly_ruler_plugin::{PluginInfo, PluginState};
 use fly_ruler_utils::error::FrResult;
+use fly_ruler_utils::plane_model::CoreOutput;
 use fly_ruler_utils::CancellationToken;
 use fly_ruler_utils::{error::FrError, InputSender, OutputReceiver};
 use lua_runtime::{prelude::*, CancellationTokenWrapper};
@@ -107,7 +109,16 @@ impl System {
         controller_buffer: usize,
         init_cfg: PlaneInitCfg,
         cancellation_token: CancellationToken,
-    ) -> Result<(Uuid, OutputReceiver, InputSender, JoinHandle<FrResult<()>>), SysError> {
+    ) -> Result<
+        (
+            Uuid,
+            OutputReceiver,
+            InputSender,
+            JoinHandle<FrResult<()>>,
+            TrimOutput,
+        ),
+        SysError,
+    > {
         let model = if let Some(manager) = &mut self.model_manager {
             manager.get_model(model_id)
         } else {
@@ -148,6 +159,29 @@ pub enum SysError {
     Fr(#[from] FrError),
     #[error("Model not available")]
     ModelNotAvailable,
+}
+
+struct JoinHandlerWrapper(Option<JoinHandle<FrResult<()>>>);
+
+impl LuaUserData for JoinHandlerWrapper {
+    fn add_methods<'lua, M: LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_async_method_mut("wait", |_, this, ()| async move {
+            let h = this.0.take();
+            match h {
+                Some(h) => {
+                    let r = h.await;
+                    match r {
+                        Ok(r) => match r {
+                            Ok(()) => Ok(()),
+                            Err(e) => Err(LuaError::external(e)),
+                        },
+                        Err(e) => Err(LuaError::external(e)),
+                    }
+                }
+                None => Err(LuaError::external("JoinHandlerWrapper is None".to_string())),
+            }
+        })
+    }
 }
 
 impl LuaUserData for SystemWrapper {
@@ -237,7 +271,7 @@ impl LuaUserData for SystemWrapper {
             )| {
                 let cancellation_token = CancellationToken::new();
                 let init_cfg: PlaneInitCfg = lua.from_value(init_cfg)?;
-                let (id, viewer, controller, _handler) = this
+                let (id, viewer, controller, handler, trim_output) = this
                     .0
                     .lock()
                     .unwrap()
@@ -252,7 +286,13 @@ impl LuaUserData for SystemWrapper {
                 t.push(UuidWrapper::from(id))?;
                 t.push(OutputReceiverWrapper::from(viewer))?;
                 t.push(InputSenderWrapper::from(controller))?;
+                t.push(JoinHandlerWrapper(Some(handler)))?;
                 t.push(CancellationTokenWrapper::from(cancellation_token))?;
+                t.push(lua.to_value(&CoreOutput::new(
+                    trim_output.state,
+                    trim_output.control,
+                    trim_output.state_extend,
+                ))?)?;
                 t.into_lua(lua)
             },
         );

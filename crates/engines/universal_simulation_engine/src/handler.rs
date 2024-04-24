@@ -336,19 +336,21 @@ async fn rpc_handler(
                                 }
                             };
 
-                            let (id, viewer, controller, _handler) = tokio::task::spawn_blocking({
-                                let system = system.clone();
-                                let group_cancellation_token = group_cancellation_token.clone();
-                                move || {
-                                    system.lock().unwrap().push_plane(
-                                        Uuid::parse_str(&args.model_id).unwrap(),
-                                        controller_buffer,
-                                        args.plane_init_cfg.map_or_else(|| init_cfg, |c| c.into()),
-                                        group_cancellation_token,
-                                    )
-                                }
-                            })
-                            .await??;
+                            let (id, viewer, controller, _handler, trim_output) =
+                                tokio::task::spawn_blocking({
+                                    let system = system.clone();
+                                    let group_cancellation_token = group_cancellation_token.clone();
+                                    move || {
+                                        system.lock().unwrap().push_plane(
+                                            Uuid::parse_str(&args.model_id).unwrap(),
+                                            controller_buffer,
+                                            args.plane_init_cfg
+                                                .map_or_else(|| init_cfg, |c| c.into()),
+                                            group_cancellation_token,
+                                        )
+                                    }
+                                })
+                                .await??;
 
                             controllers.lock().await.insert(id.to_string(), controller);
 
