@@ -6,7 +6,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <div id="chart"></div>
 `
 
-fetch("public/data.csv")
+fetch("public/data_delta.csv")
   .then(response => response.blob())
   .then(blob => {
     const csvFile = new File([blob], "data.csv", { type: "text/csv" });
@@ -14,7 +14,7 @@ fetch("public/data.csv")
       new Chart(
         document.getElementById('chart') as HTMLDivElement,
         document.getElementById('tab') as HTMLDivElement,
-        csvFile, "theta(degree)")
+        csvFile, "delta_theta(degree)")
     }
   })
   .catch(error => console.error(error));

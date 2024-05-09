@@ -33,27 +33,35 @@ local function output_to_csv(output)
     return v
 end
 
-function CSVWriter.new(filename)
+function CSVWriter.new(filename, header)
     local self = setmetatable({}, CSVWriter)
     self.filename = filename
     self.file = io.open(filename, "w")
-    self.header = {
-        "time(s)",
-        "npos(ft)", "epos(ft)", "altitude(ft)",
-        "phi(degree)", "theta(degree)", "psi(degree)",
-        "velocity(ft/s)",
-        "alpha(degree)", "beta(degree)",
-        "p(degree/s)", "q(degree/s)", "r(degree/s)",
-        "thrust(lbs)", "elevator(degree)", "aileron(degree)", "rudder(degree)",
-        "nx(g)", "ny(g)", "nz(g)",
-        "mach", "qbar(lb/ft ft)", "ps(lb/ft ft)",
-    }
+    if header == nil then
+        self.header = {
+            "time(s)",
+            "npos(ft)", "epos(ft)", "altitude(ft)",
+            "phi(degree)", "theta(degree)", "psi(degree)",
+            "velocity(ft/s)",
+            "alpha(degree)", "beta(degree)",
+            "p(degree/s)", "q(degree/s)", "r(degree/s)",
+            "thrust(lbs)", "elevator(degree)", "aileron(degree)", "rudder(degree)",
+            "nx(g)", "ny(g)", "nz(g)",
+            "mach", "qbar(lb/ft ft)", "ps(lb/ft ft)",
+        }
+    else
+        self.header = header
+    end
     self.file:write(table.concat(self.header, ",") .. "\n")
     return self
 end
 
-function CSVWriter:write(data)
-    self.file:write(table.concat(output_to_csv(data), ",") .. "\n")
+function CSVWriter:write(data, converter)
+    local c = converter
+    if c == nil then
+        c = output_to_csv
+    end
+    self.file:write(table.concat(c(data), ",") .. "\n")
 end
 
 function CSVWriter:close()

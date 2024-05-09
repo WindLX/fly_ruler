@@ -69,6 +69,7 @@ local main_thread = coroutine.create(function()
                 exit_flag = true
                 ctk:cancel()
                 csv_writer:close()
+                wings_level.csv_writer.close(wings_level.csv_writer)
                 Linfo("Exit")
             end
         end

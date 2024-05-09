@@ -12,8 +12,8 @@ function Algorithm.new(init_state, init_control, raw_update)
     return self
 end
 
-function Algorithm:update(time, state)
-    local control = self.raw_update(self, time, state)
+function Algorithm:update(time, state, other)
+    local control = self.raw_update(self, time, state, other)
     self.last_state = state
     self.last_time = time
     self.last_control = control
