@@ -78,7 +78,7 @@ int frplugin_install_hook(int argc, char **argv) {
 
   r = init_axis_data();
 
-  LEFMap = create_hashmap(1);
+  LEFMap = create_hashmap(100);
 
   return r;
 }

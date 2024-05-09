@@ -112,7 +112,7 @@ pub fn init_handler_constructor(
     let h = move |id: &str, input: &MechanicalModelInput| {
         let state = Box::new(input.state);
         let control = Box::new(input.control);
-        let id = CString::new(id).unwrap();
+        let id = CString::new(id.to_string()).unwrap();
         unsafe {
             let res = handler(id.as_ptr(), &*state, &*control);
             if res < 0 {
@@ -189,7 +189,7 @@ pub fn step_handler_constructor(
         let control = Box::new(input.control);
         let mut c = Box::new(C::default());
         let c_ptr = &mut *c;
-        let id = CString::new(id).unwrap();
+        let id = CString::new(id.to_string()).unwrap();
         unsafe {
             let res = handler(id.as_ptr(), &*state, &*control, t, c_ptr);
             if res < 0 {

@@ -39,10 +39,15 @@ HashMap *create_hashmap(int capacity)
 
 unsigned int hash(const char *key, int capacity)
 {
-    unsigned int hash = 0;
+    unsigned long hash = 0;
     while (*key)
     {
-        hash = (hash << 5) + *key++;
+        hash = (hash << 4) + *key++;
+        unsigned long g = hash & 0xF0000000L;
+        if (g) {
+            hash ^= g >> 24;
+        }
+        hash &= ~g;
     }
     return hash % capacity;
 }

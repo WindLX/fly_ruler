@@ -142,7 +142,6 @@ impl MechanicalModel {
 
         let c = (self.model_step_func)(id.unwrap(), model_input, t)
             .map_err(|e| FatalCoreError::from(e))?;
-
         let (velocity_dot, sub_velocity_dot) = velocity_derivation(
             &c,
             &self.constants,

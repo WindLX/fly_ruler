@@ -214,7 +214,10 @@ impl Core {
                     _ = ctk.cancelled() => {
                         event!(Level::DEBUG, "clock {plane_id} cancelled", plane_id = plane_id);
                     }
-                    _ = h => {
+                    res = h => {
+                        if let Ok(Err(e)) = res {
+                            event!(Level::ERROR, "clock {plane_id} error: {}", e)
+                        }
                         event!(Level::DEBUG, "clock {plane_id} finished", plane_id = plane_id);
                     }
                 }

@@ -1,6 +1,6 @@
 system = {
     model_root_path = "./models",
-    controller_buffer = 10
+    controller_buffer = 10000
 }
 
 log = {
@@ -18,11 +18,11 @@ server = {
 
 core_init_cfg = {
     clock_mode = {
-        Realtime = true,
-        -- Fixed = {
-        --     time_scale = 1.0, -- optional
-        --     sample_time = 50 -- ms optional     
-        -- }
+        -- Realtime = true,
+        Fixed = {
+            time_scale = 1.0, -- optional
+            sample_time = 50 -- ms optional     
+        }
     },
 }
 
@@ -40,7 +40,7 @@ plane_init_cfg = {
 
     -- optional
     trim_init = {
-        alpha = 8.49, -- deg
+        alpha = 8.49 / 57.3, -- deg
         -- thrust(lbs) ele(deg) ail(deg) rud(deg)
         control = {
             thrust = 5000.0,

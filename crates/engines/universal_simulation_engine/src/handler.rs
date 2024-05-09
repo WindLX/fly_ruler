@@ -336,7 +336,7 @@ async fn rpc_handler(
                                 }
                             };
 
-                            let (id, viewer, controller, _handler, trim_output) =
+                            let (id, viewer, controller, _handler, _trim_output) =
                                 tokio::task::spawn_blocking({
                                     let system = system.clone();
                                     let group_cancellation_token = group_cancellation_token.clone();
